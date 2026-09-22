@@ -1,5 +1,5 @@
 "use node";
-/** GuardAsli — افزودن کارت با AES-GCM + AAD؛ plaintext در DB نیست. */
+/** GuardAsli — کارت با purpose payment_card. */
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -28,6 +28,7 @@ export const cardAddAction = action({
     const last4 = num.slice(-4);
     const envelope = encryptSecret(num, master(), {
       aad: `purpose:payment_card|last4:${last4}`,
+      purpose: "payment_card",
     });
     return await ctx.runMutation(internal.payments.cardInsertEncrypted, {
       token: args.token,

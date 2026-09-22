@@ -15,7 +15,9 @@
     "lint": "tsc -b --noEmit",
     "release-check": "bun scripts/release-check.mjs",
     "ci": "bun run typecheck && bun test && bun run build",
-    "prod-start": "bash scripts/prod-start.sh"
+    "prod-start": "bash scripts/prod-start.sh",
+    "wizard": "bash scripts/wizard.sh",
+    "install:wizard": "bash scripts/wizard.sh"
   },
   "dependencies": {
     "convex": "^1.19.0",

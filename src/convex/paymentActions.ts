@@ -1,5 +1,5 @@
 "use node";
-/** GuardAsli — CubePay/Tetraminator با AAD روی اسرار کاربر. */
+/** GuardAsli — CubePay/Tetraminator با purpose AEAD. */
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal, api } from "./_generated/api";
@@ -28,6 +28,8 @@ function aadFor(userId: string, provider: string): string {
   return `user:${userId}|provider:${provider}|purpose:payment_credentials`;
 }
 
+const PAY_OPTS = { purpose: "payment_credentials" as const };
+
 export const saveUserProviderConfigAction = action({
   args: {
     token: v.string(),
@@ -44,6 +46,7 @@ export const saveUserProviderConfigAction = action({
     const who = await ctx.runQuery(api.auth.whoami, { token: args.token });
     const envelope = encryptSecret(args.apiKeyOrToken, masterSecret(), {
       aad: aadFor(String(who.userId), args.provider),
+      purpose: "payment_credentials",
     });
     return await ctx.runMutation(internal.payments.saveUserProviderConfig, {
       token: args.token,
@@ -57,6 +60,19 @@ export const saveUserProviderConfigAction = action({
     });
   },
 });
+
+function decryptCred(envelope: string, userId: string, provider: string): string {
+  const aad = aadFor(userId, provider);
+  try {
+    return decryptSecret(envelope, masterSecret(), { aad, purpose: "payment_credentials" });
+  } catch {
+    try {
+      return decryptSecret(envelope, masterSecret(), { aad });
+    } catch {
+      return decryptSecret(envelope, masterSecret());
+    }
+  }
+}
 
 export const createCubePayInvoiceAction = action({
   args: {
@@ -73,30 +89,14 @@ export const createCubePayInvoiceAction = action({
       idempotencyKey: args.idempotencyKey,
     });
     if (prepared.deduped) {
-      return {
-        paymentId: prepared.paymentId,
-        paymentLink: prepared.paymentLink ?? null,
-        deduped: true,
-      };
+      return { paymentId: prepared.paymentId, paymentLink: prepared.paymentLink ?? null, deduped: true };
     }
     const cfg = await ctx.runQuery(internal.payments.getUserProviderEnvelope, {
       userId: prepared.userId as never,
       provider: "cubepay",
     });
     if (!cfg?.enabled) throw new Error("FORBIDDEN: پیکربندی CubePay فعال نیست");
-    let tokenPlain: string;
-    try {
-      tokenPlain = decryptSecret(cfg.credentialsEncrypted, masterSecret(), {
-        aad: aadFor(String(prepared.userId), "cubepay"),
-      });
-    } catch {
-      // تلاش سازگاری v1 بدون AAD
-      try {
-        tokenPlain = decryptSecret(cfg.credentialsEncrypted, masterSecret());
-      } catch {
-        throw new Error("INTERNAL_ERROR: رمزگشایی توکن CubePay ناموفق");
-      }
-    }
+    const tokenPlain = decryptCred(cfg.credentialsEncrypted, String(prepared.userId), "cubepay");
     const callbackUrl = `${publicBaseUrl()}/api/v1/payments/cubepay/callback?order_id=${prepared.paymentId}`;
     const created = await cubePayAdapter.createPayment(
       { token: tokenPlain, baseUrl: cfg.baseUrl ?? CUBEPAY_BASE },
@@ -111,11 +111,7 @@ export const createCubePayInvoiceAction = action({
       paymentId: prepared.paymentId as never,
       providerPaymentId: created.authority,
       paymentLink: created.paymentLink,
-      payload: {
-        authority: created.authority,
-        payAmount: created.payAmount,
-        isTest: created.isTest,
-      },
+      payload: { authority: created.authority, payAmount: created.payAmount, isTest: created.isTest },
     });
     return {
       paymentId: prepared.paymentId,
@@ -145,29 +141,14 @@ export const createTetraminatorInvoiceAction = action({
       idempotencyKey: args.idempotencyKey,
     });
     if (prepared.deduped) {
-      return {
-        paymentId: prepared.paymentId,
-        paymentLink: prepared.paymentLink ?? null,
-        deduped: true,
-      };
+      return { paymentId: prepared.paymentId, paymentLink: prepared.paymentLink ?? null, deduped: true };
     }
     const cfg = await ctx.runQuery(internal.payments.getUserProviderEnvelope, {
       userId: prepared.userId as never,
       provider: "tetraminator",
     });
     if (!cfg?.enabled) throw new Error("FORBIDDEN: پیکربندی Tetraminator فعال نیست");
-    let apiKey: string;
-    try {
-      apiKey = decryptSecret(cfg.credentialsEncrypted, masterSecret(), {
-        aad: aadFor(String(prepared.userId), "tetraminator"),
-      });
-    } catch {
-      try {
-        apiKey = decryptSecret(cfg.credentialsEncrypted, masterSecret());
-      } catch {
-        throw new Error("INTERNAL_ERROR: رمزگشایی API Key ناموفق");
-      }
-    }
+    const apiKey = decryptCred(cfg.credentialsEncrypted, String(prepared.userId), "tetraminator");
     const callbackUrl = `${publicBaseUrl()}/api/v1/payments/tetraminator/webhook?order_id=${prepared.paymentId}`;
     const created = await tetraminatorAdapter.createInvoice(
       { apiKey, baseUrl: cfg.baseUrl ?? TETRAMINATOR_DEFAULT_BASE },
@@ -205,27 +186,18 @@ export const verifyProviderPaymentAction = action({
     if (payment.status !== "awaiting_verify" && payment.status !== "processing") {
       return { ok: false, reason: `status=${payment.status}` };
     }
-
     const provider = args.provider === "cubepay" ? "cubepay" : "tetraminator";
     const cfg = await ctx.runQuery(internal.payments.getUserProviderEnvelope, {
       userId: payment.userId,
       provider,
     });
     if (!cfg) return { ok: false, reason: "NO_CONFIG" };
-
     let secret: string;
     try {
-      secret = decryptSecret(cfg.credentialsEncrypted, masterSecret(), {
-        aad: aadFor(String(payment.userId), provider),
-      });
+      secret = decryptCred(cfg.credentialsEncrypted, String(payment.userId), provider);
     } catch {
-      try {
-        secret = decryptSecret(cfg.credentialsEncrypted, masterSecret());
-      } catch {
-        return { ok: false, reason: "DECRYPT_FAILED" };
-      }
+      return { ok: false, reason: "DECRYPT_FAILED" };
     }
-
     if (args.provider === "tetraminator") {
       const result = await tetraminatorAdapter.verifyPayment(
         { apiKey: secret, baseUrl: cfg.baseUrl ?? TETRAMINATOR_DEFAULT_BASE },
@@ -254,7 +226,6 @@ export const verifyProviderPaymentAction = action({
     } else {
       return { ok: false, reason: "UNKNOWN_PROVIDER" };
     }
-
     return await ctx.runMutation(internal.payments.acceptProviderPayment, {
       paymentId: args.paymentId,
       expectedAmount: payment.amount,

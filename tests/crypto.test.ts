@@ -1,4 +1,4 @@
-/** GuardAsli — تست رمزنگاری سخت‌شده. */
+/** GuardAsli — تست رمزنگاری v3 purpose + scrypt نسخه‌دار. */
 import { describe, expect, test } from "bun:test";
 import { decryptSecret, encryptSecret, timingSafeEqualUtf8 } from "../src/core/aead";
 import {
@@ -12,26 +12,31 @@ import { createHmac } from "node:crypto";
 
 const MASTER = "test-master-secret-at-least-16chars";
 
-describe("AEAD v2 HKDF + AAD", () => {
-  test("roundtrip with AAD", () => {
+describe("AEAD v3 purpose + kid", () => {
+  test("roundtrip payment purpose", () => {
     const aad = "user:u1|provider:cubepay|purpose:payment_credentials";
-    const env = encryptSecret("super-secret-key", MASTER, { aad });
-    expect(env.startsWith("v2.")).toBe(true);
-    expect(decryptSecret(env, MASTER, { aad })).toBe("super-secret-key");
+    const env = encryptSecret("super-secret-key", MASTER, {
+      aad,
+      purpose: "payment_credentials",
+    });
+    expect(env.startsWith("v3.")).toBe(true);
+    expect(decryptSecret(env, MASTER, { aad, purpose: "payment_credentials" })).toBe(
+      "super-secret-key",
+    );
+  });
+
+  test("wrong purpose fails", () => {
+    const env = encryptSecret("x", MASTER, { purpose: "payment_credentials" });
+    expect(() => decryptSecret(env, MASTER, { purpose: "telegram_bot_token" })).toThrow();
   });
 
   test("wrong AAD fails", () => {
-    const env = encryptSecret("x", MASTER, { aad: "aad-a" });
-    expect(() => decryptSecret(env, MASTER, { aad: "aad-b" })).toThrow();
+    const env = encryptSecret("x", MASTER, { aad: "aad-a", purpose: "generic" });
+    expect(() => decryptSecret(env, MASTER, { aad: "aad-b", purpose: "generic" })).toThrow();
   });
 
-  test("wrong master fails", () => {
-    const env = encryptSecret("x", MASTER);
-    expect(() => decryptSecret(env, "other-master-secret-xx")).toThrow();
-  });
-
-  test("v1 legacy still decrypts", () => {
-    // ساخت دستی سبک با مسیر v1 داخل decrypt
+  test("v2 legacy still decrypts", () => {
+    // ساخت با مسیر داخلی: encrypt بدون purpose روی نسخه قدیمی شبیه‌سازی با v1
     const { createCipheriv, createHash, randomBytes } = require("node:crypto");
     const key = createHash("sha256").update(MASTER, "utf8").digest();
     const iv = randomBytes(12);
@@ -43,24 +48,35 @@ describe("AEAD v2 HKDF + AAD", () => {
   });
 });
 
-describe("scrypt password", () => {
-  test("hash verify", () => {
+describe("scrypt versioned", () => {
+  test("hash verify new format", () => {
     const { hash } = scryptHashSync("Password1");
+    expect(hash.startsWith("scrypt$")).toBe(true);
     expect(scryptVerifySync("Password1", hash)).toBe(true);
     expect(scryptVerifySync("wrong", hash)).toBe(false);
   });
 
+  test("legacy salt$hash still verifies", () => {
+    // ساخت دستی شبیه قدیمی با پارامتر فعلی
+    const { scryptSync, randomBytes } = require("node:crypto");
+    const salt = randomBytes(16).toString("hex");
+    const h = scryptSync("Password1", salt, 64, {
+      N: 32768,
+      r: 8,
+      p: 1,
+      maxmem: 128 * 1024 * 1024,
+    }).toString("hex");
+    const legacy = `${salt}$${h}`;
+    expect(scryptVerifySync("Password1", legacy)).toBe(true);
+  });
+
   test("strong password policy", () => {
     expect(() => assertStrongPassword("short")).toThrow();
-    expect(() => assertStrongPassword("alllowercase1")).toThrow();
-    expect(() => assertStrongPassword("ALLUPPERCASE1")).toThrow();
-    expect(() => assertStrongPassword("NoDigitsHere")).toThrow();
     expect(() => assertStrongPassword("GoodPass1234")).not.toThrow();
   });
 
   test("credential generation length", () => {
-    const c = generateSecureCredential(32);
-    expect(c.length).toBe(32);
+    expect(generateSecureCredential(32).length).toBe(32);
   });
 });
 

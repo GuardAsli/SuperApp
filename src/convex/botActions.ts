@@ -1,8 +1,8 @@
 "use node";
-/** GuardAsli — ذخیره امن توکن ربات با AES-GCM + AAD. */
+/** GuardAsli — ذخیره امن توکن ربات با purpose telegram_bot_token. */
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import { encryptSecret } from "../core/aead";
 
 function master(): string {
@@ -27,6 +27,7 @@ export const saveBotConfigAction = action({
     const who = await ctx.runQuery(api.auth.whoami, { token: args.token });
     const envelope = encryptSecret(args.botToken, master(), {
       aad: `tenant:${who.tenantId}|purpose:telegram_bot_token`,
+      purpose: "telegram_bot_token",
     });
     return await ctx.runMutation(api.telegram.botConfigSave, {
       token: args.token,
