@@ -10,6 +10,7 @@ export const registerAction = action({
   args: {
     username: v.string(),
     password: v.string(),
+    /** نقش از کلاینت نادیده گرفته می‌شود — همیشه user */
     role: v.optional(v.string()),
     parentUsername: v.optional(v.string()),
   },
@@ -20,13 +21,15 @@ export const registerAction = action({
     if (args.password.length < 8) {
       throw new Error("VALIDATION_ERROR: رمز عبور باید حداقل ۸ کاراکتر باشد");
     }
+    // جلوگیری از privilege escalation: ثبت‌نام عمومی فقط user
+    const role = "user";
     const { hash } = scryptHashSync(args.password);
     const res: { userId: string; tenantId: string } = await ctx.runMutation(
       internal.auth.persistUser,
       {
         username: args.username,
         passwordEnvelope: hash,
-        role: args.role ?? "user",
+        role,
         parentUsername: args.parentUsername,
       },
     );
@@ -84,7 +87,7 @@ export const refreshAction = action({
   },
 });
 
-/** ایجاد اولین Super Admin — bootstrap. */
+/** ایجاد اولین Super Admin — bootstrap. فقط یک‌بار. */
 export const bootstrapAdminAction = action({
   args: {
     username: v.string(),
@@ -94,8 +97,8 @@ export const bootstrapAdminAction = action({
     if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(args.username)) {
       throw new Error("VALIDATION_ERROR: نام کاربری نامعتبر است");
     }
-    if (args.password.length < 8) {
-      throw new Error("VALIDATION_ERROR: رمز عبور باید حداقل ۸ کاراکتر باشد");
+    if (args.password.length < 12) {
+      throw new Error("VALIDATION_ERROR: رمز Super Admin باید حداقل ۱۲ کاراکتر باشد");
     }
     const { hash } = scryptHashSync(args.password);
     const res: { tenantId: string; created: boolean } = await ctx.runMutation(

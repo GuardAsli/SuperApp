@@ -1,82 +1,43 @@
 "use node";
-/** GuardAsli — اکشن‌های Node تلگرام: verify initData و ارسال پیام با محافظت token. */
+/** GuardAsli — اکشن‌های Node برای تلگرام: verify initData با bot token رمزگشایی‌شده. */
 import { v } from "convex/values";
-import { action, internalAction } from "./_generated/server";
+import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { decryptSecret } from "../core/aead";
 import { verifyTelegramInitData } from "../core/telegram";
-import { validateOutboundUrl } from "../core/ssrf";
 
-export const verifyInitDataAction = internalAction({
+/**
+ * احراز هویت Mini App — verify واقعی روی سرور.
+ * کلاینت فقط initData خام می‌فرستد؛ پرچم verified از کلاینت پذیرفته نمی‌شود.
+ */
+export const miniAppAuthAction = action({
   args: {
+    botConfigId: v.id("botConfigs"),
     initData: v.string(),
-    tokenEncrypted: v.string(),
-    masterSecret: v.string(),
   },
   handler: async (ctx, args) => {
-    // token از پاکت رمزنگاری‌شده باز می‌شود — هرگز لاگ نمی‌شود
-    const { decryptSecret } = await import("../core/aead");
+    const master = process.env.GUARDASLI_MASTER_SECRET;
+    if (!master) throw new Error("INTERNAL_ERROR: GUARDASLI_MASTER_SECRET تنظیم نشده");
+
+    const cfg: { tokenEncrypted: string; enabled: boolean } | null = await ctx.runQuery(
+      internal.telegram.getBotTokenEnvelope,
+      { botConfigId: args.botConfigId },
+    );
+    if (!cfg || !cfg.enabled) throw new Error("FORBIDDEN: bot فعال نیست");
+
     let botToken: string;
     try {
-      botToken = decryptSecret(args.tokenEncrypted, args.masterSecret);
+      botToken = decryptSecret(cfg.tokenEncrypted, master);
     } catch {
-      return { ok: false, reason: "DECRYPT_FAILED" };
+      throw new Error("INTERNAL_ERROR: رمزگشایی توکن bot ناموفق");
     }
+
     const parsed = verifyTelegramInitData(args.initData, botToken);
-    if (!parsed) return { ok: false, reason: "BAD_SIGNATURE" };
-    return {
-      ok: true,
+    if (!parsed) throw new Error("UNAUTHENTICATED: امضای initData نامعتبر است");
+
+    return await ctx.runMutation(internal.telegram.miniAppCompleteAuth, {
+      botConfigId: args.botConfigId,
       telegramUserId: parsed.user.id,
-      username: parsed.user.username ?? null,
-    };
-  },
-});
-
-/** ارسال پیام bot — webhook-based token هرگز در پاسخ/لاگ ظاهر نمی‌شود. */
-export const sendTelegramMessage = action({
-  args: {
-    apiBase: v.string(),
-    botToken: v.string(),
-    chatId: v.string(),
-    text: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const base = validateOutboundUrl(args.apiBase);
-    if (!base.ok) throw new Error(`PROVIDER_ERROR: ${base.reason}`);
-    const res = await fetch(`${args.apiBase}/bot${args.botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: args.chatId, text: args.text }),
-      signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) throw new Error(`PROVIDER_ERROR: sendMessage HTTP ${res.status}`);
-    return { ok: true };
-  },
-});
-
-/** تنظیم webhook با secret هر tenant. */
-export const setTelegramWebhook = action({
-  args: {
-    apiBase: v.string(),
-    botToken: v.string(),
-    webhookUrl: v.string(),
-    webhookSecret: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const base = validateOutboundUrl(args.apiBase);
-    if (!base.ok) throw new Error(`PROVIDER_ERROR: ${base.reason}`);
-    const cb = validateOutboundUrl(args.webhookUrl);
-    if (!cb.ok) throw new Error(`PROVIDER_ERROR: ${cb.reason}`);
-    const res = await fetch(`${args.apiBase}/bot${args.botToken}/setWebhook`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: args.webhookUrl,
-        secret_token: args.webhookSecret,
-        allowed_updates: ["message", "callback_query"],
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) throw new Error(`PROVIDER_ERROR: setWebhook HTTP ${res.status}`);
-    return { ok: true };
   },
 });

@@ -2,6 +2,7 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { DEFAULT_ROLE_PERMISSIONS } from "../core/rbac";
+import { requireActor, requireSuperAdmin } from "./auth";
 
 const DEFAULT_FEATURES = [
   "DedicatedApp", "TelegramBot", "TelegramMiniApp", "WebApp", "CustomDomain",
@@ -10,11 +11,14 @@ const DEFAULT_FEATURES = [
   "ConfigImport", "MultiDevice",
 ];
 
-const ALL_PERMISSIONS = Object.values(DEFAULT_ROLE_PERMISSIONS).flat();
-
 export const systemSettingsGet = query({
-  args: { key: v.string() },
+  args: { token: v.string(), key: v.string() },
   handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    // تنظیمات عمومی فقط برای نقش‌های مدیریتی
+    if (!["super_admin", "admin"].includes(actor.role)) {
+      throw new Error("FORBIDDEN: دسترسی تنظیمات سیستم مجاز نیست");
+    }
     const doc = await ctx.db
       .query("systemSettings")
       .withIndex("by_key", (q) => q.eq("key", args.key))
@@ -24,8 +28,14 @@ export const systemSettingsGet = query({
 });
 
 export const systemSettingsSet = mutation({
-  args: { key: v.string(), value: v.any() },
+  args: { token: v.string(), key: v.string(), value: v.any() },
   handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    requireSuperAdmin(actor);
+    // جلوگیری از تغییر هویت Core از طریق settings
+    if (args.key === "identity") {
+      throw new Error("FORBIDDEN: هویت Core قابل تغییر نیست");
+    }
     const doc = await ctx.db
       .query("systemSettings")
       .withIndex("by_key", (q) => q.eq("key", args.key))
@@ -40,6 +50,7 @@ export const systemSettingsSet = mutation({
 
 export const featureFlagsSet = mutation({
   args: {
+    token: v.string(),
     key: v.string(),
     globallyEnabled: v.optional(v.boolean()),
     canPurchaseSeparately: v.optional(v.boolean()),
@@ -51,6 +62,8 @@ export const featureFlagsSet = mutation({
     resellerPrice: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    requireSuperAdmin(actor);
     const doc = await ctx.db
       .query("featureFlags")
       .withIndex("by_key", (q) => q.eq("key", args.key))
@@ -81,8 +94,9 @@ export const featureFlagsSet = mutation({
 });
 
 export const featureFlagsList = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireActor(ctx, args.token);
     return await ctx.db.query("featureFlags").collect();
   },
 });
