@@ -201,13 +201,13 @@ describe("SSRF", () => {
   });
 });
 
-describe("AES-256-GCM HKDF", () => {
-  test("چرخه رمز/رمزگشایی", () => {
+describe("AES-256-GCM purpose keys", () => {
+  test("چرخه رمز/رمزگشایی v3", () => {
     const secret = "bot-token-123456";
-    const enc = encryptSecret(secret, MASTER);
-    expect(enc.startsWith("v2.")).toBe(true);
+    const enc = encryptSecret(secret, MASTER, { purpose: "telegram_bot_token" });
+    expect(enc.startsWith("v3.")).toBe(true);
     expect(enc).not.toContain(secret);
-    expect(decryptSecret(enc, MASTER)).toBe(secret);
+    expect(decryptSecret(enc, MASTER, { purpose: "telegram_bot_token" })).toBe(secret);
   });
   test("رد کلید اشتباه", () => {
     const enc = encryptSecret("data", MASTER);
@@ -221,7 +221,7 @@ describe("AES-256-GCM HKDF", () => {
 describe("رمز عبور", () => {
   test("hash و verify", () => {
     const { hash } = scryptHashSync("MyPassword123");
-    expect(hash).toContain("$");
+    expect(hash.startsWith("scrypt$")).toBe(true);
     expect(hash).not.toContain("MyPassword123");
     expect(scryptVerifySync("MyPassword123", hash)).toBe(true);
     expect(scryptVerifySync("WrongPass", hash)).toBe(false);
