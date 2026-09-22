@@ -204,6 +204,7 @@ export default defineSchema(
       trafficLimitGb: v.optional(v.number()),
       trafficUsedGb: v.optional(v.number()),
       userLimit: v.optional(v.number()),
+      durationDays: v.optional(v.number()),
       durationEndsAt: v.optional(v.number()),
       status: v.string(),
       provisioningState: v.string(),
@@ -215,6 +216,21 @@ export default defineSchema(
       .index("by_tenant", ["tenantId"])
       .index("by_server", ["serverId"])
       .index("by_status", ["status"]),
+
+    /** دستگاه‌های کلاینت VPN (سقف multi-device) */
+    clientDevices: defineTable({
+      tenantId: v.id("tenants"),
+      userId: v.id("users"),
+      deviceKey: v.string(),
+      name: v.string(),
+      platform: v.string(),
+      status: v.string(),
+      lastSeenAt: v.number(),
+      createdAt: v.number(),
+    })
+      .index("by_user", ["userId"])
+      .index("by_user_key", ["userId", "deviceKey"])
+      .index("by_tenant", ["tenantId"]),
 
     provisionJobs: defineTable({
       tenantId: v.id("tenants"),

@@ -18,4 +18,11 @@ crons.interval(
   { limit: 300 },
 );
 
+/** بکاپ خودکار روزانه ساعت ۰۳:۰۰ UTC */
+crons.daily(
+  "nightly encrypted backup",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.backupAuto.enqueueNightlyBackup,
+);
+
 export default crons;
