@@ -1,248 +1,93 @@
 # GuardAsli — مستندات فنی
 
-**نسخه:** `is0.0.1` · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
+**نسخه:** `is0.0.1` FINAL · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
 
-> محصول **GuardAsli** · توسعه‌دهنده **AsliCode** — هویت مرکزی ثابت و غیرقابل مذاکره است.
+> محصول **GuardAsli** · توسعه‌دهنده **AsliCode**
 
-این سند مرجع فنی فارسی است. انگلیسی: [Docs.md](Docs.md). آموزش: [Learn.fa.md](Learn.fa.md).
+انگلیسی: [Docs.md](Docs.md) · آموزش: [Learn.fa.md](Learn.fa.md) · ممیزی: [FINAL_AUDIT.md](FINAL_AUDIT.md)
 
 <div dir="rtl">
+
+## نصب یک‌خطی VPS + دامنه
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
+```
+
+با کلید Convex:
+
+```bash
+export CONVEX_DEPLOY_KEY=... ; curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
+```
+
+جزئیات OS/منابع: [README.fa.md](README.fa.md)
 
 ---
 
 ## فهرست
 
-1. [هویت و نسخه‌گذاری](#1-هویت-و-نسخه‌گذاری)
-2. [نمای معماری](#2-نمای-معماری)
-3. [نقش‌ها و مجوز](#3-نقش‌ها-و-مجوز)
-4. [قابلیت‌ها و سهمیه](#4-قابلیت‌ها-و-سهمیه)
-5. [کیف پول و دفتر کل](#5-کیف-پول-و-دفتر-کل)
-6. [پرداخت](#6-پرداخت)
-7. [سرورهای بالادستی](#7-سرورهای-بالادستی)
-8. [کانال‌های تلگرام](#8-کانال‌های-تلگرام)
-9. [API اچ‌تی‌تی‌پی](#9-api-اچ‌تی‌تی‌پی)
-10. [ویزارد نصب و CLI](#10-ویزارد-نصب-و-cli)
-11. [محیط و اسرار](#11-محیط-و-اسرار)
-12. [تست و کیفیت](#12-تست-و-کیفیت)
-13. [مستندات مرتبط](#13-مستندات-مرتبط)
+1. هویت و نسخه‌گذاری
+2. معماری
+3. نقش‌ها و مجوز
+4. قابلیت‌ها
+5. کیف پول و Ledger
+6. پرداخت
+7. Providerها
+8. تلگرام
+9. HTTP API
+10. نصب و CLI
+11. محیط و اسرار
+12. مانیتور
+13. تست
 
 ---
 
-## ۱. هویت و نسخه‌گذاری
-
-منبع حقیقت: `src/core/identity.ts` و `src/core/version.ts`.
+## ۱. هویت
 
 | ثابت | مقدار |
 |---|---|
-| محصول | `GuardAsli` |
-| توسعه‌دهنده | `AsliCode` |
-| قالب نسخه | `isMAJOR.MINOR.PATCH` |
-| انتشار اولیه | `is0.0.1` برای هر ۱۲ جزء |
+| محصول | GuardAsli |
+| توسعه‌دهنده | AsliCode |
+| انتشار | is0.0.1 |
 
-اجزا: `core`، `api`، `web`، `bot`، `miniapp`، `mainapp`، `dedicated`، `installer`، `payment`، `providers`، `build`، `releases`.
+منبع: `src/core/identity.ts`
 
-توابع کمکی: `parseVersion`، `compareVersions`، `isCompatible` (major یکسان لازم است)، `bumpVersion`.
+## ۲. معماری
 
-هیچ جدول شخصی‌سازی نباید این نام‌ها را ذخیره یا override کند.
+Core ثابت + سفارشی‌سازی برند. `src/core/` · `src/convex/` · `src/web/`
 
----
+## ۳. نقش‌ها
 
-## ۲. نمای معماری
+super_admin → admin → reseller → sub_reseller → user — فقط سمت سرور.
 
-دو لایه صریح:
+## ۴–۶. قابلیت، کیف، پرداخت
 
-**Core (ثابت)**  
-هویت، RBAC، ledger، قیمت‌گذاری، امنیت، احراز هویت مرکزی، کیف پول، قراردادهای provider/payment، حسابرسی، HTTP API. کد در `src/core/` و `src/convex/`.
+Ledger فقط‌الحاقی و idempotent. چهار روش: admin_manual، card_to_card، CubePay، Tetraminator. Webhook مستقیم شارژ نمی‌کند.
 
-**سفارشی‌سازی (کاملاً برندپذیر)**  
-برندینگ هر مشتری، دارایی‌ها، متن‌های UI، پیکربندی بات، اپ اختصاصی، دامنه سفارشی. از جداول + `src/web/branding.ts`.
+## ۱۰. نصب
 
-جزئیات کامل: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-ساختار مخزن:
-
-```
-src/
-  core/       موتورها (identity، ledger، rbac، payments، providers، …)
-  convex/     بک‌اند: schema، auth، wallet، billing، jobs، http
-  web/        Landing، Auth، Dashboard، Mini App، branding
-tests/        تست واحد و یکپارچه (bun test)
-scripts/      CLI / ویزارد نصب guardasli
-docs/         معماری، API، برندینگ، حسابرسی
-```
-
----
-
-## ۳. نقش‌ها و مجوز
-
-پنج نقش؛ اعمال **فقط** سمت سرور:
-
-| نقش | محدوده |
+| مسیر | دستور |
 |---|---|
-| `super_admin` | کل پلتفرم |
-| `admin` | مدیریت مشتری |
-| `reseller` | درخت خود + زیرریسلرها |
-| `sub_reseller` | زیردرخت خود |
-| `user` | خریدها و کیف پول خود |
+| VPS | `install.sh` یک‌خطی بالا |
+| Lab | `bun run wizard && bun run up` |
+| تکمیل | `bash scripts/finish-vps.sh` |
 
-دسترسی cross-tenant با `requireTenantScope` و پیمایش درخت مالکیت مسدود می‌شود.
-
----
-
-## ۴. قابلیت‌ها و سهمیه
-
-هجده کلید قابلیت. هر درخواست از زنجیره شش‌مرحله‌ای عبور می‌کند:
-
-1. سوئیچ سراسری  
-2. اجازه پلن  
-3. مجوز نقش  
-4. فعال‌سازی مشتری  
-5. مالکیت  
-6. سهمیه باقی‌مانده  
-
-قیمت ارسالی کلاینت هرگز پذیرفته نمی‌شود؛ قیمت فقط سمت سرور محاسبه می‌شود.
-
----
-
-## ۵. کیف پول و دفتر کل
-
-دفتر کل فقط‌الحاقی: هر تغییر موجودی یک ردیف شماره‌دار و تکرارناپذیر است.
-
-- بدون تغییر بی‌صدا  
-- تکرار همان کلید idempotency اثر دوبرابر ندارد  
-- ردپای حسابرسی برای هر credit/debit  
-
-پیاده‌سازی: `src/convex/wallet.ts` + `src/core/ledger.ts`.
-
----
-
-## ۶. پرداخت
-
-| کانال | رفتار |
-|---|---|
-| شارژ دستی ادمین | نوشتن مستقیم در ledger با audit |
-| کارت‌به‌کارت | حداکثر ۱۰ کارت؛ تأیید / رد / تقلب |
-| CubePay | callback → job تأیید → شارژ |
-| Tetraminator | webhook → job تأیید → شارژ |
-
-**قاعده:** وب‌هوک پرداخت هرگز مستقیم کیف را شارژ نمی‌کند. فقط job با نام `payment_verify` ساخته می‌شود. شارژ فقط بعد از تأیید آداپتور (وضعیت، شناسه پرداخت، مبلغ) از مسیر `acceptProviderPayment` با کلید idempotency انجام می‌شود (ضد-replay).
-
-آداپتورها: `src/core/payments/cubepay.ts`، `src/core/payments/tetraminator.ts`.
-
----
-
-## ۷. سرورهای بالادستی
-
-آداپتورهای سرور با تشخیص واقعی قابلیت:
-
-- 3X-UI  
-- Sanaei  
-- PasarGuard  
-- Rebecca  
-
-قراردادها و تشخیص در `src/core/providers/`.
-
----
-
-## ۸. کانال‌های تلگرام
-
-| سطح | امنیت |
-|---|---|
-| وب‌هوک بات | `webhookSecret` اختصاصی هر مشتری در هدر `X-Telegram-Bot-Api-Secret-Token` |
-| مینی‌اپ | تأیید HMAC روی `initData` تلگرام |
-
-توکن بات و کلید پرداخت با AES-256-GCM رمزنگاری می‌شوند.
-
----
-
-## ۹. API اچ‌تی‌تی‌پی
-
-پایه: `/api/v1`.
-
-قالب خطای یکسان:
-
-```json
-{
-  "code": "VALIDATION_ERROR",
-  "message": "پیام کوتاه و قابل اقدام",
-  "details": {},
-  "requestId": "ga_..."
-}
-```
-
-مسیرهای کلیدی: `ping`، `version`، `openapi.json`، وب‌هوک تلگرام، callback پرداخت.
-
-مرجع کامل: [docs/API.md](docs/API.md).
-
----
-
-## ۱۰. ویزارد نصب و CLI
-
-**نصب با یک دستور:**
+## ۱۲. مانیتور
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && sh ./scripts/cli.mjs install
+bun run monitor
+bun run monitor:follow
+bun run monitor:jobs
 ```
 
-دستورهای CLI:
+داشبورد تب **مانیتور** برای ادمین: سلامت + صف jobs.
 
-| دستور | عمل |
-|---|---|
-| `install` | بررسی سیستم + وابستگی‌ها + ساخت env |
-| `doctor` | OS، رم، دیسک، پورت‌ها، شبکه |
-| `reconfigure` | دامنه اصلی + ادمین اولیه |
-| `backup` | پشتیبان رمزنگاری‌شده |
-| `status` | نسخه `is0.0.1` + مسیر نصب |
-| `update` | به‌روزرسانی اجزا (داده و پیکربندی حفظ می‌شود) |
-| `logs` | نمایش لاگ‌ها |
-| *(بدون آرگومان)* | منوی تعاملی |
-
-اسکریپت: `scripts/cli.mjs`. مسیر پیش‌فرض نصب: `/opt/guardasli`.
-
----
-
-## ۱۱. محیط و اسرار
-
-| متغیر | کاربرد |
-|---|---|
-| `GUARDASLI_MASTER_SECRET` | ماده کلید AES-256-GCM |
-| `GUARDASLI_MAIN_DOMAIN` | دامنه اصلی پلتفرم (Core) |
-| اطلاعات پرداخت | از پنل ادمین؛ رمزنگاری‌شده در ذخیره |
-
-محافظت SSRF آدرس‌های خروجی را اعتبارسنجی می‌کند؛ رنج خصوصی و میزبان داخلی رد می‌شوند.
-
----
-
-## ۱۲. تست و کیفیت
+## ۱۳. تست
 
 ```bash
-bun test        # ۳۶ تست واحد و یکپارچه
-bun typecheck   # تایپ‌اسکریپت بدون خطا
-bun run build   # باندل production در dist/
+bun run ci
 ```
 
-زنجیره اثبات هر قابلیت:
-
-```
-Frontend → API → Authorization → Business Logic → Database
-→ External Provider → Background Jobs → Logs → Audit → Tests → Documentation
-```
-
----
-
-## ۱۳. مستندات مرتبط
-
-| فایل | محتوا |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | لایه‌ها، جریان خرید، مدل امنیتی |
-| [docs/API.md](docs/API.md) | مسیرها، کد خطا، امنیت وب‌هوک |
-| [docs/BRANDING.md](docs/BRANDING.md) | فیلدهای قابل شخصی‌سازی + مرز Core |
-| [docs/AUDIT.md](docs/AUDIT.md) | تاریخچه حسابرسی مخزن |
-| [Learn.fa.md](Learn.fa.md) | آموزش گام‌به‌گام |
-| [README.fa.md](README.fa.md) | نمای کلی محصول |
-
----
-
-© AsliCode — GuardAsli `is0.0.1`
+© AsliCode — GuardAsli is0.0.1
 
 </div>
