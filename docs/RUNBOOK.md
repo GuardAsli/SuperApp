@@ -1,89 +1,77 @@
-# GuardAsli is0.0.1 — Production Runbook
+# GuardAsli is0.0.1 — Production Runbook (VPS)
 
 **Product:** GuardAsli · **Developer:** AsliCode
 
-## 1. Prerequisites
+## Supported OS & resources
 
-- Linux x86_64 or arm64
-- Bun 1.1+
-- Outbound HTTPS
-- Domain pointing to host (for SSL / webhooks)
-- Convex account (backend)
+See root [README.md](../README.md) — Ubuntu 22.04/24.04 recommended; min 1 vCPU / 1 GB RAM; recommended 2 vCPU / 2–4 GB.
 
-## 2. Install
+## One-command VPS install
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli
-cd guardasli
-cp .env.example .env.local
-# fill GUARDASLI_MASTER_SECRET (openssl rand -hex 32)
-# fill VITE_CONVEX_URL after convex login
-
-bun install
-bunx convex login
-bunx convex dev --once    # links project + pushes schema
-# or production:
-bunx convex deploy
+export CONVEX_DEPLOY_KEY=...
+sudo bash install.sh --domain panel.example.com --email you@example.com
 ```
 
-## 3. Bootstrap Super Admin (once)
+Installer path: `/opt/guardasli` · unit: `guardasli.service` · proxy: nginx · SSL: certbot.
+
+## After install
+
+```bash
+systemctl status guardasli
+journalctl -u guardasli -f
+cd /opt/guardasli && bash scripts/finish-vps.sh   # if Convex was pending
+```
+
+## Bootstrap
+
+`scripts/auto-bootstrap.mjs`:
+
+- Reads `.env.local`
+- Ensures strong admin password (writes back if weak)
+- Retries up to 5 times with backoff
+- Treats “already bootstrapped” as success
+
+Manual:
 
 ```bash
 bunx convex run authActions:bootstrapAdminAction \
-  '{"username":"admin","password":"CHANGE_ME_12chars_min"}'
+  '{"username":"admin","password":"YourStrongPass1"}'
 ```
 
-Creates root tenant, feature flags (all off), four payment methods (all off).
+## Convex on VPS (performance)
 
-## 4. First login
+- **Do not** leave `convex dev` running long-term on production VPS.
+- Use `convex deploy` + cloud backend.
+- UI process only: `bun run preview` behind nginx (systemd).
+- Set all `GUARDASLI_*` secrets in Convex Dashboard env (installer sync tries this).
+- Indexes in schema are required for tenant-scoped queries — already defined.
+
+## Domain & SSL
+
+1. DNS A record → VPS IP
+2. `install.sh --domain … --email …`
+3. `GUARDASLI_PUBLIC_URL` and CORS become `https://domain`
+4. Payment webhooks use that public URL
+
+## Health
 
 ```bash
-bun run build && bun run preview
-# or: bun dev
+bun run ci
+curl -fsS https://your-domain/ | head
+systemctl is-active guardasli
 ```
 
-Open web → Auth → login as bootstrap user.
-
-## 5. Super Admin checklist
-
-1. **Payment methods** → enable only what you use (`admin_manual`, `card_to_card`, `cubepay`, `tetraminator`)
-2. **Feature flags** → enable WebApp / TelegramBot / etc. as needed
-3. **Plans** → create volume or user plans
-4. **Providers** → add 3X-UI / Sanaei / … with encrypted credentials
-5. **Cards** (if card-to-card) → up to 10 destination cards
-6. **Telegram** → set bot token in panel; set webhook to
-   `{CONVEX_SITE_URL}/api/v1/telegram/webhook/{botConfigId}`
-7. **Public URL** → `GUARDASLI_PUBLIC_URL` must match payment callbacks
-
-## 6. Verify payments
-
-- Webhook only enqueues `payment_verify`
-- Cron every 1 min runs `workerActions.processDueJobs`
-- Manual: Super Admin can call `paymentActions` verify via worker once
-
-## 7. Health & CI
-
-```bash
-bun run ci          # typecheck + test + build
-sh ./scripts/cli.mjs doctor
-sh ./scripts/release-check.mjs
-```
-
-## 8. Backup
+## Backup
 
 ```bash
 sh ./scripts/cli.mjs backup
 ```
 
-Backups must remain encrypted; never put plaintext secrets in archives.
+Encrypted only.
 
-## 9. Incident
+## Incident
 
-- Revoke sessions: `auth.revokeSession`
-- Revoke API keys: `infra.apiKeyRevoke`
-- Disable payment method globally if provider is compromised
-- Check `audit.list` and job status (`dead` jobs)
-
-## 10. Release tag
-
-`RELEASE.json` + `COMPONENT_VERSIONS` must stay `is0.0.1` for this gate.
+- `systemctl restart guardasli`
+- Disable payment methods in panel if provider compromised
+- Rotate `GUARDASLI_MASTER_SECRET` only with re-encrypt plan (see SECURITY.md)
