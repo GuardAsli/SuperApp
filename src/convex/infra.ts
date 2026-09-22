@@ -3,10 +3,8 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireActor, requirePermission, requireTenantScope } from "./auth";
-import { generateSecureCredentialRuntime, randomToken } from "./runtime";
+import { randomToken } from "./runtime";
 import { stableTokenHash } from "./auth";
-
-// ————— Monitoring (بند ۳۴) —————
 
 export const healthRecord = internalMutation({
   args: {
@@ -48,8 +46,6 @@ export const healthLatest = query({
     return out;
   },
 });
-
-// ————— Background Jobs (بند ۳۵) —————
 
 export const jobEnqueue = internalMutation({
   args: {
@@ -110,8 +106,6 @@ export const jobFinish = internalMutation({
   },
 });
 
-// ————— Backup / Restore (بند ۳۳) —————
-
 export const backupRecord = mutation({
   args: {
     token: v.string(),
@@ -165,8 +159,6 @@ export const backupList = query({
   },
 });
 
-// ————— Domains / SSL (بند ۳۱) —————
-
 const DOMAIN_RE = /^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
 
 export const domainAdd = mutation({
@@ -209,6 +201,7 @@ export const domainAdd = mutation({
   },
 });
 
+/** درخواست تأیید دامنه — verified فقط بعد از تأیید DNS توسط worker/Node action. */
 export const domainVerify = mutation({
   args: { token: v.string(), domainId: v.id("customDomains") },
   handler: async (ctx, args) => {
@@ -217,15 +210,37 @@ export const domainVerify = mutation({
     if (!dom) throw new Error("NOT_FOUND: دامنه یافت نشد");
     await requireTenantScope(ctx, actor, dom.tenantId);
     requirePermission(actor, "ManageDomains");
-    // تأیید واقعی DNS در اکشن node انجام می‌شود؛ اینجا وضعیت به‌روزرسانی می‌شود.
-    await ctx.db.patch(args.domainId, { verified: true, sslStatus: "pending" });
+    // هرگز verified=true بدون DNS واقعی — فقط صف بررسی
+    await ctx.db.patch(args.domainId, { sslStatus: "pending" });
+    await ctx.db.insert("jobs", {
+      kind: "domain_dns_verify",
+      tenantId: dom.tenantId,
+      payload: { domainId: args.domainId, domain: dom.domain, token: dom.verificationToken },
+      status: "queued",
+      attempts: 0,
+      maxAttempts: 5,
+      nextRunAt: Date.now(),
+    });
     await ctx.runMutation(internal.audit.log, {
       actorUserId: actor.userId,
       tenantId: dom.tenantId,
-      action: "domain.verify",
+      action: "domain.verify_requested",
       entityType: "customDomains",
       entityId: args.domainId,
     });
+    return { ok: true, pending: true };
+  },
+});
+
+/** تکمیل تأیید DNS — فقط internal پس از بررسی واقعی. */
+export const domainMarkVerified = internalMutation({
+  args: { domainId: v.id("customDomains"), ok: v.boolean() },
+  handler: async (ctx, args) => {
+    if (args.ok) {
+      await ctx.db.patch(args.domainId, { verified: true, sslStatus: "pending" });
+    } else {
+      await ctx.db.patch(args.domainId, { verified: false, sslStatus: "failed" });
+    }
     return { ok: true };
   },
 });
@@ -241,8 +256,6 @@ export const domainList = query({
   },
 });
 
-// ————— API Keys (بند ۴۰) —————
-
 export const apiKeyCreate = mutation({
   args: { token: v.string(), name: v.string(), scopes: v.array(v.string()), expiresInDays: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -250,12 +263,13 @@ export const apiKeyCreate = mutation({
     requirePermission(actor, "Manage");
     const raw = `ga_${randomToken(24)}`;
     const prefix = raw.slice(0, 10);
+    const keyHash = await stableTokenHash(raw);
     const id = await ctx.db.insert("apiKeys", {
       tenantId: actor.tenantId,
       createdBy: actor.userId,
       name: args.name,
       prefix,
-      keyHash: stableTokenHash(raw),
+      keyHash,
       scopes: args.scopes,
       status: "active",
       ...(args.expiresInDays !== undefined
@@ -270,7 +284,6 @@ export const apiKeyCreate = mutation({
       entityId: id,
       metadata: { name: args.name, scopes: args.scopes },
     });
-    // مقدار خام فقط یک‌بار در پاسخ ایجاد برگردانده می‌شود
     return { apiKey: raw, apiKeyId: id, prefix };
   },
 });
@@ -303,7 +316,6 @@ export const apiKeyList = query({
       .query("apiKeys")
       .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
       .collect();
-    // hash هرگز برنمی‌گردد
     return keys.map((k) => ({
       apiKeyId: k._id,
       name: k.name,
@@ -315,8 +327,6 @@ export const apiKeyList = query({
     }));
   },
 });
-
-// ————— Rate limiting —————
 
 export const rateLimitCheck = internalMutation({
   args: { bucketKey: v.string(), windowMs: v.number(), maxPerWindow: v.number() },
@@ -342,14 +352,11 @@ export const rateLimitCheck = internalMutation({
   },
 });
 
-// ————— Reports (بند ۳۷) —————
-
 export const reportGenerate = query({
   args: { token: v.string(), kind: v.string(), periodStart: v.number(), periodEnd: v.number() },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "View");
-    const tenants = [actor.tenantId];
     const data: Record<string, unknown> = {};
     if (args.kind === "users") {
       const users = await ctx.db
@@ -365,8 +372,11 @@ export const reportGenerate = query({
       const entries = await ctx.db
         .query("ledgerEntries")
         .filter((q) =>
-          q.eq(q.field("tenantId"), actor.tenantId) &&
-          q.gte(q.field("createdAt"), args.periodStart) && q.lte(q.field("createdAt"), args.periodEnd),
+          q.and(
+            q.eq(q.field("tenantId"), actor.tenantId),
+            q.gte(q.field("createdAt"), args.periodStart),
+            q.lte(q.field("createdAt"), args.periodEnd),
+          ),
         )
         .collect();
       data.credits = entries.filter((e) => e.direction === "credit").reduce((s, e) => s + e.amount, 0);
@@ -385,7 +395,6 @@ export const reportGenerate = query({
     } else {
       throw new Error("VALIDATION_ERROR: نوع گزارش پشتیبانی نمی‌شود");
     }
-    void tenants;
     return { kind: args.kind, periodStart: args.periodStart, periodEnd: args.periodEnd, data };
   },
 });
