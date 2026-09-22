@@ -1,4 +1,4 @@
-/** GuardAsli — تست رمزنگاری v3 purpose + scrypt نسخه‌دار. */
+/** GuardAsli — crypto unit tests (always non-production env via package.json test script). */
 import { describe, expect, test } from "bun:test";
 import { decryptSecret, encryptSecret, timingSafeEqualUtf8 } from "../src/core/aead";
 import {
@@ -10,7 +10,8 @@ import {
 import { verifyTelegramInitData } from "../src/core/telegram";
 import { createHmac } from "node:crypto";
 
-const MASTER = "test-master-secret-at-least-16chars";
+// Test-only IKM — NOT used in production. package.json forces NODE_ENV=test.
+const MASTER = "unit-test-master-secret-32b-ok!!";
 
 describe("AEAD v3 purpose + kid", () => {
   test("roundtrip payment purpose", () => {
@@ -36,7 +37,6 @@ describe("AEAD v3 purpose + kid", () => {
   });
 
   test("v2 legacy still decrypts", () => {
-    // ساخت با مسیر داخلی: encrypt بدون purpose روی نسخه قدیمی شبیه‌سازی با v1
     const { createCipheriv, createHash, randomBytes } = require("node:crypto");
     const key = createHash("sha256").update(MASTER, "utf8").digest();
     const iv = randomBytes(12);
@@ -57,7 +57,6 @@ describe("scrypt versioned", () => {
   });
 
   test("legacy salt$hash still verifies", () => {
-    // ساخت دستی شبیه قدیمی با پارامتر فعلی
     const { scryptSync, randomBytes } = require("node:crypto");
     const salt = randomBytes(16).toString("hex");
     const h = scryptSync("Password1", salt, 64, {
