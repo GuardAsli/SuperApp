@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ga-bg: #f6f7f9;
+  --ga-surface: #ffffff;
+  --ga-border: #e2e5ea;
+  --ga-text: #101828;
+  --ga-muted: #5b6474;
+  --ga-primary: #0f766e;
+  --ga-primary-fg: #ffffff;
+  --ga-accent: #b45309;
+  --ga-danger: #dc2626;
+  --ga-ok: #15803d;
+  --ga-warn: #d97706;
+}
+
+.dark {
+  --ga-bg: #0b1220;
+  --ga-surface: #121a2b;
+  --ga-border: #22304a;
+  --ga-text: #e6eaf2;
+  --ga-muted: #8b95a9;
+  --ga-primary: #2dd4bf;
+  --ga-primary-fg: #062018;
+  --ga-accent: #f59e0b;
+  --ga-danger: #f87171;
+  --ga-ok: #4ade80;
+  --ga-warn: #fbbf24;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--ga-bg);
+  color: var(--ga-text);
+  font-family:
+    "Segoe UI",
+    Tahoma,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  margin: 0;
+}
+
+* {
+  border-color: var(--ga-border);
+}
