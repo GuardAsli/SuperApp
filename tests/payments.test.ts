@@ -1,13 +1,36 @@
-/** GuardAsli — تست‌های پرداخت (بند ۴۴): CubePay، Tetraminator، ضد-replay. */
+/** GuardAsli — تست‌های پرداخت: CubePay، Tetraminator، state machine، ضد-replay. */
 import { describe, expect, test } from "bun:test";
 import { cubePayAdapter, validateCubePayConfig, CUBEPAY_BASE } from "../src/core/payments/cubepay";
 import {
   tetraminatorAdapter, validateTetraminatorConfig,
   TETRAMINATOR_MIN, TETRAMINATOR_MAX,
 } from "../src/core/payments/tetraminator";
+import { canTransition, isTerminalPaid, PAYMENT_METHODS } from "../src/core/payments/states";
 
 const fetchOk = (body: unknown) => async () =>
   new Response(JSON.stringify(body), { status: 200 });
+
+describe("Payment state machine", () => {
+  test("چهار روش پرداخت ثابت", () => {
+    expect(PAYMENT_METHODS).toContain("admin_manual");
+    expect(PAYMENT_METHODS).toContain("card_to_card");
+    expect(PAYMENT_METHODS).toContain("cubepay");
+    expect(PAYMENT_METHODS).toContain("tetraminator");
+    expect(PAYMENT_METHODS).toHaveLength(4);
+  });
+  test("انتقال‌های مجاز کارت به کارت", () => {
+    expect(canTransition("pending_review", "paid")).toBe(true);
+    expect(canTransition("pending_review", "rejected")).toBe(true);
+    expect(canTransition("pending_review", "fraud")).toBe(true);
+    expect(canTransition("paid", "pending_review")).toBe(false);
+    expect(canTransition("rejected", "paid")).toBe(false);
+  });
+  test("ضد دوباره‌شارژ", () => {
+    expect(isTerminalPaid("paid")).toBe(true);
+    expect(isTerminalPaid("approved")).toBe(true);
+    expect(isTerminalPaid("pending_review")).toBe(false);
+  });
+});
 
 describe("CubePay طبق مستندات رسمی", () => {
   const cfg = { token: "test_token_1234567890", baseUrl: CUBEPAY_BASE };
@@ -113,5 +136,11 @@ describe("Tetraminator با verify و ضد-replay", () => {
       fetchOk({ status: false, payment_status: "paid" }) as unknown as typeof fetch,
     );
     expect(statusFalse.accepted).toBe(false);
+
+    const idMismatch = await tetraminatorAdapter.verifyPayment(
+      cfg, "pay1", 500000,
+      fetchOk({ status: true, payment_status: "paid", amount: 500000, pay_id: "other" }) as unknown as typeof fetch,
+    );
+    expect(idMismatch.accepted).toBe(false);
   });
 });

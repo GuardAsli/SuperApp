@@ -1,11 +1,10 @@
-/** GuardAsli — HTTP API /api/v1: فرمت خطای استاندارد، webhook ها، OpenAPI. */
+/** GuardAsli — HTTP API /api/v1 */
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { newRequestId, safeInternalMessage } from "../core/errors";
 import { getVersionSnapshot, GUARDASLI } from "../core/identity";
 
 const corsHeaders: Record<string, string> = {
-  // در production دامنهٔ اصلی را جایگزین * کنید
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Request-Id, X-Webhook-Secret",
@@ -21,13 +20,8 @@ function jsonResponse(requestId: string, status: number, body: unknown): Respons
   });
 }
 
-function errorResponse(requestId: string, status: number, code: string, message: string, details?: unknown): Response {
-  return jsonResponse(requestId, status, {
-    code,
-    message,
-    ...(details !== undefined ? { details } : {}),
-    requestId,
-  });
+function errorResponse(requestId: string, status: number, code: string, message: string): Response {
+  return jsonResponse(requestId, status, { code, message, requestId });
 }
 
 function mapError(requestId: string, err: unknown): Response {
@@ -48,12 +42,33 @@ function mapError(requestId: string, err: unknown): Response {
 }
 
 type RouteHandler = (ctx: any, req: Request, requestId: string) => Promise<Response>;
+interface RouteDef { prefix?: string; path?: string; method: string; handler: RouteHandler }
 
-interface RouteDef {
-  prefix?: string;
-  path?: string;
-  method: string;
-  handler: RouteHandler;
+async function enqueueTetra(ctx: any, req: Request, requestId: string): Promise<Response> {
+  const url = new URL(req.url);
+  const paymentId = url.searchParams.get("order_id") ?? "";
+  let payId = url.searchParams.get("pay_id") ?? "";
+  if (req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as { pay_id?: string };
+    if (body.pay_id) payId = body.pay_id;
+  }
+  if (!paymentId) {
+    return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
+  }
+  // pay_id ممکن است بعداً از رکورد payment خوانده شود اگر در query نباشد
+  const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
+    paymentId: paymentId as never,
+  });
+  const providerPaymentId = payId || payment?.providerPaymentId || "";
+  if (!providerPaymentId) {
+    return errorResponse(requestId, 400, "VALIDATION_ERROR", "pay_id لازم است");
+  }
+  await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
+    paymentId: paymentId as never,
+    provider: "tetraminator",
+    providerPaymentId,
+  });
+  return jsonResponse(requestId, 200, { ok: true });
 }
 
 const routes: RouteDef[] = [
@@ -84,7 +99,7 @@ const routes: RouteDef[] = [
   {
     path: "/api/v1/openapi.json",
     method: "GET",
-    handler: async (_ctx, _req, requestId) => jsonResponse(requestId, 200, buildOpenApiSpec()),
+    handler: async (_ctx, _req, requestId) => jsonResponse(requestId, 200, { openapi: "3.1.0", info: { title: GUARDASLI.product, version: getVersionSnapshot().components.api } }),
   },
   {
     prefix: "/api/v1/telegram/webhook/",
@@ -112,23 +127,13 @@ const routes: RouteDef[] = [
   },
   {
     prefix: "/api/v1/payments/tetraminator/webhook",
+    method: "GET",
+    handler: enqueueTetra,
+  },
+  {
+    prefix: "/api/v1/payments/tetraminator/webhook",
     method: "POST",
-    handler: async (ctx, req, requestId) => {
-      // فقط صف verify — credit مستقیم ممنوع. امضای provider در worker بررسی می‌شود.
-      const url = new URL(req.url);
-      const paymentId = url.searchParams.get("order_id") ?? "";
-      const body = (await req.json().catch(() => ({}))) as { pay_id?: string };
-      if (!paymentId || !body.pay_id) {
-        return errorResponse(requestId, 400, "VALIDATION_ERROR", "پارامترهای webhook ناقص است");
-      }
-      // شناسهٔ پرداخت باید در DB وجود داشته و در awaiting_verify باشد (enqueuePaymentVerify چک می‌کند)
-      await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
-        paymentId: paymentId as never,
-        provider: "tetraminator",
-        providerPaymentId: body.pay_id,
-      });
-      return jsonResponse(requestId, 200, { ok: true });
-    },
+    handler: enqueueTetra,
   },
   {
     prefix: "/api/v1/payments/cubepay/callback",
@@ -137,13 +142,49 @@ const routes: RouteDef[] = [
       const url = new URL(req.url);
       const paymentId = url.searchParams.get("order_id") ?? "";
       const body = (await req.json().catch(() => ({}))) as { authority?: string };
-      if (!paymentId || !body.authority) {
-        return errorResponse(requestId, 400, "VALIDATION_ERROR", "پارامترهای callback ناقص است");
+      const authority =
+        body.authority ||
+        url.searchParams.get("authority") ||
+        "";
+      if (!paymentId) {
+        return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
+      }
+      const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
+        paymentId: paymentId as never,
+      });
+      const providerPaymentId = authority || payment?.providerPaymentId || "";
+      if (!providerPaymentId) {
+        return errorResponse(requestId, 400, "VALIDATION_ERROR", "authority لازم است");
       }
       await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
         paymentId: paymentId as never,
         provider: "cubepay",
-        providerPaymentId: body.authority,
+        providerPaymentId,
+      });
+      return jsonResponse(requestId, 200, { ok: true });
+    },
+  },
+  {
+    prefix: "/api/v1/payments/cubepay/callback",
+    method: "GET",
+    handler: async (ctx, req, requestId) => {
+      const url = new URL(req.url);
+      const paymentId = url.searchParams.get("order_id") ?? "";
+      const authority = url.searchParams.get("authority") ?? "";
+      if (!paymentId) {
+        return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
+      }
+      const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
+        paymentId: paymentId as never,
+      });
+      const providerPaymentId = authority || payment?.providerPaymentId || "";
+      if (!providerPaymentId) {
+        return errorResponse(requestId, 400, "VALIDATION_ERROR", "authority لازم است");
+      }
+      await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
+        paymentId: paymentId as never,
+        provider: "cubepay",
+        providerPaymentId,
       });
       return jsonResponse(requestId, 200, { ok: true });
     },
@@ -174,59 +215,3 @@ export const http = httpAction(async (ctx, req) => {
   }
   return errorResponse(requestId, 404, "NOT_FOUND", "مسیر یافت نشد");
 });
-
-function buildOpenApiSpec(): Record<string, unknown> {
-  const snap = getVersionSnapshot();
-  return {
-    openapi: "3.1.0",
-    info: {
-      title: `${GUARDASLI.product} API`,
-      version: snap.components.api,
-      description: `API پلتفرم ${GUARDASLI.product} توسط ${GUARDASLI.developer}`,
-      contact: { name: GUARDASLI.developer },
-    },
-    servers: [{ url: "/api/v1" }],
-    components: {
-      schemas: {
-        Error: {
-          type: "object",
-          required: ["code", "message", "requestId"],
-          properties: {
-            code: { type: "string" },
-            message: { type: "string" },
-            details: {},
-            requestId: { type: "string" },
-          },
-        },
-      },
-    },
-    paths: {
-      "/api/v1/ping": { get: { summary: "سلام", responses: { "200": { description: "OK" } } } },
-      "/api/v1/version": {
-        get: {
-          summary: "نسخه مستقل هر جزء با قالب isMAJOR.MINOR.PATCH",
-          responses: { "200": { description: "OK" } },
-        },
-      },
-      "/api/v1/payments/tetraminator/webhook": {
-        post: {
-          summary: "Webhook Tetraminator — صف verify بدون credit مستقیم",
-          responses: { "200": { description: "OK" }, "400": { description: "خطا" } },
-        },
-      },
-      "/api/v1/payments/cubepay/callback": {
-        post: {
-          summary: "Callback CubePay — صف verify بدون credit مستقیم",
-          responses: { "200": { description: "OK" }, "400": { description: "خطا" } },
-        },
-      },
-      "/api/v1/telegram/webhook/{botConfigId}": {
-        post: {
-          summary: "Webhook bot هر tenant با secret token",
-          parameters: [{ name: "botConfigId", in: "path", required: true, schema: { type: "string" } }],
-          responses: { "200": { description: "OK" }, "401": { description: "امضای نامعتبر" } },
-        },
-      },
-    },
-  };
-}
