@@ -1,14 +1,8 @@
 /**
- * GuardAsli — لایه KMS / Envelope encryption.
- *
- * مدل:
- *   plaintext → AES-GCM با DEK تصادفی → ciphertext
- *   DEK → wrap با KEK (محلی از MASTER یا ابری)
- *
- * حالت‌ها:
- *   local  — KEK از GUARDASLI_MASTER_SECRET (پیش‌فرض)
- *   env_kek — KEK جدا از GUARDASLI_KMS_KEK
- *   http   — POST به GUARDASLI_KMS_WRAP_URL (آداپتر AWS/GCP/Azure شما)
+ * GuardAsli — Envelope encryption + KMS modes.
+ * blob format (بدون تداخل نقطه):
+ *   e1|{mode}|{wrapped_b64url}|{iv}|{ct}|{tag}
+ * wrapped محلی: w1.{iv}.{ct}.{tag} سپس base64url کل رشته
  */
 import {
   createCipheriv,
@@ -53,7 +47,11 @@ function deriveKek(label: string, secret: string): Buffer {
   return Buffer.from(hkdfSync("sha256", ikm, salt, info, 32));
 }
 
-function aesGcmEncrypt(key: Buffer, plaintext: Buffer, aad?: string): { iv: Buffer; ct: Buffer; tag: Buffer } {
+function aesGcmEncrypt(
+  key: Buffer,
+  plaintext: Buffer,
+  aad?: string,
+): { iv: Buffer; ct: Buffer; tag: Buffer } {
   const iv = randomBytes(IV_LEN);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   if (aad) cipher.setAAD(Buffer.from(aad, "utf8"));
@@ -62,23 +60,33 @@ function aesGcmEncrypt(key: Buffer, plaintext: Buffer, aad?: string): { iv: Buff
   return { iv, ct, tag };
 }
 
-function aesGcmDecrypt(key: Buffer, iv: Buffer, ct: Buffer, tag: Buffer, aad?: string): Buffer {
+function aesGcmDecrypt(
+  key: Buffer,
+  iv: Buffer,
+  ct: Buffer,
+  tag: Buffer,
+  aad?: string,
+): Buffer {
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
   if (aad) decipher.setAAD(Buffer.from(aad, "utf8"));
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ct), decipher.final()]);
 }
 
-/** Wrap DEK با KEK محلی. */
 function wrapDekLocal(dek: Buffer, kekSecret: string, aad: string): string {
   const kek = deriveKek("wrap", kekSecret);
-  const { iv, ct, tag } = aesGcmEncrypt(kek, dek, aad);
-  kek.fill(0);
-  return ["w1", iv.toString("base64url"), ct.toString("base64url"), tag.toString("base64url")].join(".");
+  try {
+    const { iv, ct, tag } = aesGcmEncrypt(kek, dek, aad);
+    const raw = ["w1", iv.toString("base64url"), ct.toString("base64url"), tag.toString("base64url")].join(".");
+    return Buffer.from(raw, "utf8").toString("base64url");
+  } finally {
+    kek.fill(0);
+  }
 }
 
-function unwrapDekLocal(wrapped: string, kekSecret: string, aad: string): Buffer {
-  const parts = wrapped.split(".");
+function unwrapDekLocal(wrappedB64: string, kekSecret: string, aad: string): Buffer {
+  const raw = Buffer.from(wrappedB64, "base64url").toString("utf8");
+  const parts = raw.split(".");
   if (parts[0] !== "w1" || parts.length < 4) throw new Error("KMS_UNWRAP_INVALID");
   const kek = deriveKek("wrap", kekSecret);
   try {
@@ -94,11 +102,6 @@ function unwrapDekLocal(wrapped: string, kekSecret: string, aad: string): Buffer
   }
 }
 
-/**
- * HTTP wrap: body { op: "wrap"|"unwrap", dek_b64?, wrapped?, aad }
- * پاسخ: { wrapped } یا { dek_b64 }
- * برای اتصال به Lambda/Cloud Function که AWS KMS / GCP KMS را صدا می‌زند.
- */
 async function httpWrap(dek: Buffer, aad: string): Promise<string> {
   const url = env("GUARDASLI_KMS_WRAP_URL");
   if (!url) throw new Error("KMS_HTTP: GUARDASLI_KMS_WRAP_URL لازم است");
@@ -109,11 +112,7 @@ async function httpWrap(dek: Buffer, aad: string): Promise<string> {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({
-      op: "wrap",
-      dek_b64: dek.toString("base64"),
-      aad,
-    }),
+    body: JSON.stringify({ op: "wrap", dek_b64: dek.toString("base64"), aad }),
   });
   if (!res.ok) throw new Error(`KMS_HTTP_WRAP_FAILED: ${res.status}`);
   const body = (await res.json()) as { wrapped?: string };
@@ -139,8 +138,7 @@ async function httpUnwrap(wrapped: string, aad: string): Promise<Buffer> {
   return Buffer.from(body.dek_b64, "base64");
 }
 
-function resolveKekSecret(): string {
-  const mode = getKmsMode();
+function resolveKekSecret(mode: KmsMode): string {
   if (mode === "env_kek") {
     const k = env("GUARDASLI_KMS_KEK");
     if (!k || k.length < 32) throw new Error("GUARDASLI_KMS_KEK الزامی و ≥32 است");
@@ -152,27 +150,19 @@ function resolveKekSecret(): string {
 }
 
 export interface EnvelopeBlob {
-  /** e1.wrappedDek.iv.ct.tag */
   blob: string;
   mode: KmsMode;
 }
 
-/**
- * رمزنگاری envelope: DEK تصادفی + wrap با KMS/local.
- * برای اسرار حساس‌تر از aead تک‌کلیدی (اختیاری در کنار aead.ts).
- */
-export async function envelopeEncrypt(
-  plaintext: string,
-  aad: string,
-): Promise<EnvelopeBlob> {
+export async function envelopeEncrypt(plaintext: string, aad: string): Promise<EnvelopeBlob> {
   const mode = getKmsMode();
   const dek = randomBytes(DEK_LEN);
-  let wrapped: string;
   try {
+    let wrapped: string;
     if (mode === "http") {
       wrapped = await httpWrap(dek, aad);
     } else {
-      wrapped = wrapDekLocal(dek, resolveKekSecret(), aad);
+      wrapped = wrapDekLocal(dek, resolveKekSecret(mode), aad);
     }
     const { iv, ct, tag } = aesGcmEncrypt(dek, Buffer.from(plaintext, "utf8"), aad);
     const blob = [
@@ -182,7 +172,7 @@ export async function envelopeEncrypt(
       iv.toString("base64url"),
       ct.toString("base64url"),
       tag.toString("base64url"),
-    ].join(".");
+    ].join("|");
     return { blob, mode };
   } finally {
     dek.fill(0);
@@ -190,7 +180,7 @@ export async function envelopeEncrypt(
 }
 
 export async function envelopeDecrypt(blob: string, aad: string): Promise<string> {
-  const parts = blob.split(".");
+  const parts = blob.split("|");
   if (parts[0] !== "e1" || parts.length < 6) throw new Error("ENVELOPE_INVALID");
   const mode = parts[1] as KmsMode;
   const wrapped = parts[2];
@@ -202,19 +192,10 @@ export async function envelopeDecrypt(blob: string, aad: string): Promise<string
   if (mode === "http") {
     dek = await httpUnwrap(wrapped, aad);
   } else {
-    // local و env_kek هر دو wrap محلی با KEK متفاوت
-    const prev = process.env.GUARDASLI_KMS_MODE;
-    process.env.GUARDASLI_KMS_MODE = mode;
-    try {
-      dek = unwrapDekLocal(wrapped, resolveKekSecret(), aad);
-    } finally {
-      if (prev === undefined) delete process.env.GUARDASLI_KMS_MODE;
-      else process.env.GUARDASLI_KMS_MODE = prev;
-    }
+    dek = unwrapDekLocal(wrapped, resolveKekSecret(mode), aad);
   }
   try {
-    const pt = aesGcmDecrypt(dek, iv, ct, tag, aad);
-    return pt.toString("utf8");
+    return aesGcmDecrypt(dek, iv, ct, tag, aad).toString("utf8");
   } finally {
     dek.fill(0);
   }

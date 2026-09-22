@@ -1,21 +1,21 @@
 #!/usr/bin/env bun
-/** GuardAsli — pre-release gate checks (no network secrets). */
+/** GuardAsli is0.0.1 — pre-release gate. */
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
 const root = new URL("..", import.meta.url).pathname;
 let failed = 0;
 
-function ok(msg) {
-  console.log(`✓ ${msg}`);
-}
-function fail(msg) {
-  console.error(`✗ ${msg}`);
-  failed++;
-}
+function ok(msg) { console.log(`✓ ${msg}`); }
+function fail(msg) { console.error(`✗ ${msg}`); failed++; }
 
 const mustExist = [
   "src/core/identity.ts",
+  "src/core/aead.ts",
+  "src/core/password.ts",
+  "src/core/kms.ts",
+  "src/core/sidechannel.ts",
+  "src/core/prodEnv.ts",
   "src/convex/schema.ts",
   "src/convex/auth.ts",
   "src/convex/wallet.ts",
@@ -27,10 +27,20 @@ const mustExist = [
   "src/core/payments/cubepay.ts",
   "src/core/payments/tetraminator.ts",
   "scripts/cli.mjs",
+  "scripts/wizard.sh",
+  "scripts/prod-start.sh",
   "RELEASE.json",
   "docs/RUNBOOK.md",
   "docs/SECURITY.md",
   "docs/PAYMENTS.md",
+  "docs/PRODUCTION.md",
+  "docs/KMS_AND_SIDECHANNEL.md",
+  "README.md",
+  "README.fa.md",
+  "Docs.md",
+  "Docs.fa.md",
+  "Learn.md",
+  "Learn.fa.md",
 ];
 
 for (const f of mustExist) {
@@ -49,22 +59,23 @@ if (release.product === "GuardAsli" && release.developer === "AsliCode" && relea
 } else fail("RELEASE.json invalid");
 
 const banned = [/openai/i, /chatgpt/i, /anthropic/i, /claude/i, /gemini/i, /copilot/i];
-const scanFiles = [
-  "README.md",
-  "src/core/identity.ts",
-  "src/web/LandingPage.tsx",
-  "package.json",
-];
+const scanFiles = ["README.md", "src/core/identity.ts", "package.json", "RELEASE.json"];
 for (const f of scanFiles) {
   const text = readFileSync(join(root, f), "utf8");
   for (const re of banned) {
     if (re.test(text)) fail(`banned term in ${f}: ${re}`);
   }
 }
-ok("brand purity scan on key files");
+ok("brand purity scan");
+
+const aead = readFileSync(join(root, "src/core/aead.ts"), "utf8");
+if (!aead.includes("hkdfSync")) fail("aead must use hkdfSync");
+else ok("HKDF native");
+if (!aead.includes("payment_credentials")) fail("purpose keys missing");
+else ok("purpose keys");
 
 if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);
 }
-console.log("\nAll release checks passed — is0.0.1");
+console.log("\nAll release checks passed — GuardAsli is0.0.1 FINAL");
