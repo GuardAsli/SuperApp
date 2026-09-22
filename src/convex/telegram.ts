@@ -70,7 +70,6 @@ export const botConfigGet = query({
       .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
       .unique();
     if (!cfg) return null;
-    // token رمزنگاری‌شده هرگز به کلاینت برنمی‌گردد
     return {
       botConfigId: cfg._id,
       displayName: cfg.displayName,
@@ -82,7 +81,16 @@ export const botConfigGet = query({
   },
 });
 
-/** اعتبارسنجی امضای webhook — مقایسه زمان‌ثابت با webhookSecret هر tenant. */
+/** فقط برای Node action — envelope رمزنگاری‌شده؛ plaintext هرگز از mutation برنمی‌گردد. */
+export const getBotTokenEnvelope = internalQuery({
+  args: { botConfigId: v.id("botConfigs") },
+  handler: async (ctx, args) => {
+    const cfg = await ctx.db.get(args.botConfigId);
+    if (!cfg) return null;
+    return { tokenEncrypted: cfg.tokenEncrypted, enabled: cfg.enabled };
+  },
+});
+
 export const verifyWebhookSecret = internalQuery({
   args: { botConfigId: v.id("botConfigs"), secret: v.string() },
   handler: async (ctx, args) => {
@@ -93,10 +101,6 @@ export const verifyWebhookSecret = internalQuery({
   },
 });
 
-/**
- * اتمام Mini App auth پس از verify سمت Node action.
- * کلاینت نباید initDataVerified را جعل کند — فقط internal از action فراخوانی می‌شود.
- */
 export const miniAppCompleteAuth = internalMutation({
   args: {
     botConfigId: v.id("botConfigs"),

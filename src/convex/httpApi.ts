@@ -1,12 +1,14 @@
-/** GuardAsli — HTTP API /api/v1 (بند ۳۹): فرمت خطای استاندارد، webhook ها، OpenAPI. */
+/** GuardAsli — HTTP API /api/v1: فرمت خطای استاندارد، webhook ها، OpenAPI. */
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { newRequestId, safeInternalMessage } from "../core/errors";
+import { getVersionSnapshot, GUARDASLI } from "../core/identity";
 
 const corsHeaders: Record<string, string> = {
+  // در production دامنهٔ اصلی را جایگزین * کنید
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Request-Id",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Request-Id, X-Webhook-Secret",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Content-Security-Policy": "default-src 'none'",
@@ -59,24 +61,25 @@ const routes: RouteDef[] = [
     path: "/api/v1/ping",
     method: "GET",
     handler: async (_ctx, _req, requestId) =>
-      jsonResponse(requestId, 200, { code: "OK", message: "GuardAsli API", version: "is0.0.1" }),
+      jsonResponse(requestId, 200, {
+        code: "OK",
+        message: `${GUARDASLI.product} API`,
+        version: getVersionSnapshot().components.api,
+      }),
   },
   {
     path: "/api/v1/version",
     method: "GET",
-    handler: async (_ctx, _req, requestId) =>
-      jsonResponse(requestId, 200, {
-        product: "GuardAsli",
-        developer: "AsliCode",
-        version: "is0.0.1",
-        format: "isMAJOR.MINOR.PATCH",
-        components: {
-          core: "is0.0.1", api: "is0.0.1", web: "is0.0.1", bot: "is0.0.1",
-          miniapp: "is0.0.1", mainapp: "is0.0.1", dedicated: "is0.0.1",
-          installer: "is0.0.1", payment: "is0.0.1", providers: "is0.0.1",
-          build: "is0.0.1", releases: "is0.0.1",
-        },
-      }),
+    handler: async (_ctx, _req, requestId) => {
+      const snap = getVersionSnapshot();
+      return jsonResponse(requestId, 200, {
+        product: snap.product,
+        developer: snap.developer,
+        version: snap.components.core,
+        format: snap.format,
+        components: snap.components,
+      });
+    },
   },
   {
     path: "/api/v1/openapi.json",
@@ -111,12 +114,14 @@ const routes: RouteDef[] = [
     prefix: "/api/v1/payments/tetraminator/webhook",
     method: "POST",
     handler: async (ctx, req, requestId) => {
+      // فقط صف verify — credit مستقیم ممنوع. امضای provider در worker بررسی می‌شود.
       const url = new URL(req.url);
       const paymentId = url.searchParams.get("order_id") ?? "";
       const body = (await req.json().catch(() => ({}))) as { pay_id?: string };
       if (!paymentId || !body.pay_id) {
         return errorResponse(requestId, 400, "VALIDATION_ERROR", "پارامترهای webhook ناقص است");
       }
+      // شناسهٔ پرداخت باید در DB وجود داشته و در awaiting_verify باشد (enqueuePaymentVerify چک می‌کند)
       await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
         paymentId: paymentId as never,
         provider: "tetraminator",
@@ -145,7 +150,6 @@ const routes: RouteDef[] = [
   },
 ];
 
-/** روتینگ دستی — فایل http.ts فقط این را به Convex معرفی می‌کند. */
 export const http = httpAction(async (ctx, req) => {
   const requestId = newRequestId();
   if (req.method === "OPTIONS") {
@@ -172,13 +176,14 @@ export const http = httpAction(async (ctx, req) => {
 });
 
 function buildOpenApiSpec(): Record<string, unknown> {
+  const snap = getVersionSnapshot();
   return {
     openapi: "3.1.0",
     info: {
-      title: "GuardAsli API",
-      version: "is0.0.1",
-      description: "API پلتفرم GuardAsli توسط AsliCode",
-      contact: { name: "AsliCode" },
+      title: `${GUARDASLI.product} API`,
+      version: snap.components.api,
+      description: `API پلتفرم ${GUARDASLI.product} توسط ${GUARDASLI.developer}`,
+      contact: { name: GUARDASLI.developer },
     },
     servers: [{ url: "/api/v1" }],
     components: {
@@ -199,7 +204,7 @@ function buildOpenApiSpec(): Record<string, unknown> {
       "/api/v1/ping": { get: { summary: "سلام", responses: { "200": { description: "OK" } } } },
       "/api/v1/version": {
         get: {
-          summary: "نسخه اجزا با فرمت isMAJOR.MINOR.PATCH",
+          summary: "نسخه مستقل هر جزء با قالب isMAJOR.MINOR.PATCH",
           responses: { "200": { description: "OK" } },
         },
       },

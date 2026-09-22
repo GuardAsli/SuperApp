@@ -1,4 +1,4 @@
-/** GuardAsli — خرید/پرووایژنینگ (بند ۲۲ و ۲۳): دبیت اتمی → خرید → پرووایژن → فعال‌سازی. */
+/** GuardAsli — خرید/پرووایژنینگ: دبیت اتمی → خرید → پرووایژن → فعال‌سازی. */
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -6,8 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireActor, requirePermission, requireTenantScope } from "./auth";
 import { quoteCustomPurchase, type CustomPurchaseConfig } from "../core/pricing";
 import { evaluateFeatureAccess } from "../core/features";
-
-// ————— Plans —————
+import { DEFAULT_ROLE_PERMISSIONS } from "../core/rbac";
 
 export const planCreate = mutation({
   args: {
@@ -30,7 +29,9 @@ export const planCreate = mutation({
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "ManagePlans");
-    if (args.price < 0) throw new Error("VALIDATION_ERROR: قیمت نامعتبر است");
+    if (!Number.isInteger(args.price) || args.price < 0) {
+      throw new Error("VALIDATION_ERROR: قیمت نامعتبر است");
+    }
     if (args.kind === "user" && args.durationDays !== undefined && args.durationDays <= 0) {
       throw new Error("VALIDATION_ERROR: مدت نامعتبر است");
     }
@@ -76,8 +77,7 @@ export const planList = query({
   },
 });
 
-// ————— Custom Purchase quote —————
-
+/** قیمت Custom Purchase فقط از تنظیمات سرور — کلاینت قیمت پایه نمی‌فرستد. */
 export const customPurchaseQuote = query({
   args: {
     token: v.string(),
@@ -85,24 +85,23 @@ export const customPurchaseQuote = query({
     users: v.number(),
     durationDays: v.number(),
     featureKeys: v.array(v.string()),
-    perUserCost: v.number(),
-    optionalCosts: v.number(),
-    basePricePerMonth: v.number(),
   },
   handler: async (ctx, args) => {
     await requireActor(ctx, args.token);
-    // تنظیمات Custom Purchase از سرور خوانده می‌شود — قیمت فرانت هرگز مرجع نیست
     const cfgDoc = await ctx.db
       .query("systemSettings")
       .withIndex("by_key", (q) => q.eq("key", "custom_purchase_config"))
       .unique();
     if (!cfgDoc) throw new Error("FORBIDDEN: Custom Purchase پیکربندی نشده است");
-    const cfg = cfgDoc.value as CustomPurchaseConfig;
+    const cfg = cfgDoc.value as CustomPurchaseConfig & { basePricePerMonth?: number; perUserCost?: number; optionalCosts?: number };
     const global = await ctx.db
       .query("featureFlags")
       .withIndex("by_key", (q) => q.eq("key", "CustomPurchase"))
       .unique();
     if (!global?.globallyEnabled) throw new Error("FORBIDDEN: Custom Purchase غیرفعال است");
+    const basePricePerMonth = typeof cfg.basePricePerMonth === "number" ? cfg.basePricePerMonth : 0;
+    const perUserCost = typeof cfg.perUserCost === "number" ? cfg.perUserCost : 0;
+    const optionalCosts = typeof cfg.optionalCosts === "number" ? cfg.optionalCosts : 0;
     return quoteCustomPurchase(
       cfg,
       {
@@ -110,15 +109,13 @@ export const customPurchaseQuote = query({
         users: args.users,
         durationDays: args.durationDays,
         featureKeys: args.featureKeys,
-        perUserCost: args.perUserCost,
-        optionalCosts: args.optionalCosts,
+        perUserCost,
+        optionalCosts,
       },
-      args.basePricePerMonth,
+      basePricePerMonth,
     );
   },
 });
-
-// ————— خرید Plan با Wallet —————
 
 export const purchasePlan = mutation({
   args: {
@@ -134,35 +131,24 @@ export const purchasePlan = mutation({
     if (!plan || plan.status !== "active") throw new Error("NOT_FOUND: پلن یافت نشد");
     await requireTenantScope(ctx, actor, plan.tenantId);
 
-    // زنجیره Feature: WebApp/پلن/نقش/tenant
     const global = await ctx.db
       .query("featureFlags")
       .withIndex("by_key", (q) => q.eq("key", "WebApp"))
       .unique();
-    const planEnabled = true; // پلن فعال باشد کافی است؛ سقف‌ها در ادامه اعمال می‌شوند
-    const quotaOk = true; // سقف‌های سطح quota در createSubscription بررسی می‌شوند
+    const rolePerms =
+      DEFAULT_ROLE_PERMISSIONS[actor.role as keyof typeof DEFAULT_ROLE_PERMISSIONS] ?? [];
     if (!evaluateFeatureAccess({
-      globalEnabled: global?.globallyEnabled ?? false,
-      planEnabled,
-      rolePermissions: plan.permissions,
+      globalEnabled: global?.globallyEnabled ?? true,
+      planEnabled: true,
+      rolePermissions: rolePerms as string[],
       roleRequired: "Purchase" as never,
       tenantActive: true,
       ownershipOk: true,
-      quotaOk,
+      quotaOk: true,
     })) {
       throw new Error("FORBIDDEN: زنجیره دسترسی Feature تأیید نشد");
     }
 
-    const dupe = await ctx.db
-      .query("subscriptions")
-      .withIndex("by_user", (q) => q.eq("userId", actor.userId))
-      .filter((q) => q.eq(q.field("status"), "created"))
-      .first();
-    if (dupe && args.idempotencyKey) {
-      // بررسی idempotency از طریق لجر در ادامه انجام می‌شود
-    }
-
-    // Wallet
     const wallet = await ctx.db
       .query("wallets")
       .withIndex("by_user", (q) => q.eq("userId", actor.userId))
@@ -171,7 +157,6 @@ export const purchasePlan = mutation({
       throw new Error("CONFLICT: موجودی کافی نیست");
     }
 
-    // دبیت اتمی — Ledger با idempotencyKey تضمین عدم دوباره‌برداشت
     const debit: { ledgerEntryId: Id<"ledgerEntries">; balanceAfter: number; deduped: boolean } =
       await ctx.runMutation(internal.wallet.ledgerApply, {
         walletId: wallet._id,
@@ -182,6 +167,11 @@ export const purchasePlan = mutation({
         idempotencyKey: `purchase:${args.idempotencyKey}`,
         metadata: { planId: args.planId },
       });
+
+    // اگر idempotent replay بود و قبلاً اشتراک ساخته شده، همان را برنگردانیم مگر از ledger
+    if (debit.deduped) {
+      return { subscriptionId: null, ledgerEntryId: debit.ledgerEntryId, deduped: true };
+    }
 
     const now = Date.now();
     const subscriptionId = await ctx.db.insert("subscriptions", {
@@ -201,6 +191,11 @@ export const purchasePlan = mutation({
       provisionAttempts: 0,
     });
 
+    await ctx.runMutation(internal.billing.provisionJobEnqueue, {
+      subscriptionId,
+      tenantId: actor.tenantId,
+    });
+
     await ctx.runMutation(internal.audit.log, {
       actorUserId: actor.userId,
       tenantId: actor.tenantId,
@@ -212,8 +207,6 @@ export const purchasePlan = mutation({
     return { subscriptionId, ledgerEntryId: debit.ledgerEntryId, deduped: debit.deduped };
   },
 });
-
-// ————— صف پرووایژنینگ —————
 
 export const provisionJobEnqueue = internalMutation({
   args: { subscriptionId: v.id("subscriptions"), tenantId: v.id("tenants") },
@@ -229,7 +222,6 @@ export const provisionJobEnqueue = internalMutation({
   },
 });
 
-/** اجرای پرووایژن — فقط پس از موفقیت واقعی provider وضعیت active می‌شود (بند ۲۳). */
 export const provisionRun = internalMutation({
   args: { jobId: v.id("provisionJobs") },
   handler: async (ctx, args) => {
@@ -243,7 +235,6 @@ export const provisionRun = internalMutation({
     await ctx.db.patch(args.jobId, { status: "running" });
     await ctx.db.patch(sub._id, { provisioningState: "provisioning" });
     if (!sub.serverId) {
-      // سروری تعیین نشده: فعال‌سازی بدون پرووایژن خارجی (مدیریت داخلی)
       await ctx.db.patch(sub._id, {
         status: "active",
         provisioningState: "provisioned",
@@ -265,8 +256,6 @@ export const provisionRun = internalMutation({
       await ctx.db.patch(sub._id, { provisioningState: "failed", lastProvisionError: "server missing" });
       return { ok: false };
     }
-    // فراخوانی provider از طریق اکشن node در provisionAction انجام می‌شود؛
-    // این mutation وضعیت را مدیریت می‌کند و خطای واقعی را ثبت می‌نماید.
     return { ok: true, serverId: sub.serverId };
   },
 });
@@ -302,15 +291,13 @@ export const provisionFinish = internalMutation({
       await ctx.db.patch(args.jobId, {
         status: failed ? "dead" : "queued",
         attempt,
-        nextRunAt: Date.now() + Math.min(60_000 * 2 ** attempt, 3600_000), // exponential backoff
+        nextRunAt: Date.now() + Math.min(60_000 * 2 ** attempt, 3600_000),
         ...(args.error !== undefined ? { lastError: args.error } : {}),
       });
     }
     return { ok: true };
   },
 });
-
-// ————— Subscriptions —————
 
 export const subscriptionList = query({
   args: { token: v.string() },
