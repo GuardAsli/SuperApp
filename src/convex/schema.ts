@@ -156,11 +156,10 @@ export default defineSchema(
       configEncrypted: v.string(),
     }).index("by_key", ["key"]),
 
-    /** پیکربندی درگاه متعلق به کاربر — اسرار رمزنگاری‌شده، ایزوله per-user */
     userPaymentConfigs: defineTable({
       userId: v.id("users"),
       tenantId: v.id("tenants"),
-      provider: v.string(), // cubepay | tetraminator
+      provider: v.string(),
       credentialsEncrypted: v.string(),
       baseUrl: v.optional(v.string()),
       enabled: v.boolean(),
@@ -358,8 +357,7 @@ export default defineSchema(
 
     jobs: defineTable({
       kind: v.string(),
-      tenantId: v.optional(v.id("tenants"),
-      ),
+      tenantId: v.optional(v.id("tenants")),
       payload: v.optional(v.any()),
       status: v.string(),
       attempts: v.number(),
