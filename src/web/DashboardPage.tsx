@@ -1,4 +1,4 @@
-/** GuardAsli — داشبورد کامل: کیف پول، شارژ، کارت‌به‌کارت، خرید پلن، ادمین، i18n */
+/** GuardAsli — داشبورد با تب‌های مدیریت حرفه‌ای */
 import { useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -11,7 +11,15 @@ interface Props {
   onBrandingChange: (b: TenantBranding) => void;
 }
 
-type Tab = "overview" | "wallet" | "charge" | "payments" | "plans" | "branding" | "admin";
+type Tab =
+  | "overview"
+  | "wallet"
+  | "charge"
+  | "payments"
+  | "plans"
+  | "branding"
+  | "admin"
+  | "monitor";
 
 export default function DashboardPage({ branding, onBrandingChange }: Props) {
   const token = sessionStorage.getItem("guardasli.session") ?? "";
@@ -24,7 +32,11 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
   const myPayments = useQuery(api.payments.myPayments, token ? { token } : "skip");
   const cards = useQuery(
     api.payments.cardList,
-    token && methods?.some((m: { key: string; globallyEnabled: boolean }) => m.key === "card_to_card" && m.globallyEnabled)
+    token &&
+      methods?.some(
+        (m: { key: string; globallyEnabled: boolean }) =>
+          m.key === "card_to_card" && m.globallyEnabled,
+      )
       ? { token }
       : "skip",
   );
@@ -33,6 +45,14 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
     token && ["admin", "super_admin"].includes(whoami?.role ?? "") ? { token } : "skip",
   );
   const providerCfgs = useQuery(api.payments.myProviderConfigList, token ? { token } : "skip");
+  const health = useQuery(
+    api.infra.healthLatest,
+    token && whoami && ["admin", "super_admin"].includes(whoami.role) ? { token } : "skip",
+  );
+  const jobStats = useQuery(
+    api.infra.jobStats,
+    token && whoami && ["admin", "super_admin"].includes(whoami.role) ? {} : "skip",
+  );
   const logout = useMutation(api.auth.revokeSession);
   const methodToggle = useMutation(api.payments.methodSetEnabled);
   const cardReview = useMutation(api.payments.cardReview);
@@ -45,7 +65,9 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
   const createTetra = useAction(api.paymentActions.createTetraminatorInvoiceAction);
 
   const [tab, setTab] = useState<Tab>("overview");
-  const [chargeMethod, setChargeMethod] = useState<"cubepay" | "tetraminator" | "card">("tetraminator");
+  const [chargeMethod, setChargeMethod] = useState<"cubepay" | "tetraminator" | "card">(
+    "tetraminator",
+  );
   const [amount, setAmount] = useState("");
   const [cardId, setCardId] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -72,6 +94,24 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
     return m;
   }, [methods]);
 
+  const tabs = useMemo(() => {
+    const base: Array<[Tab, string]> = [
+      ["overview", t("overview", locale)],
+      ["wallet", t("wallet", locale)],
+      ["charge", t("charge", locale)],
+      ["payments", t("payments", locale)],
+      ["plans", t("plans", locale)],
+    ];
+    if (["admin", "super_admin", "reseller"].includes(role)) {
+      base.push(["branding", t("branding", locale)]);
+    }
+    if (isAdmin) {
+      base.push(["admin", t("admin", locale)]);
+      base.push(["monitor", t("monitor", locale)]);
+    }
+    return base;
+  }, [locale, role, isAdmin]);
+
   function switchLocale(next: Locale) {
     setLocale(next);
     setLoc(next);
@@ -87,7 +127,14 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
       if (chargeMethod === "card") {
         if (!methodMap.card_to_card) throw new Error("FORBIDDEN: card_to_card disabled");
         if (!cardId || !receiptFile) throw new Error("VALIDATION_ERROR: card + receipt required");
-        const uploadUrl = await genUpload({ token });
+        const upMeta = await genUpload({
+          token,
+          purpose: "receipt",
+          contentType: receiptFile.type || "application/octet-stream",
+          sizeBytes: receiptFile.size,
+        });
+        const uploadUrl =
+          typeof upMeta === "string" ? upMeta : (upMeta as { uploadUrl: string }).uploadUrl;
         const up = await fetch(uploadUrl, {
           method: "POST",
           headers: { "Content-Type": receiptFile.type || "application/octet-stream" },
@@ -176,13 +223,19 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
     <div className="mx-auto max-w-6xl px-6 py-8" dir={locale === "fa" ? "rtl" : "ltr"}>
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold">{t("dashboard", locale)} {branding.displayName}</h1>
+          <h1 className="text-2xl font-extrabold">
+            {t("dashboard", locale)} {branding.displayName}
+          </h1>
           <p className="text-sm text-core-muted">
             {whoami ? `${whoami.username} · ${role}` : "…"} · {GUARDASLI.product}
           </p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={() => switchLocale(locale === "fa" ? "en" : "fa")} className="rounded-lg border px-3 py-2 text-sm font-semibold">
+          <button
+            type="button"
+            onClick={() => switchLocale(locale === "fa" ? "en" : "fa")}
+            className="rounded-lg border px-3 py-2 text-sm font-semibold"
+          >
             {locale === "fa" ? "EN" : "FA"}
           </button>
           <button
@@ -198,23 +251,16 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
         </div>
       </header>
 
-      <nav className="mt-6 flex flex-wrap gap-2">
-        {(
-          [
-            ["overview", t("overview", locale)],
-            ["wallet", t("wallet", locale)],
-            ["charge", t("charge", locale)],
-            ["payments", t("payments", locale)],
-            ["plans", t("plans", locale)],
-            ...(["admin", "super_admin", "reseller"].includes(role) ? ([["branding", t("branding", locale)]] as const) : []),
-            ...(isAdmin ? ([["admin", "Admin"]] as const) : []),
-          ] as Array<[Tab, string]>
-        ).map(([key, label]) => (
+      <nav className="mt-6 flex flex-wrap gap-2 border-b border-white/10 pb-3">
+        {tabs.map(([key, label]) => (
           <button
             key={key}
+            type="button"
             onClick={() => setTab(key)}
             className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-              tab === key ? "bg-core-primary text-core-primaryFg" : "border hover:bg-core-surface"
+              tab === key
+                ? "bg-core-primary text-core-primaryFg shadow"
+                : "border border-transparent hover:border-white/20 hover:bg-core-surface"
             }`}
           >
             {label}
@@ -223,13 +269,18 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
       </nav>
 
       {msg && (
-        <p className="mt-4 rounded-lg border bg-core-surface px-3 py-2 text-sm" dir="ltr">{msg}</p>
+        <p className="mt-4 rounded-lg border bg-core-surface px-3 py-2 text-sm" dir="ltr">
+          {msg}
+        </p>
       )}
 
       <main className="mt-6">
         {tab === "overview" && (
           <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard title={t("balance", locale)} value={wallet ? `${wallet.balance.toLocaleString(locNum)} ${t("toman", locale)}` : "…"} />
+            <StatCard
+              title={t("balance", locale)}
+              value={wallet ? `${wallet.balance.toLocaleString(locNum)} ${t("toman", locale)}` : "…"}
+            />
             <StatCard title={t("plans", locale)} value={plans ? String(plans.length) : "…"} />
             <StatCard title="Role" value={role} />
           </div>
@@ -243,13 +294,25 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
               <span className="text-sm font-bold text-core-muted">{t("toman", locale)}</span>
             </div>
             <ul className="mt-6 divide-y">
-              {((history ?? []) as Array<{ _id: string; type: string; reason: string; direction: string; amount: number }>).map((h) => (
+              {(
+                (history ?? []) as Array<{
+                  _id: string;
+                  type: string;
+                  reason: string;
+                  direction: string;
+                  amount: number;
+                }>
+              ).map((h) => (
                 <li key={h._id} className="flex items-center justify-between py-3 text-sm">
                   <span>
                     <span className="font-semibold">{h.type}</span>
                     <span className="text-core-muted"> · {h.reason}</span>
                   </span>
-                  <span className={`font-bold ${h.direction === "credit" ? "text-core-ok" : "text-core-danger"}`}>
+                  <span
+                    className={`font-bold ${
+                      h.direction === "credit" ? "text-core-ok" : "text-core-danger"
+                    }`}
+                  >
                     {h.direction === "credit" ? "+" : "−"}
                     {h.amount.toLocaleString(locNum)}
                   </span>
@@ -276,51 +339,100 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
                       chargeMethod === m ? "bg-core-primary text-core-primaryFg" : "border"
                     }`}
                   >
-                    {m === "card" ? t("cardToCard", locale) : m === "cubepay" ? t("cubePay", locale) : t("tetraminator", locale)}
+                    {m === "card"
+                      ? t("cardToCard", locale)
+                      : m === "cubepay"
+                        ? t("cubePay", locale)
+                        : t("tetraminator", locale)}
                   </button>
                 ))}
               </div>
               <label className="mt-4 block text-sm font-semibold">
                 {t("amount", locale)}
-                <input value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2" dir="ltr" inputMode="numeric" />
+                <input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2"
+                  dir="ltr"
+                  inputMode="numeric"
+                />
               </label>
               {chargeMethod === "card" && (
                 <>
                   <label className="mt-3 block text-sm font-semibold">
                     Card
-                    <select value={cardId} onChange={(e) => setCardId(e.target.value)} className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2">
+                    <select
+                      value={cardId}
+                      onChange={(e) => setCardId(e.target.value)}
+                      className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2"
+                    >
                       <option value="">—</option>
-                      {(cards ?? []).map((c: { _id: string; numberMasked?: string; ownerName: string }) => (
-                        <option key={c._id} value={c._id}>
-                          {c.numberMasked ?? "****"} · {c.ownerName}
-                        </option>
-                      ))}
+                      {(cards ?? []).map(
+                        (c: { _id: string; numberMasked?: string; ownerName: string }) => (
+                          <option key={c._id} value={c._id}>
+                            {c.numberMasked ?? "****"} · {c.ownerName}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </label>
                   <label className="mt-3 block text-sm font-semibold">
                     Receipt
-                    <input type="file" accept="image/*,application/pdf" className="mt-1 block w-full text-sm" onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)} />
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="mt-1 block w-full text-sm"
+                      onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+                    />
                   </label>
                 </>
               )}
-              <button type="button" disabled={busy} onClick={doCharge} className="mt-4 w-full rounded-xl bg-core-primary py-3 font-bold text-core-primaryFg disabled:opacity-50">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={doCharge}
+                className="mt-4 w-full rounded-xl bg-core-primary py-3 font-bold text-core-primaryFg disabled:opacity-50"
+              >
                 {t("submit", locale)}
               </button>
             </div>
             <div className="rounded-2xl border bg-core-surface p-6">
               <h2 className="text-lg font-extrabold">{t("providerConfig", locale)}</h2>
               <ul className="mt-3 space-y-1 text-sm">
-                {(providerCfgs ?? []).map((c: { provider: string; enabled: boolean; hasSecret: boolean }) => (
-                  <li key={c.provider}>
-                    {c.provider}: {c.enabled ? t("enabled", locale) : t("disabled", locale)}
-                    {c.hasSecret ? " · ••••" : ""}
-                  </li>
-                ))}
+                {(providerCfgs ?? []).map(
+                  (c: { provider: string; enabled: boolean; hasSecret: boolean }) => (
+                    <li key={c.provider}>
+                      {c.provider}: {c.enabled ? t("enabled", locale) : t("disabled", locale)}
+                      {c.hasSecret ? " · ••••" : ""}
+                    </li>
+                  ),
+                )}
               </ul>
-              <input type="password" value={provKey} onChange={(e) => setProvKey(e.target.value)} placeholder="API Key / Bearer" className="mt-4 w-full rounded-lg border bg-core-bg px-3 py-2" dir="ltr" />
+              <input
+                type="password"
+                value={provKey}
+                onChange={(e) => setProvKey(e.target.value)}
+                placeholder="API Key / Bearer"
+                className="mt-4 w-full rounded-lg border bg-core-bg px-3 py-2"
+                dir="ltr"
+              />
               <div className="mt-3 flex gap-2">
-                <button type="button" disabled={busy} onClick={() => doSaveProvider("tetraminator")} className="rounded-lg border px-3 py-2 text-sm font-semibold">Tetra</button>
-                <button type="button" disabled={busy} onClick={() => doSaveProvider("cubepay")} className="rounded-lg border px-3 py-2 text-sm font-semibold">CubePay</button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => doSaveProvider("tetraminator")}
+                  className="rounded-lg border px-3 py-2 text-sm font-semibold"
+                >
+                  Tetra
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => doSaveProvider("cubepay")}
+                  className="rounded-lg border px-3 py-2 text-sm font-semibold"
+                >
+                  CubePay
+                </button>
               </div>
             </div>
           </div>
@@ -330,12 +442,32 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
           <div className="rounded-2xl border bg-core-surface p-6">
             <h2 className="text-lg font-extrabold">{t("history", locale)}</h2>
             <ul className="mt-4 divide-y">
-              {(myPayments ?? []).map((p: { _id: string; method: string; status: string; amount: number; paymentLink?: string | null }) => (
-                <li key={p._id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
-                  <span>{p.method} · {p.status}</span>
+              {(
+                (myPayments ?? []) as Array<{
+                  _id: string;
+                  method: string;
+                  status: string;
+                  amount: number;
+                  paymentLink?: string | null;
+                }>
+              ).map((p) => (
+                <li
+                  key={p._id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
+                >
+                  <span>
+                    {p.method} · {p.status}
+                  </span>
                   <span className="font-bold">{p.amount.toLocaleString(locNum)}</span>
                   {p.paymentLink && (
-                    <a href={p.paymentLink} target="_blank" rel="noreferrer" className="text-core-primary underline">link</a>
+                    <a
+                      href={p.paymentLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-core-primary underline"
+                    >
+                      link
+                    </a>
                   )}
                 </li>
               ))}
@@ -348,19 +480,62 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
 
         {tab === "plans" && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {((plans ?? []) as Array<{ _id: string; name: string; kind: string; price: number }>).map((p) => (
-              <div key={p._id} className="rounded-2xl border bg-core-surface p-5">
-                <h3 className="text-lg font-bold">{p.name}</h3>
-                <div className="mt-3 text-2xl font-black">{p.price.toLocaleString(locNum)}</div>
-                <button type="button" disabled={busy} onClick={() => doPurchase(p._id)} className="mt-4 w-full rounded-lg bg-core-primary py-2 text-sm font-bold text-core-primaryFg disabled:opacity-50">
-                  {t("submit", locale)}
-                </button>
-              </div>
-            ))}
+            {((plans ?? []) as Array<{ _id: string; name: string; kind: string; price: number }>).map(
+              (p) => (
+                <div key={p._id} className="rounded-2xl border bg-core-surface p-5">
+                  <h3 className="text-lg font-bold">{p.name}</h3>
+                  <div className="mt-3 text-2xl font-black">{p.price.toLocaleString(locNum)}</div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => doPurchase(p._id)}
+                    className="mt-4 w-full rounded-lg bg-core-primary py-2 text-sm font-bold text-core-primaryFg disabled:opacity-50"
+                  >
+                    {t("submit", locale)}
+                  </button>
+                </div>
+              ),
+            )}
           </div>
         )}
 
-        {tab === "branding" && <BrandingPanel branding={branding} onChange={onBrandingChange} />}
+        {tab === "branding" && (
+          <BrandingPanel branding={branding} onChange={onBrandingChange} />
+        )}
+
+        {tab === "monitor" && isAdmin && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border bg-core-surface p-6">
+              <h2 className="text-lg font-extrabold">{t("health", locale)}</h2>
+              <ul className="mt-4 space-y-2 text-sm">
+                {(health ?? []).map((h: { target: string; state: string; checkedAt: number }) => (
+                  <li key={h.target} className="flex justify-between border-b border-white/5 py-2">
+                    <span className="font-semibold">{h.target}</span>
+                    <span className="text-core-muted">{h.state}</span>
+                  </li>
+                ))}
+                {(!health || health.length === 0) && <li className="text-core-muted">—</li>}
+              </ul>
+            </div>
+            <div className="rounded-2xl border bg-core-surface p-6">
+              <h2 className="text-lg font-extrabold">{t("jobs", locale)}</h2>
+              {jobStats ? (
+                <div className="mt-4 space-y-2 font-mono text-sm" dir="ltr">
+                  {Object.entries((jobStats as { counts: Record<string, number> }).counts || {}).map(
+                    ([k, v]) => (
+                      <div key={k} className="flex justify-between">
+                        <span>{k}</span>
+                        <span className="font-bold">{String(v)}</span>
+                      </div>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-core-muted">…</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {tab === "admin" && isAdmin && (
           <div className="grid gap-6 lg:grid-cols-2">
@@ -369,11 +544,37 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
               <ul className="mt-4 space-y-3">
                 {(pending ?? []).map((p: { _id: string; amount: number; method: string }) => (
                   <li key={p._id} className="rounded-lg border p-3 text-sm">
-                    <div>{p.amount.toLocaleString(locNum)} · {p.method}</div>
+                    <div>
+                      {p.amount.toLocaleString(locNum)} · {p.method}
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" className="rounded-lg bg-core-primary px-3 py-1 text-xs font-bold text-core-primaryFg" onClick={() => cardReview({ token, paymentId: p._id as never, decision: "approve" })}>{t("approve", locale)}</button>
-                      <button type="button" className="rounded-lg border px-3 py-1 text-xs font-bold" onClick={() => cardReview({ token, paymentId: p._id as never, decision: "reject" })}>{t("reject", locale)}</button>
-                      <button type="button" className="rounded-lg border border-red-500 px-3 py-1 text-xs font-bold text-red-500" onClick={() => cardReview({ token, paymentId: p._id as never, decision: "fraud" })}>{t("fraud", locale)}</button>
+                      <button
+                        type="button"
+                        className="rounded-lg bg-core-primary px-3 py-1 text-xs font-bold text-core-primaryFg"
+                        onClick={() =>
+                          cardReview({ token, paymentId: p._id as never, decision: "approve" })
+                        }
+                      >
+                        {t("approve", locale)}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg border px-3 py-1 text-xs font-bold"
+                        onClick={() =>
+                          cardReview({ token, paymentId: p._id as never, decision: "reject" })
+                        }
+                      >
+                        {t("reject", locale)}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-red-500 px-3 py-1 text-xs font-bold text-red-500"
+                        onClick={() =>
+                          cardReview({ token, paymentId: p._id as never, decision: "fraud" })
+                        }
+                      >
+                        {t("fraud", locale)}
+                      </button>
                     </div>
                   </li>
                 ))}
@@ -382,18 +583,46 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
             </div>
             <div className="rounded-2xl border bg-core-surface p-6">
               <h2 className="text-lg font-extrabold">{t("adminCredit", locale)}</h2>
-              <input placeholder="target user id" value={adminUserId} onChange={(e) => setAdminUserId(e.target.value)} className="mt-3 w-full rounded-lg border bg-core-bg px-3 py-2" dir="ltr" />
-              <input placeholder={t("amount", locale)} value={adminAmount} onChange={(e) => setAdminAmount(e.target.value)} className="mt-2 w-full rounded-lg border bg-core-bg px-3 py-2" dir="ltr" />
-              <input placeholder={t("reason", locale)} value={adminReason} onChange={(e) => setAdminReason(e.target.value)} className="mt-2 w-full rounded-lg border bg-core-bg px-3 py-2" />
-              <button type="button" disabled={busy} onClick={doAdminCredit} className="mt-3 rounded-xl bg-core-primary px-4 py-2 font-bold text-core-primaryFg">{t("submit", locale)}</button>
+              <input
+                placeholder="target user id"
+                value={adminUserId}
+                onChange={(e) => setAdminUserId(e.target.value)}
+                className="mt-3 w-full rounded-lg border bg-core-bg px-3 py-2"
+                dir="ltr"
+              />
+              <input
+                placeholder={t("amount", locale)}
+                value={adminAmount}
+                onChange={(e) => setAdminAmount(e.target.value)}
+                className="mt-2 w-full rounded-lg border bg-core-bg px-3 py-2"
+                dir="ltr"
+              />
+              <input
+                placeholder={locale === "fa" ? "دلیل" : "Reason"}
+                value={adminReason}
+                onChange={(e) => setAdminReason(e.target.value)}
+                className="mt-2 w-full rounded-lg border bg-core-bg px-3 py-2"
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={doAdminCredit}
+                className="mt-3 rounded-xl bg-core-primary px-4 py-2 font-bold text-core-primaryFg"
+              >
+                {t("submit", locale)}
+              </button>
               {isSuper && (
                 <div className="mt-8">
-                  <h3 className="font-extrabold">{t("methods", locale)}</h3>
+                  <h3 className="font-extrabold">{t("paymentMethods", locale)}</h3>
                   <ul className="mt-2 space-y-2 text-sm">
                     {["admin_manual", "card_to_card", "cubepay", "tetraminator"].map((key) => (
                       <li key={key} className="flex items-center justify-between">
                         <span>{key}</span>
-                        <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => methodToggle({ token, key, enabled: !methodMap[key] })}>
+                        <button
+                          type="button"
+                          className="rounded border px-2 py-1 text-xs"
+                          onClick={() => methodToggle({ token, key, enabled: !methodMap[key] })}
+                        >
                           {methodMap[key] ? t("enabled", locale) : t("disabled", locale)}
                         </button>
                       </li>
@@ -409,7 +638,13 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
   );
 }
 
-function BrandingPanel({ branding, onChange }: { branding: TenantBranding; onChange: (b: TenantBranding) => void }) {
+function BrandingPanel({
+  branding,
+  onChange,
+}: {
+  branding: TenantBranding;
+  onChange: (b: TenantBranding) => void;
+}) {
   function update<K extends keyof TenantBranding>(key: K, value: TenantBranding[K]) {
     const next = { ...branding, [key]: value };
     saveBranding(next);
@@ -418,10 +653,16 @@ function BrandingPanel({ branding, onChange }: { branding: TenantBranding; onCha
   return (
     <div className="rounded-2xl border bg-core-surface p-6">
       <h2 className="text-lg font-extrabold">Branding</h2>
-      <p className="mt-1 text-sm text-core-muted">Core ({GUARDASLI.product} / {GUARDASLI.developer}) is fixed.</p>
+      <p className="mt-1 text-sm text-core-muted">
+        Core ({GUARDASLI.product} / {GUARDASLI.developer}) is fixed.
+      </p>
       <label className="mt-4 block text-sm font-semibold">
         Display name
-        <input value={branding.displayName} onChange={(e) => update("displayName", e.target.value)} className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2" />
+        <input
+          value={branding.displayName}
+          onChange={(e) => update("displayName", e.target.value)}
+          className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2"
+        />
       </label>
     </div>
   );
