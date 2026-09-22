@@ -1,16 +1,15 @@
 "use node";
-/** GuardAsli — اکشن‌های Node: هش scrypt، ورود، چرخش refresh، bootstrap ادمین. */
+/** GuardAsli — scrypt login/register/bootstrap با سیاست رمز قوی. */
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { scryptHashSync, scryptVerifySync } from "../core/password";
+import { assertStrongPassword, scryptHashSync, scryptVerifySync } from "../core/password";
 import type { Doc } from "./_generated/dataModel";
 
 export const registerAction = action({
   args: {
     username: v.string(),
     password: v.string(),
-    /** نقش از کلاینت نادیده گرفته می‌شود — همیشه user */
     role: v.optional(v.string()),
     parentUsername: v.optional(v.string()),
   },
@@ -21,19 +20,14 @@ export const registerAction = action({
     if (args.password.length < 8) {
       throw new Error("VALIDATION_ERROR: رمز عبور باید حداقل ۸ کاراکتر باشد");
     }
-    // جلوگیری از privilege escalation: ثبت‌نام عمومی فقط user
     const role = "user";
     const { hash } = scryptHashSync(args.password);
-    const res: { userId: string; tenantId: string } = await ctx.runMutation(
-      internal.auth.persistUser,
-      {
-        username: args.username,
-        passwordEnvelope: hash,
-        role,
-        parentUsername: args.parentUsername,
-      },
-    );
-    return res;
+    return await ctx.runMutation(internal.auth.persistUser, {
+      username: args.username,
+      passwordEnvelope: hash,
+      role,
+      parentUsername: args.parentUsername,
+    });
   },
 });
 
@@ -77,17 +71,15 @@ export const loginAction = action({
 
 export const refreshAction = action({
   args: { refreshToken: v.string() },
-  handler: async (ctx, args): Promise<{ accessToken: string; refreshToken: string; userId: string; expiresAt: number }> => {
-    const res: { accessToken: string; refreshToken: string; userId: string; expiresAt: number } | null =
-      await ctx.runMutation(internal.auth.rotateSession, {
-        refreshToken: args.refreshToken,
-      });
+  handler: async (ctx, args) => {
+    const res = await ctx.runMutation(internal.auth.rotateSession, {
+      refreshToken: args.refreshToken,
+    });
     if (!res) throw new Error("UNAUTHENTICATED: refresh token نامعتبر است");
     return res;
   },
 });
 
-/** ایجاد اولین Super Admin — bootstrap. فقط یک‌بار. */
 export const bootstrapAdminAction = action({
   args: {
     username: v.string(),
@@ -97,19 +89,13 @@ export const bootstrapAdminAction = action({
     if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(args.username)) {
       throw new Error("VALIDATION_ERROR: نام کاربری نامعتبر است");
     }
-    if (args.password.length < 12) {
-      throw new Error("VALIDATION_ERROR: رمز Super Admin باید حداقل ۱۲ کاراکتر باشد");
-    }
+    assertStrongPassword(args.password, 12);
     const { hash } = scryptHashSync(args.password);
-    const res: { tenantId: string; created: boolean } = await ctx.runMutation(
-      internal.tenants.bootstrapSystem,
-      {
-        username: args.username,
-        passwordHash: hash,
-        passwordSalt: "",
-      },
-    );
-    return res;
+    return await ctx.runMutation(internal.tenants.bootstrapSystem, {
+      username: args.username,
+      passwordHash: hash,
+      passwordSalt: "",
+    });
   },
 });
 

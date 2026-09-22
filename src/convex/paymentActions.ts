@@ -1,5 +1,5 @@
 "use node";
-/** GuardAsli — اکشن‌های Node: ساخت فاکتور CubePay/Tetraminator و verify قبل از credit. */
+/** GuardAsli — CubePay/Tetraminator با AAD روی اسرار کاربر. */
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal, api } from "./_generated/api";
@@ -14,7 +14,9 @@ import {
 
 function masterSecret(): string {
   const s = process.env.GUARDASLI_MASTER_SECRET;
-  if (!s) throw new Error("INTERNAL_ERROR: GUARDASLI_MASTER_SECRET تنظیم نشده");
+  if (!s || s.length < 16) {
+    throw new Error("INTERNAL_ERROR: GUARDASLI_MASTER_SECRET تنظیم نشده یا کوتاه است");
+  }
   return s;
 }
 
@@ -22,7 +24,10 @@ function publicBaseUrl(): string {
   return process.env.GUARDASLI_PUBLIC_URL ?? process.env.CONVEX_SITE_URL ?? "https://localhost";
 }
 
-/** ذخیره پیکربندی درگاه کاربر — اسرار فقط به صورت envelope ذخیره می‌شوند. */
+function aadFor(userId: string, provider: string): string {
+  return `user:${userId}|provider:${provider}|purpose:payment_credentials`;
+}
+
 export const saveUserProviderConfigAction = action({
   args: {
     token: v.string(),
@@ -36,7 +41,10 @@ export const saveUserProviderConfigAction = action({
     if (args.apiKeyOrToken.length < 8) {
       throw new Error("VALIDATION_ERROR: کلید/توکن نامعتبر است");
     }
-    const envelope = encryptSecret(args.apiKeyOrToken, masterSecret());
+    const who = await ctx.runQuery(api.auth.whoami, { token: args.token });
+    const envelope = encryptSecret(args.apiKeyOrToken, masterSecret(), {
+      aad: aadFor(String(who.userId), args.provider),
+    });
     return await ctx.runMutation(internal.payments.saveUserProviderConfig, {
       token: args.token,
       provider: args.provider,
@@ -50,7 +58,6 @@ export const saveUserProviderConfigAction = action({
   },
 });
 
-/** ساخت فاکتور CubePay — پس از فعال بودن روش سراسری و config کاربر. */
 export const createCubePayInvoiceAction = action({
   args: {
     token: v.string(),
@@ -79,9 +86,16 @@ export const createCubePayInvoiceAction = action({
     if (!cfg?.enabled) throw new Error("FORBIDDEN: پیکربندی CubePay فعال نیست");
     let tokenPlain: string;
     try {
-      tokenPlain = decryptSecret(cfg.credentialsEncrypted, masterSecret());
+      tokenPlain = decryptSecret(cfg.credentialsEncrypted, masterSecret(), {
+        aad: aadFor(String(prepared.userId), "cubepay"),
+      });
     } catch {
-      throw new Error("INTERNAL_ERROR: رمزگشایی توکن CubePay ناموفق");
+      // تلاش سازگاری v1 بدون AAD
+      try {
+        tokenPlain = decryptSecret(cfg.credentialsEncrypted, masterSecret());
+      } catch {
+        throw new Error("INTERNAL_ERROR: رمزگشایی توکن CubePay ناموفق");
+      }
     }
     const callbackUrl = `${publicBaseUrl()}/api/v1/payments/cubepay/callback?order_id=${prepared.paymentId}`;
     const created = await cubePayAdapter.createPayment(
@@ -112,7 +126,6 @@ export const createCubePayInvoiceAction = action({
   },
 });
 
-/** ساخت فاکتور Tetraminator */
 export const createTetraminatorInvoiceAction = action({
   args: {
     token: v.string(),
@@ -145,9 +158,15 @@ export const createTetraminatorInvoiceAction = action({
     if (!cfg?.enabled) throw new Error("FORBIDDEN: پیکربندی Tetraminator فعال نیست");
     let apiKey: string;
     try {
-      apiKey = decryptSecret(cfg.credentialsEncrypted, masterSecret());
+      apiKey = decryptSecret(cfg.credentialsEncrypted, masterSecret(), {
+        aad: aadFor(String(prepared.userId), "tetraminator"),
+      });
     } catch {
-      throw new Error("INTERNAL_ERROR: رمزگشایی API Key ناموفق");
+      try {
+        apiKey = decryptSecret(cfg.credentialsEncrypted, masterSecret());
+      } catch {
+        throw new Error("INTERNAL_ERROR: رمزگشایی API Key ناموفق");
+      }
     }
     const callbackUrl = `${publicBaseUrl()}/api/v1/payments/tetraminator/webhook?order_id=${prepared.paymentId}`;
     const created = await tetraminatorAdapter.createInvoice(
@@ -169,9 +188,6 @@ export const createTetraminatorInvoiceAction = action({
   },
 });
 
-/**
- * Worker تأیید پرداخت — webhook فقط job می‌سازد؛ credit فقط اینجا بعد از inquiry/verify.
- */
 export const verifyProviderPaymentAction = action({
   args: {
     paymentId: v.id("payments"),
@@ -190,17 +206,24 @@ export const verifyProviderPaymentAction = action({
       return { ok: false, reason: `status=${payment.status}` };
     }
 
+    const provider = args.provider === "cubepay" ? "cubepay" : "tetraminator";
     const cfg = await ctx.runQuery(internal.payments.getUserProviderEnvelope, {
       userId: payment.userId,
-      provider: args.provider === "cubepay" ? "cubepay" : "tetraminator",
+      provider,
     });
     if (!cfg) return { ok: false, reason: "NO_CONFIG" };
 
     let secret: string;
     try {
-      secret = decryptSecret(cfg.credentialsEncrypted, masterSecret());
+      secret = decryptSecret(cfg.credentialsEncrypted, masterSecret(), {
+        aad: aadFor(String(payment.userId), provider),
+      });
     } catch {
-      return { ok: false, reason: "DECRYPT_FAILED" };
+      try {
+        secret = decryptSecret(cfg.credentialsEncrypted, masterSecret());
+      } catch {
+        return { ok: false, reason: "DECRYPT_FAILED" };
+      }
     }
 
     if (args.provider === "tetraminator") {
@@ -232,11 +255,10 @@ export const verifyProviderPaymentAction = action({
       return { ok: false, reason: "UNKNOWN_PROVIDER" };
     }
 
-    const accept = await ctx.runMutation(internal.payments.acceptProviderPayment, {
+    return await ctx.runMutation(internal.payments.acceptProviderPayment, {
       paymentId: args.paymentId,
       expectedAmount: payment.amount,
       providerPaymentId: args.providerPaymentId,
     });
-    return accept;
   },
 });
