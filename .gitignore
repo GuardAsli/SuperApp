@@ -4,13 +4,17 @@ node_modules/
 # build output
 dist/
 
-# generated
+# typescript
 tsconfig.tsbuildinfo
-src/convex/_generated/
 
 # env / secrets
 .env
 .env.local
+.env.*.local
 
-# logs
+# logs / OS
 *.log
+.DS_Store
+
+# note: src/convex/_generated stubs are committed for offline CI;
+# `bunx convex dev` will overwrite them with real bindings.

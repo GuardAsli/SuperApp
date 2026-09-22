@@ -1,4 +1,4 @@
-/** GuardAsli — HTTP API /api/v1 */
+/** GuardAsli — HTTP API /api/v1 + OpenAPI 3.1 کامل */
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { newRequestId, safeInternalMessage } from "../core/errors";
@@ -11,6 +11,8 @@ const corsHeaders: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Content-Security-Policy": "default-src 'none'",
+  "X-Frame-Options": "DENY",
+  "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
 };
 
 function jsonResponse(requestId: string, status: number, body: unknown): Response {
@@ -55,7 +57,6 @@ async function enqueueTetra(ctx: any, req: Request, requestId: string): Promise<
   if (!paymentId) {
     return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
   }
-  // pay_id ممکن است بعداً از رکورد payment خوانده شود اگر در query نباشد
   const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
     paymentId: paymentId as never,
   });
@@ -69,6 +70,119 @@ async function enqueueTetra(ctx: any, req: Request, requestId: string): Promise<
     providerPaymentId,
   });
   return jsonResponse(requestId, 200, { ok: true });
+}
+
+async function enqueueCube(ctx: any, req: Request, requestId: string): Promise<Response> {
+  const url = new URL(req.url);
+  const paymentId = url.searchParams.get("order_id") ?? "";
+  let authority = url.searchParams.get("authority") ?? "";
+  if (req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as { authority?: string };
+    if (body.authority) authority = body.authority;
+  }
+  if (!paymentId) {
+    return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
+  }
+  const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
+    paymentId: paymentId as never,
+  });
+  const providerPaymentId = authority || payment?.providerPaymentId || "";
+  if (!providerPaymentId) {
+    return errorResponse(requestId, 400, "VALIDATION_ERROR", "authority لازم است");
+  }
+  await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
+    paymentId: paymentId as never,
+    provider: "cubepay",
+    providerPaymentId,
+  });
+  return jsonResponse(requestId, 200, { ok: true });
+}
+
+function openApiDoc() {
+  const snap = getVersionSnapshot();
+  return {
+    openapi: "3.1.0",
+    info: {
+      title: GUARDASLI.product,
+      description: `Control-plane API by ${GUARDASLI.developer}`,
+      version: snap.components.api,
+    },
+    paths: {
+      "/api/v1/ping": {
+        get: {
+          summary: "Health ping",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/api/v1/version": {
+        get: {
+          summary: "Component versions",
+          responses: { "200": { description: "Version snapshot" } },
+        },
+      },
+      "/api/v1/openapi.json": {
+        get: {
+          summary: "OpenAPI document",
+          responses: { "200": { description: "This document" } },
+        },
+      },
+      "/api/v1/telegram/webhook/{botConfigId}": {
+        post: {
+          summary: "Telegram bot webhook",
+          parameters: [
+            { name: "botConfigId", in: "path", required: true, schema: { type: "string" } },
+            {
+              name: "X-Telegram-Bot-Api-Secret-Token",
+              in: "header",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: { "200": { description: "Accepted" }, "401": { description: "Bad secret" } },
+        },
+      },
+      "/api/v1/payments/tetraminator/webhook": {
+        get: {
+          summary: "Tetraminator webhook (enqueue verify only)",
+          parameters: [
+            { name: "order_id", in: "query", required: true, schema: { type: "string" } },
+            { name: "pay_id", in: "query", required: false, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Queued" } },
+        },
+        post: {
+          summary: "Tetraminator webhook POST",
+          responses: { "200": { description: "Queued" } },
+        },
+      },
+      "/api/v1/payments/cubepay/callback": {
+        get: {
+          summary: "CubePay callback (enqueue verify only)",
+          parameters: [
+            { name: "order_id", in: "query", required: true, schema: { type: "string" } },
+            { name: "authority", in: "query", required: false, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Queued" } },
+        },
+        post: {
+          summary: "CubePay callback POST",
+          responses: { "200": { description: "Queued" } },
+        },
+      },
+    },
+    components: {
+      schemas: {
+        Error: {
+          type: "object",
+          properties: {
+            code: { type: "string" },
+            message: { type: "string" },
+            requestId: { type: "string" },
+          },
+        },
+      },
+    },
+  };
 }
 
 const routes: RouteDef[] = [
@@ -99,7 +213,7 @@ const routes: RouteDef[] = [
   {
     path: "/api/v1/openapi.json",
     method: "GET",
-    handler: async (_ctx, _req, requestId) => jsonResponse(requestId, 200, { openapi: "3.1.0", info: { title: GUARDASLI.product, version: getVersionSnapshot().components.api } }),
+    handler: async (_ctx, _req, requestId) => jsonResponse(requestId, 200, openApiDoc()),
   },
   {
     prefix: "/api/v1/telegram/webhook/",
@@ -125,70 +239,10 @@ const routes: RouteDef[] = [
       return jsonResponse(requestId, 200, { ok: true });
     },
   },
-  {
-    prefix: "/api/v1/payments/tetraminator/webhook",
-    method: "GET",
-    handler: enqueueTetra,
-  },
-  {
-    prefix: "/api/v1/payments/tetraminator/webhook",
-    method: "POST",
-    handler: enqueueTetra,
-  },
-  {
-    prefix: "/api/v1/payments/cubepay/callback",
-    method: "POST",
-    handler: async (ctx, req, requestId) => {
-      const url = new URL(req.url);
-      const paymentId = url.searchParams.get("order_id") ?? "";
-      const body = (await req.json().catch(() => ({}))) as { authority?: string };
-      const authority =
-        body.authority ||
-        url.searchParams.get("authority") ||
-        "";
-      if (!paymentId) {
-        return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
-      }
-      const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
-        paymentId: paymentId as never,
-      });
-      const providerPaymentId = authority || payment?.providerPaymentId || "";
-      if (!providerPaymentId) {
-        return errorResponse(requestId, 400, "VALIDATION_ERROR", "authority لازم است");
-      }
-      await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
-        paymentId: paymentId as never,
-        provider: "cubepay",
-        providerPaymentId,
-      });
-      return jsonResponse(requestId, 200, { ok: true });
-    },
-  },
-  {
-    prefix: "/api/v1/payments/cubepay/callback",
-    method: "GET",
-    handler: async (ctx, req, requestId) => {
-      const url = new URL(req.url);
-      const paymentId = url.searchParams.get("order_id") ?? "";
-      const authority = url.searchParams.get("authority") ?? "";
-      if (!paymentId) {
-        return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
-      }
-      const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
-        paymentId: paymentId as never,
-      });
-      const providerPaymentId = authority || payment?.providerPaymentId || "";
-      if (!providerPaymentId) {
-        return errorResponse(requestId, 400, "VALIDATION_ERROR", "authority لازم است");
-      }
-      await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
-        paymentId: paymentId as never,
-        provider: "cubepay",
-        providerPaymentId,
-      });
-      return jsonResponse(requestId, 200, { ok: true });
-    },
-  },
+  { prefix: "/api/v1/payments/tetraminator/webhook", method: "GET", handler: enqueueTetra },
+  { prefix: "/api/v1/payments/tetraminator/webhook", method: "POST", handler: enqueueTetra },
+  { prefix: "/api/v1/payments/cubepay/callback", method: "GET", handler: enqueueCube },
+  { prefix: "/api/v1/payments/cubepay/callback", method: "POST", handler: enqueueCube },
 ];
 
 export const http = httpAction(async (ctx, req) => {
