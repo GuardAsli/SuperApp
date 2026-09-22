@@ -1,103 +1,63 @@
-/** GuardAsli — i18n: فارسی پیش‌فرض + انگلیسی */
-
+/** GuardAsli — i18n ساده FA/EN · پیش‌فرض فارسی */
 export type Locale = "fa" | "en";
 
-const STORAGE_KEY = "guardasli.locale";
+const KEY = "guardasli.locale";
 
 export function getLocale(): Locale {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
+    const v = localStorage.getItem(KEY);
     if (v === "en" || v === "fa") return v;
   } catch {
-    /* ignore */
+    /* */
   }
   return "fa";
 }
 
 export function setLocale(locale: Locale): void {
   try {
-    localStorage.setItem(STORAGE_KEY, locale);
+    localStorage.setItem(KEY, locale);
   } catch {
-    /* ignore */
+    /* */
   }
-  document.documentElement.lang = locale;
-  document.documentElement.dir = locale === "fa" ? "rtl" : "ltr";
 }
 
-const dict = {
-  fa: {
-    product: "GuardAsli",
-    dashboard: "داشبورد",
-    wallet: "کیف پول",
-    charge: "شارژ کیف پول",
-    balance: "موجودی",
-    plans: "پلن‌ها",
-    branding: "برندینگ",
-    payments: "پرداخت‌ها",
-    methods: "روش‌های پرداخت",
-    cardToCard: "کارت به کارت",
-    cubePay: "CubePay",
-    tetraminator: "Tetraminator",
-    adminCredit: "شارژ دستی ادمین",
-    amount: "مبلغ",
-    reason: "دلیل",
-    submit: "ثبت",
-    approve: "تأیید",
-    reject: "رد",
-    fraud: "تقلب + مسدود",
-    pendingReview: "در انتظار بررسی",
-    history: "تاریخچه",
-    logout: "خروج",
-    login: "ورود",
-    register: "ثبت‌نام",
-    overview: "نمای کلی",
-    providerConfig: "پیکربندی درگاه",
-    save: "ذخیره",
-    enabled: "فعال",
-    disabled: "غیرفعال",
-    language: "زبان",
-    noTransactions: "هنوز تراکنشی ثبت نشده است.",
-    toman: "تومان",
-  },
-  en: {
-    product: "GuardAsli",
-    dashboard: "Dashboard",
-    wallet: "Wallet",
-    charge: "Charge wallet",
-    balance: "Balance",
-    plans: "Plans",
-    branding: "Branding",
-    payments: "Payments",
-    methods: "Payment methods",
-    cardToCard: "Card-to-card",
-    cubePay: "CubePay",
-    tetraminator: "Tetraminator",
-    adminCredit: "Admin manual credit",
-    amount: "Amount",
-    reason: "Reason",
-    submit: "Submit",
-    approve: "Approve",
-    reject: "Reject",
-    fraud: "Fraud + block",
-    pendingReview: "Pending review",
-    history: "History",
-    logout: "Log out",
-    login: "Sign in",
-    register: "Register",
-    overview: "Overview",
-    providerConfig: "Provider config",
-    save: "Save",
-    enabled: "Enabled",
-    disabled: "Disabled",
-    language: "Language",
-    noTransactions: "No transactions yet.",
-    toman: "Toman",
-  },
-} as const;
+const dict: Record<string, { fa: string; en: string }> = {
+  dashboard: { fa: "داشبورد", en: "Dashboard" },
+  overview: { fa: "نمای کلی", en: "Overview" },
+  wallet: { fa: "کیف پول", en: "Wallet" },
+  charge: { fa: "شارژ", en: "Charge" },
+  payments: { fa: "پرداخت‌ها", en: "Payments" },
+  plans: { fa: "پلن‌ها", en: "Plans" },
+  branding: { fa: "برندینگ", en: "Branding" },
+  admin: { fa: "مدیریت", en: "Admin" },
+  monitor: { fa: "مانیتور", en: "Monitor" },
+  logout: { fa: "خروج", en: "Logout" },
+  balance: { fa: "موجودی", en: "Balance" },
+  toman: { fa: "تومان", en: "Toman" },
+  amount: { fa: "مبلغ", en: "Amount" },
+  submit: { fa: "ثبت", en: "Submit" },
+  save: { fa: "ذخیره شد", en: "Saved" },
+  history: { fa: "تاریخچه", en: "History" },
+  noTransactions: { fa: "تراکنشی نیست", en: "No transactions" },
+  cardToCard: { fa: "کارت‌به‌کارت", en: "Card to card" },
+  cubePay: { fa: "CubePay", en: "CubePay" },
+  tetraminator: { fa: "Tetraminator", en: "Tetraminator" },
+  providerConfig: { fa: "پیکربندی درگاه", en: "Provider config" },
+  enabled: { fa: "فعال", en: "Enabled" },
+  disabled: { fa: "غیرفعال", en: "Disabled" },
+  pendingReview: { fa: "در انتظار بررسی", en: "Pending review" },
+  approve: { fa: "تأیید", en: "Approve" },
+  reject: { fa: "رد", en: "Reject" },
+  fraud: { fa: "تقلب", en: "Fraud" },
+  adminCredit: { fa: "شارژ دستی", en: "Manual credit" },
+  paymentMethods: { fa: "روش‌های پرداخت", en: "Payment methods" },
+  health: { fa: "سلامت سیستم", en: "System health" },
+  jobs: { fa: "صف کارها", en: "Job queue" },
+  refresh: { fa: "بروزرسانی", en: "Refresh" },
+};
 
-export type MsgKey = keyof typeof dict.fa;
-
-export function t(key: MsgKey, locale?: Locale): string {
-  const loc = locale ?? getLocale();
-  return dict[loc][key] ?? dict.fa[key] ?? key;
+export function t(key: string, locale: Locale): string {
+  const row = dict[key];
+  if (!row) return key;
+  return row[locale] ?? row.fa ?? key;
 }

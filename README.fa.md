@@ -1,58 +1,96 @@
 <p align="center">
-  <img src="public/logo.svg" alt="GuardAsli — AsliCode" width="520" />
+  <img src="public/logo.svg" alt="GuardAsli — AsliCode" width="480" />
 </p>
 
 <h1 align="center">GuardAsli</h1>
 
 <p align="center">
-  <b>نسخه:</b> <code>is0.0.1</code> ·
+  <b>محصول:</b> GuardAsli ·
   <b>توسعه‌دهنده:</b> AsliCode ·
+  <b>انتشار:</b> <code>is0.0.1</code> <b>نهایی</b> ·
   <b>قالب:</b> <code>isMAJOR.MINOR.PATCH</code>
 </p>
 
 <p align="center">
   <a href="README.md">English</a> ·
+  <a href="FINAL_AUDIT.md">ممیزی نهایی</a> ·
   <a href="Docs.fa.md">مستندات</a> ·
-  <a href="docs/RUNBOOK.md">راهنمای اجرا</a> ·
-  <a href="docs/PAYMENTS.md">پرداخت</a> ·
-  <a href="docs/SECURITY.md">امنیت</a>
+  <a href="docs/SECURITY.md">امنیت</a> ·
+  <a href="docs/RUNBOOK.md">اجرا</a>
 </p>
 
 ---
 
-**GuardAsli** پلتفرم کنترل‌پلن **AsliCode** برای فروش و مدیریت سرویس پروکسی/VPN است: چندمستأجری، RBAC سمت سرور، کیف‌پول با Ledger، چهار درگاه پرداخت، آداپتور Provider، ربات و مینی‌اپ تلگرام، داشبورد وب، نسخه‌گذاری مستقل اجزا.
+**GuardAsli** کنترل‌پلن **AsliCode** برای فروش و مدیریت سرویس پروکسی/VPN: چندمستأجری، RBAC سمت سرور، کیف‌پول و Ledger، چهار روش پرداخت، آداپتور Provider، ربات و مینی‌اپ تلگرام، داشبورد وب.
 
 هویت Core ثابت است: **GuardAsli** / **AsliCode**.
 
-## نصب یک‌خطی
+وضعیت کد: ممیزی کامل — [FINAL_AUDIT.md](FINAL_AUDIT.md). آمادگی production به deploy Convex، DNS دامنه و کلید درگاه‌ها وابسته است.
+
+---
+
+## نصب یک‌خطی (VPS + دامنه)
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && sh ./scripts/cli.mjs install
+curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
 ```
 
-## مسیر اجرای مطمئن (Production)
+با deploy key:
 
 ```bash
-cp .env.example .env.local
-# GUARDASLI_MASTER_SECRET=$(openssl rand -hex 32)
-
-bun install
-bun run ci
-bun run release-check
-bunx convex login && bunx convex deploy
-bunx convex run authActions:bootstrapAdminAction \
-  '{"username":"admin","password":"رمز_قوی_حداقل_۱۲_کاراکتر"}'
-bun run preview
+export CONVEX_DEPLOY_KEY=... ; curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
 ```
 
-چک‌لیست کامل: **[docs/RUNBOOK.md](docs/RUNBOOK.md)**
+نصب در `/opt/guardasli`، تولید secrets، build، deploy Convex، bootstrap ادمین، **Nginx + SSL**، سرویس **systemd**.
 
-## قوانین مهم پرداخت
+---
 
-- Webhook **هرگز** کیف را شارژ نمی‌کند.
-- Credit فقط بعد از verify/inquiry سمت سرور و یک‌بار (idempotent).
-- روش غیرفعال سراسری در backend رد می‌شود.
+## سیستم‌عامل و منابع
 
-## لایسنس
+| OS | نسخه |
+|---|---|
+| Ubuntu | ۲۲.۰۴ / ۲۴.۰۴ LTS (پیشنهادی) |
+| Debian | ۱۱، ۱۲ |
+| Rocky / Alma / RHEL | ۹.x |
+| Fedora | ۳۹+ |
 
-اختصاصی **AsliCode**. تمام حقوق محفوظ است.
+| منبع | حداقل | پیشنهادی |
+|---|---|---|
+| CPU | ۱ vCPU | ۲ vCPU |
+| RAM | ۱ GB | ۲–۴ GB |
+| Disk | ۱۰ GB SSD | ۲۰ GB+ |
+
+---
+
+## آزمایشگاهی
+
+```bash
+git clone https://github.com/GuardAsli/SuperApp.git && cd SuperApp && bun run wizard && bun run up
+```
+
+---
+
+## تب‌های داشبورد
+
+| تب | نقش | محتوا |
+|---|---|---|
+| نمای کلی | همه | موجودی، تعداد پلن، نقش |
+| کیف پول | همه | موجودی + تاریخچه ledger |
+| شارژ | همه | Tetra / CubePay / کارت‌به‌کارت |
+| پرداخت‌ها | همه | تاریخچه |
+| پلن‌ها | همه | خرید |
+| برندینگ | ادمین+ | نام و رنگ |
+| ادمین | ادمین+ | بررسی رسید، شارژ دستی، روش‌ها |
+| مانیتور | ادمین+ | سلامت و صف jobs |
+
+زبان پیش‌فرض UI: **فارسی**.
+
+---
+
+## مستندات
+
+[Docs.fa.md](Docs.fa.md) · [Learn.fa.md](Learn.fa.md) · [docs/SECURITY.md](docs/SECURITY.md) · [docs/PRODUCTION.md](docs/PRODUCTION.md)
+
+---
+
+© AsliCode — GuardAsli `is0.0.1`

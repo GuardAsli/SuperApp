@@ -1,97 +1,81 @@
 # GuardAsli
 
-**Product:** GuardAsli · **Developer:** AsliCode · **Release:** **is0.0.1 FINAL**
+<p align="center">
+  <img src="public/logo.svg" alt="GuardAsli — AsliCode" width="480" />
+</p>
 
-Control-plane for sales, wallet, payments, resellers, Telegram, and provisioning.
+<p align="center">
+  <b>Product:</b> GuardAsli ·
+  <b>Developer:</b> AsliCode ·
+  <b>Release:</b> <code>is0.0.1</code> <b>FINAL</b> ·
+  <b>Format:</b> <code>isMAJOR.MINOR.PATCH</code>
+</p>
 
-[FINAL_AUDIT.md](FINAL_AUDIT.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md)
+<p align="center">
+  <a href="README.fa.md">فارسی</a> ·
+  <a href="FINAL_AUDIT.md">Final audit</a> ·
+  <a href="Docs.md">Docs</a> ·
+  <a href="docs/SECURITY.md">Security</a> ·
+  <a href="docs/PRODUCTION.md">Production</a> ·
+  <a href="docs/RUNBOOK.md">Runbook</a>
+</p>
+
+---
+
+**GuardAsli** is the AsliCode control-plane for selling and operating proxy/VPN services: multi-tenant, server-side RBAC, wallet + immutable ledger, four payment methods, provider adapters, Telegram bot & mini app, web dashboard, independent component versioning.
+
+Core identity is fixed: **GuardAsli** / **AsliCode**.
+
+**Status:** code audit complete — see [FINAL_AUDIT.md](FINAL_AUDIT.md). Production readiness depends on your Convex deploy key, domain DNS, and provider credentials.
+
+---
+
+## One-line install (VPS + domain)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
+```
+
+Optional non-interactive Convex:
+
+```bash
+export CONVEX_DEPLOY_KEY=... ; curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
+```
+
+Installs to `/opt/guardasli`, generates secrets, builds UI, deploys Convex (if key present), bootstraps admin, configures **Nginx + SSL**, enables **systemd `guardasli`**.
 
 ---
 
 ## Requirements
 
-### Supported operating systems (installer tested targets)
+### Supported OS
 
 | OS | Versions |
 |---|---|
-| **Ubuntu** | 22.04 LTS, 24.04 LTS (recommended) |
-| **Debian** | 12 (Bookworm), 11 (Bullseye) |
-| **Rocky Linux / AlmaLinux** | 9.x |
-| **Fedora** | 39+ |
-| **RHEL** | 9.x (packages via dnf/yum) |
+| Ubuntu | **22.04 / 24.04 LTS** (recommended) |
+| Debian | 11, 12 |
+| Rocky / Alma / RHEL | 9.x |
+| Fedora | 39+ |
 
-**Architecture:** `x86_64` (amd64) and `aarch64` (arm64).
+**Arch:** x86_64, aarch64. **Not** Windows/macOS as VPS targets (use lab install below).
 
-**Not supported as VPS target:** Windows Server, macOS (use local `bun run wizard` for dev only).
+### Resources
 
-### Minimum resources (VPS)
-
-| Resource | Minimum | Recommended |
+| | Minimum | Recommended |
 |---|---|---|
 | CPU | 1 vCPU | 2 vCPU |
 | RAM | 1 GB | 2–4 GB |
-| Disk | 10 GB SSD | 20 GB+ SSD |
-| Network | 100 Mbps, public IPv4 | + IPv6 optional |
-| Swap | 1 GB if RAM=1 GB | 2 GB |
+| Disk | 10 GB SSD | 20 GB+ |
+| Network | Public IPv4 + outbound HTTPS | + IPv6 |
 
-Backend data plane runs on **Convex Cloud** (outbound HTTPS required). The VPS mainly serves the static web UI + reverse proxy + SSL.
-
-### Software prerequisites
-
-- Root or passwordless sudo on the VPS
-- Outbound HTTPS (443) to GitHub, bun.sh, Convex, Let’s Encrypt
-- DNS **A/AAAA** record for your domain → server IP (before SSL)
-- Convex account + recommended `CONVEX_DEPLOY_KEY` for non-interactive deploy
+Backend data plane: **Convex Cloud**. VPS serves static UI + reverse proxy + TLS.
 
 ---
 
-## VPS install (production + domain) — one shot
+## Lab / local
 
 ```bash
-# روی سرور لینوکس:
-export CONVEX_DEPLOY_KEY="your-deploy-key"   # توصیه می‌شود
-sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | bash -s -- \
-  --domain panel.example.com \
-  --email admin@example.com'
-```
-
-Or from a cloned tree:
-
-```bash
-sudo bash install.sh --domain panel.example.com --email admin@example.com
-```
-
-What `install.sh` does automatically:
-
-1. Installs system packages (git, nginx, certbot, …)
-2. Installs **bun**
-3. Clones/updates repo to `/opt/guardasli`
-4. Generates production secrets in `.env.local`
-5. `bun install` + typecheck + test + build
-6. Convex deploy + env sync (if deploy key / URL present)
-7. Super Admin bootstrap
-8. Nginx reverse-proxy for your domain
-9. Let’s Encrypt SSL (when `--email` set and DNS points to server)
-10. **systemd** service `guardasli` (auto-restart)
-
-Credentials are printed at the end and stored in `/opt/guardasli/.env.local`.
-
-Finish after first-time Convex login (if no deploy key):
-
-```bash
-cd /opt/guardasli
-bunx convex login && bunx convex deploy
-bash scripts/finish-vps.sh
-```
-
----
-
-## Local / lab (optional)
-
-```bash
-git clone https://github.com/GuardAsli/SuperApp.git && cd SuperApp
-bun run wizard
-bun run up
+git clone https://github.com/GuardAsli/SuperApp.git && cd SuperApp && bun run wizard && bun run up
 ```
 
 ---
@@ -100,19 +84,60 @@ bun run up
 
 | Command | Purpose |
 |---|---|
-| `sudo bash install.sh --domain … --email …` | Full VPS install |
-| `bash scripts/finish-vps.sh` | Deploy + bootstrap + restart |
-| `bun run wizard` | Dev/lab install |
-| `bun run up` | Lab bring-up |
-| `systemctl status guardasli` | Service health |
+| `install.sh --domain … --email …` | Full VPS install |
+| `bun run wizard` | Lab install (no prompts) |
+| `bun run up` | Start UI (+ Convex sync/bootstrap) |
+| `bun run monitor` | Health + logs summary |
+| `bun run monitor:follow` | Tail app/nginx/convex logs |
+| `bun run monitor:jobs` | Job queue stats |
+| `bun run ci` | typecheck + test + build |
+| `bun run prod-start` | Production env gate |
 
 ---
 
-## Docs
+## Dashboard (management tabs)
 
-- [FINAL_AUDIT.md](FINAL_AUDIT.md)
-- [Docs.md](Docs.md) / [Docs.fa.md](Docs.fa.md)
-- [docs/SECURITY.md](docs/SECURITY.md) · [docs/PRODUCTION.md](docs/PRODUCTION.md)
-- [docs/PAYMENTS.md](docs/PAYMENTS.md)
+After login the web UI exposes role-aware tabs:
 
-**GuardAsli** by **AsliCode** · version format `isMAJOR.MINOR.PATCH`
+| Tab | Who | Content |
+|---|---|---|
+| Overview | all | Balance, plans count, role |
+| Wallet | all | Balance + ledger history |
+| Charge | all | Tetra / CubePay / card-to-card + provider keys |
+| Payments | all | Payment history + links |
+| Plans | all | Purchase plans |
+| Branding | admin+ | White-label colors/name |
+| Admin | admin+ | Pending card reviews, manual credit, method toggles (super) |
+| Monitor | admin+ | Health targets + job queue snapshot |
+
+Default UI language: **Persian** (toggle EN/FA).
+
+---
+
+## Security highlights
+
+- AES-256-GCM + HKDF purpose keys + AAD  
+- scrypt passwords, session pepper, side-channel hardened login  
+- Verify-before-credit payments; ledger idempotency  
+- CORS allowlist, upload limits, CSP, production env hard-fail  
+
+Details: [docs/SECURITY.md](docs/SECURITY.md) · [docs/PRODUCTION.md](docs/PRODUCTION.md)
+
+---
+
+## Documentation map
+
+| File | |
+|---|---|
+| [FINAL_AUDIT.md](FINAL_AUDIT.md) | Completion sign-off |
+| [Docs.md](Docs.md) / [Docs.fa.md](Docs.fa.md) | Technical reference |
+| [Learn.md](Learn.md) / [Learn.fa.md](Learn.fa.md) | Tutorials |
+| [docs/RUNBOOK.md](docs/RUNBOOK.md) | Ops |
+| [docs/PAYMENTS.md](docs/PAYMENTS.md) | Payments |
+| [docs/KMS_AND_SIDECHANNEL.md](docs/KMS_AND_SIDECHANNEL.md) | KMS / timing |
+
+---
+
+## License
+
+Proprietary **AsliCode**. All rights reserved.
