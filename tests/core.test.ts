@@ -1,4 +1,4 @@
-/** GuardAsli — تست‌های واحد هسته (بند ۴۴). */
+/** GuardAsli — تست‌های واحد هسته. */
 import { describe, expect, test } from "bun:test";
 import { GUARDASLI, INITIAL_VERSIONS, COMPONENTS } from "../src/core/identity";
 import {
@@ -12,6 +12,8 @@ import { validateOutboundUrl } from "../src/core/ssrf";
 import { encryptSecret, decryptSecret } from "../src/core/aead";
 import { scryptHashSync, scryptVerifySync, generateSecureCredential } from "../src/core/password";
 import { verifyTelegramInitData } from "../src/core/telegram";
+
+const MASTER = "test-master-secret-16+";
 
 describe("هویت مرکزی", () => {
   test("نام محصول و توسعه‌دهنده ثابت", () => {
@@ -163,8 +165,8 @@ describe("Custom Purchase", () => {
       trafficGb: 100, users: 10, durationDays: 60,
       featureKeys: ["MultiDevice", "QR"], perUserCost: 1000, optionalCosts: 0,
     }, 100000);
-    expect(q.basePrice).toBe(200000); // 2 ماه
-    expect(q.trafficPrice).toBe(100000); // 100 * (100000/100)
+    expect(q.basePrice).toBe(200000);
+    expect(q.trafficPrice).toBe(100000);
     expect(q.featurePrices).toBe(25000);
     expect(q.userCost).toBe(10000);
     expect(q.total).toBe(200000 + 100000 + 25000 + 10000);
@@ -199,16 +201,20 @@ describe("SSRF", () => {
   });
 });
 
-describe("AES-256-GCM", () => {
+describe("AES-256-GCM HKDF", () => {
   test("چرخه رمز/رمزگشایی", () => {
     const secret = "bot-token-123456";
-    const enc = encryptSecret(secret, "master-key");
+    const enc = encryptSecret(secret, MASTER);
+    expect(enc.startsWith("v2.")).toBe(true);
     expect(enc).not.toContain(secret);
-    expect(decryptSecret(enc, "master-key")).toBe(secret);
+    expect(decryptSecret(enc, MASTER)).toBe(secret);
   });
   test("رد کلید اشتباه", () => {
-    const enc = encryptSecret("data", "key1");
-    expect(() => decryptSecret(enc, "key2")).toThrow();
+    const enc = encryptSecret("data", MASTER);
+    expect(() => decryptSecret(enc, "other-master-key-xx")).toThrow();
+  });
+  test("رد master کوتاه", () => {
+    expect(() => encryptSecret("x", "short")).toThrow();
   });
 });
 
