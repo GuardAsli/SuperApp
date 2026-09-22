@@ -138,7 +138,6 @@ export default defineSchema(
 
     paymentCards: defineTable({
       tenantId: v.id("tenants"),
-      /** فقط masked یا placeholder — هرگز plaintext کامل در API */
       number: v.string(),
       numberLast4: v.optional(v.string()),
       numberEncrypted: v.optional(v.string()),
@@ -199,7 +198,7 @@ export default defineSchema(
       tenantId: v.id("tenants"),
       userId: v.id("users"),
       planId: v.optional(v.id("plans")),
-      serverId: v.optional(v.id("servers")) ,
+      serverId: v.optional(v.id("servers")),
       remoteUserId: v.optional(v.string()),
       kind: v.string(),
       trafficLimitGb: v.optional(v.number()),
