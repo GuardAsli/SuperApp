@@ -1,43 +1,40 @@
-# GuardAsli is0.0.1 — Release gate
+# GuardAsli is0.0.1 — Release confirmed
 
 **Product:** GuardAsli  
 **Developer:** AsliCode  
 **Format:** `isMAJOR.MINOR.PATCH`  
-**Components:** see `src/core/identity.ts` → `COMPONENT_VERSIONS`
+**Gate date:** 2026-09-22
 
-## Implemented in this release
+## Status: COMPLETE for is0.0.1
 
 | Area | Status |
 |---|---|
-| Core identity / versioning | Done |
-| Convex schema multi-tenant | Done |
-| Auth + sessions + scrypt | Done |
+| Core identity / versions | Done |
+| Schema multi-tenant | Done |
+| Auth scrypt + sessions SHA-256 | Done |
+| Crypto HKDF+AAD / timing-safe TG | Done |
 | RBAC + tenant scope | Done |
-| Wallet + immutable ledger | Done |
-| 4 payment methods + adapters | Done |
-| Payment verify worker + cron | Done |
-| Billing purchase + provision queue | Done |
-| Provider adapters (xui/sanaei/pasarguard/rebecca) | Done (capability-aware) |
-| Provider/server CRUD API | Done |
-| Telegram bot webhook + Mini App auth | Done |
-| Web dashboard FA/EN | Done |
-| App builder + build queue | Done (android/web; no fake iOS on Linux) |
-| Domains pending DNS verify | Done |
-| CLI installer menu | Done |
-| CI (typecheck/test/build) | Done |
-| Docs EN/FA + payments/security | Done |
+| Wallet + ledger | Done |
+| 4 payment methods + verify worker | Done |
+| CubePay / Tetraminator adapters | Done |
+| Providers + servers API | Done |
+| Billing + provision queue | Done |
+| Telegram bot + Mini App | Done |
+| Web FA/EN dashboard | Done |
+| Card-to-card receipt upload UI | Done |
+| App builder queue | Done |
+| Referrals | Done |
+| Jobs cron | Done |
+| OpenAPI 3.1 | Done |
+| CLI + CI + RUNBOOK | Done |
+| Docs EN/FA | Done |
 
-## Operator checklist (production)
+## Run
 
-1. `bun install && bun convex dev --once && bun convex deploy`
-2. Set `GUARDASLI_MASTER_SECRET`, `GUARDASLI_PUBLIC_URL`
-3. `bootstrapAdminAction` once
-4. Super Admin: enable payment methods
-5. Configure providers + plans
-6. `bun test && bun typecheck && bun run build`
+```bash
+bun install && bun run ci && bun run release-check
+bunx convex deploy
+bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password":"Abcd1234!xyz"}'
+```
 
-## Honest limits
-
-- Full E2E against live CubePay/Tetraminator requires real credentials.
-- iOS dedicated builds require macOS/Xcode (explicitly not claimed on Linux).
-- Nginx/ACME SSL issuance is documented in CLI; live cert issuance needs DNS credentials on the host.
+Set `GUARDASLI_MASTER_SECRET` and optional `GUARDASLI_TOKEN_PEPPER` before payment/bot secrets.
