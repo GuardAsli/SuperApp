@@ -1,32 +1,55 @@
-/** GuardAsli — HTTP API /api/v1 + OpenAPI 3.1 کامل */
+/** GuardAsli — HTTP API با CORS محدود و rate-limit webhook. */
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { newRequestId, safeInternalMessage } from "../core/errors";
 import { getVersionSnapshot, GUARDASLI } from "../core/identity";
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Request-Id, X-Webhook-Secret",
-  "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "no-referrer",
-  "Content-Security-Policy": "default-src 'none'",
-  "X-Frame-Options": "DENY",
-  "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
-};
+function allowedOrigins(): string[] {
+  try {
+    const raw =
+      typeof process !== "undefined"
+        ? (process as { env?: Record<string, string> }).env?.GUARDASLI_CORS_ORIGINS
+        : undefined;
+    if (raw && raw.trim()) {
+      return raw.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  } catch {
+    /* */
+  }
+  // پیش‌فرض امن: فقط localhost توسعه؛ production باید env ست کند
+  return ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173"];
+}
 
-function jsonResponse(requestId: string, status: number, body: unknown): Response {
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allow = allowedOrigins();
+  const matched = allow.includes("*") ? "*" : allow.includes(origin) ? origin : allow[0] ?? "";
+  const base: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Request-Id, X-Webhook-Secret",
+    "Access-Control-Max-Age": "86400",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": "default-src 'none'",
+    "X-Frame-Options": "DENY",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+  };
+  if (matched) base["Access-Control-Allow-Origin"] = matched;
+  return base;
+}
+
+function jsonResponse(req: Request, requestId: string, status: number, body: unknown): Response {
   return new Response(JSON.stringify({ ...(body as object), requestId }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
-function errorResponse(requestId: string, status: number, code: string, message: string): Response {
-  return jsonResponse(requestId, status, { code, message, requestId });
+function errorResponse(req: Request, requestId: string, status: number, code: string, message: string): Response {
+  return jsonResponse(req, requestId, status, { code, message, requestId });
 }
 
-function mapError(requestId: string, err: unknown): Response {
+function mapError(req: Request, requestId: string, err: unknown): Response {
   const msg = err instanceof Error ? err.message : String(err);
   for (const code of [
     "UNAUTHENTICATED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "VALIDATION_ERROR",
@@ -37,16 +60,28 @@ function mapError(requestId: string, err: unknown): Response {
         UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, CONFLICT: 409,
         VALIDATION_ERROR: 400, QUOTA_EXCEEDED: 402, RATE_LIMITED: 429,
       };
-      return errorResponse(requestId, status[code], code, msg.replace(`${code}: `, ""));
+      return errorResponse(req, requestId, status[code], code, msg.replace(`${code}: `, ""));
     }
   }
-  return errorResponse(requestId, 500, "INTERNAL_ERROR", safeInternalMessage(requestId));
+  return errorResponse(req, requestId, 500, "INTERNAL_ERROR", safeInternalMessage(requestId));
 }
 
 type RouteHandler = (ctx: any, req: Request, requestId: string) => Promise<Response>;
 interface RouteDef { prefix?: string; path?: string; method: string; handler: RouteHandler }
 
+async function rateWebhook(ctx: any, key: string): Promise<boolean> {
+  const rl = await ctx.runMutation(internal.infra.rateLimitCheck, {
+    bucketKey: key,
+    windowMs: 60_000,
+    maxPerWindow: 60,
+  });
+  return rl.allowed;
+}
+
 async function enqueueTetra(ctx: any, req: Request, requestId: string): Promise<Response> {
+  if (!(await rateWebhook(ctx, "webhook:tetraminator"))) {
+    return errorResponse(req, requestId, 429, "RATE_LIMITED", "webhook rate limit");
+  }
   const url = new URL(req.url);
   const paymentId = url.searchParams.get("order_id") ?? "";
   let payId = url.searchParams.get("pay_id") ?? "";
@@ -55,24 +90,27 @@ async function enqueueTetra(ctx: any, req: Request, requestId: string): Promise<
     if (body.pay_id) payId = body.pay_id;
   }
   if (!paymentId) {
-    return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
+    return errorResponse(req, requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
   }
   const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
     paymentId: paymentId as never,
   });
   const providerPaymentId = payId || payment?.providerPaymentId || "";
   if (!providerPaymentId) {
-    return errorResponse(requestId, 400, "VALIDATION_ERROR", "pay_id لازم است");
+    return errorResponse(req, requestId, 400, "VALIDATION_ERROR", "pay_id لازم است");
   }
   await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
     paymentId: paymentId as never,
     provider: "tetraminator",
     providerPaymentId,
   });
-  return jsonResponse(requestId, 200, { ok: true });
+  return jsonResponse(req, requestId, 200, { ok: true });
 }
 
 async function enqueueCube(ctx: any, req: Request, requestId: string): Promise<Response> {
+  if (!(await rateWebhook(ctx, "webhook:cubepay"))) {
+    return errorResponse(req, requestId, 429, "RATE_LIMITED", "webhook rate limit");
+  }
   const url = new URL(req.url);
   const paymentId = url.searchParams.get("order_id") ?? "";
   let authority = url.searchParams.get("authority") ?? "";
@@ -81,21 +119,21 @@ async function enqueueCube(ctx: any, req: Request, requestId: string): Promise<R
     if (body.authority) authority = body.authority;
   }
   if (!paymentId) {
-    return errorResponse(requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
+    return errorResponse(req, requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
   }
   const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
     paymentId: paymentId as never,
   });
   const providerPaymentId = authority || payment?.providerPaymentId || "";
   if (!providerPaymentId) {
-    return errorResponse(requestId, 400, "VALIDATION_ERROR", "authority لازم است");
+    return errorResponse(req, requestId, 400, "VALIDATION_ERROR", "authority لازم است");
   }
   await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
     paymentId: paymentId as never,
     provider: "cubepay",
     providerPaymentId,
   });
-  return jsonResponse(requestId, 200, { ok: true });
+  return jsonResponse(req, requestId, 200, { ok: true });
 }
 
 function openApiDoc() {
@@ -108,78 +146,19 @@ function openApiDoc() {
       version: snap.components.api,
     },
     paths: {
-      "/api/v1/ping": {
-        get: {
-          summary: "Health ping",
-          responses: { "200": { description: "OK" } },
-        },
-      },
-      "/api/v1/version": {
-        get: {
-          summary: "Component versions",
-          responses: { "200": { description: "Version snapshot" } },
-        },
-      },
-      "/api/v1/openapi.json": {
-        get: {
-          summary: "OpenAPI document",
-          responses: { "200": { description: "This document" } },
-        },
-      },
+      "/api/v1/ping": { get: { summary: "Health", responses: { "200": { description: "OK" } } } },
+      "/api/v1/version": { get: { summary: "Versions", responses: { "200": { description: "OK" } } } },
+      "/api/v1/openapi.json": { get: { summary: "OpenAPI", responses: { "200": { description: "OK" } } } },
       "/api/v1/telegram/webhook/{botConfigId}": {
-        post: {
-          summary: "Telegram bot webhook",
-          parameters: [
-            { name: "botConfigId", in: "path", required: true, schema: { type: "string" } },
-            {
-              name: "X-Telegram-Bot-Api-Secret-Token",
-              in: "header",
-              required: true,
-              schema: { type: "string" },
-            },
-          ],
-          responses: { "200": { description: "Accepted" }, "401": { description: "Bad secret" } },
-        },
+        post: { summary: "Telegram webhook", responses: { "200": { description: "OK" }, "401": { description: "Bad secret" } } },
       },
       "/api/v1/payments/tetraminator/webhook": {
-        get: {
-          summary: "Tetraminator webhook (enqueue verify only)",
-          parameters: [
-            { name: "order_id", in: "query", required: true, schema: { type: "string" } },
-            { name: "pay_id", in: "query", required: false, schema: { type: "string" } },
-          ],
-          responses: { "200": { description: "Queued" } },
-        },
-        post: {
-          summary: "Tetraminator webhook POST",
-          responses: { "200": { description: "Queued" } },
-        },
+        get: { summary: "Tetra webhook", responses: { "200": { description: "Queued" } } },
+        post: { summary: "Tetra webhook POST", responses: { "200": { description: "Queued" } } },
       },
       "/api/v1/payments/cubepay/callback": {
-        get: {
-          summary: "CubePay callback (enqueue verify only)",
-          parameters: [
-            { name: "order_id", in: "query", required: true, schema: { type: "string" } },
-            { name: "authority", in: "query", required: false, schema: { type: "string" } },
-          ],
-          responses: { "200": { description: "Queued" } },
-        },
-        post: {
-          summary: "CubePay callback POST",
-          responses: { "200": { description: "Queued" } },
-        },
-      },
-    },
-    components: {
-      schemas: {
-        Error: {
-          type: "object",
-          properties: {
-            code: { type: "string" },
-            message: { type: "string" },
-            requestId: { type: "string" },
-          },
-        },
+        get: { summary: "CubePay callback", responses: { "200": { description: "Queued" } } },
+        post: { summary: "CubePay callback POST", responses: { "200": { description: "Queued" } } },
       },
     },
   };
@@ -189,8 +168,8 @@ const routes: RouteDef[] = [
   {
     path: "/api/v1/ping",
     method: "GET",
-    handler: async (_ctx, _req, requestId) =>
-      jsonResponse(requestId, 200, {
+    handler: async (_ctx, req, requestId) =>
+      jsonResponse(req, requestId, 200, {
         code: "OK",
         message: `${GUARDASLI.product} API`,
         version: getVersionSnapshot().components.api,
@@ -199,9 +178,9 @@ const routes: RouteDef[] = [
   {
     path: "/api/v1/version",
     method: "GET",
-    handler: async (_ctx, _req, requestId) => {
+    handler: async (_ctx, req, requestId) => {
       const snap = getVersionSnapshot();
-      return jsonResponse(requestId, 200, {
+      return jsonResponse(req, requestId, 200, {
         product: snap.product,
         developer: snap.developer,
         version: snap.components.core,
@@ -213,12 +192,15 @@ const routes: RouteDef[] = [
   {
     path: "/api/v1/openapi.json",
     method: "GET",
-    handler: async (_ctx, _req, requestId) => jsonResponse(requestId, 200, openApiDoc()),
+    handler: async (_ctx, req, requestId) => jsonResponse(req, requestId, 200, openApiDoc()),
   },
   {
     prefix: "/api/v1/telegram/webhook/",
     method: "POST",
     handler: async (ctx, req, requestId) => {
+      if (!(await rateWebhook(ctx, "webhook:telegram"))) {
+        return errorResponse(req, requestId, 429, "RATE_LIMITED", "webhook rate limit");
+      }
       const url = new URL(req.url);
       const botConfigId = url.pathname.split("/").pop() ?? "";
       const secret = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
@@ -231,12 +213,12 @@ const routes: RouteDef[] = [
         secret,
       });
       if (!verification.ok) {
-        return errorResponse(requestId, 401, "UNAUTHENTICATED", "امضای webhook نامعتبر است");
+        return errorResponse(req, requestId, 401, "UNAUTHENTICATED", "امضای webhook نامعتبر است");
       }
       const text = body.message?.text ?? "";
       const chatId = String(body.message?.chat?.id ?? body.callback_query?.from?.id ?? "");
       await ctx.runMutation(internal.jobs.dispatchBotCommand, { botConfigId, chatId, text });
-      return jsonResponse(requestId, 200, { ok: true });
+      return jsonResponse(req, requestId, 200, { ok: true });
     },
   },
   { prefix: "/api/v1/payments/tetraminator/webhook", method: "GET", handler: enqueueTetra },
@@ -248,7 +230,7 @@ const routes: RouteDef[] = [
 export const http = httpAction(async (ctx, req) => {
   const requestId = newRequestId();
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders(req) });
   }
   const path = new URL(req.url).pathname;
   for (const r of routes) {
@@ -256,16 +238,16 @@ export const http = httpAction(async (ctx, req) => {
       try {
         return await r.handler(ctx, req, requestId);
       } catch (err) {
-        return mapError(requestId, err);
+        return mapError(req, requestId, err);
       }
     }
     if (r.prefix && path.startsWith(r.prefix) && r.method === req.method) {
       try {
         return await r.handler(ctx, req, requestId);
       } catch (err) {
-        return mapError(requestId, err);
+        return mapError(req, requestId, err);
       }
     }
   }
-  return errorResponse(requestId, 404, "NOT_FOUND", "مسیر یافت نشد");
+  return errorResponse(req, requestId, 404, "NOT_FOUND", "مسیر یافت نشد");
 });

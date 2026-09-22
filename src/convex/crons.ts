@@ -11,4 +11,11 @@ crons.interval(
   { limit: 25 },
 );
 
+crons.interval(
+  "purge expired sessions",
+  { hours: 1 },
+  internal.jobs.purgeExpiredSessions,
+  { limit: 300 },
+);
+
 export default crons;
