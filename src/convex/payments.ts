@@ -1,29 +1,36 @@
-/** GuardAsli — هسته پرداخت: چهار روش، وضعیت‌ها و جریان‌های اتمی (بند ۱۶–۲۱). */
+/** GuardAsli — هسته پرداخت: چهار روش، وضعیت‌ها و جریان‌های اتمی. */
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireActor, requirePermission, requireTenantScope } from "./auth";
+import { isTerminalPaid } from "../core/payments/states";
 
 const MAX_CARDS = 10;
 
-// ————— کارت به کارت (بند ۱۸) —————
+async function requireMethodEnabled(ctx: { db: any }, key: string): Promise<void> {
+  const method = await ctx.db
+    .query("paymentMethods")
+    .withIndex("by_key", (q: any) => q.eq("key", key))
+    .unique();
+  if (!method?.globallyEnabled) {
+    throw new Error(`FORBIDDEN: روش پرداخت ${key} غیرفعال است`);
+  }
+}
 
 export const cardList = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
-    const method = await ctx.db
-      .query("paymentMethods")
-      .withIndex("by_key", (q) => q.eq("key", "card_to_card"))
-      .unique();
-    if (!method?.globallyEnabled) {
-      throw new Error("FORBIDDEN: روش کارت به کارت غیرفعال است");
-    }
-    return await ctx.db
+    await requireMethodEnabled(ctx, "card_to_card");
+    const cards = await ctx.db
       .query("paymentCards")
       .withIndex("by_tenant_order", (q) => q.eq("tenantId", actor.tenantId))
       .collect();
+    return cards.map((c) => ({
+      ...c,
+      numberMasked: c.number.length > 4 ? `****${c.number.slice(-4)}` : "****",
+    }));
   },
 });
 
@@ -37,6 +44,9 @@ export const cardAdd = mutation({
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "ManagePayments");
+    if (actor.role !== "super_admin" && actor.role !== "admin") {
+      throw new Error("FORBIDDEN: فقط Admin/Super Admin");
+    }
     const cards = await ctx.db
       .query("paymentCards")
       .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
@@ -44,7 +54,8 @@ export const cardAdd = mutation({
     if (cards.length >= MAX_CARDS) {
       throw new Error(`VALIDATION_ERROR: حداکثر ${MAX_CARDS} کارت مجاز است`);
     }
-    if (!/^\d{16,24}$/.test(args.number.replace(/\s/g, ""))) {
+    const num = args.number.replace(/\s/g, "");
+    if (!/^\d{16,24}$/.test(num)) {
       throw new Error("VALIDATION_ERROR: شماره کارت نامعتبر است");
     }
     if (!args.ownerName.trim()) {
@@ -52,7 +63,7 @@ export const cardAdd = mutation({
     }
     const id = await ctx.db.insert("paymentCards", {
       tenantId: actor.tenantId,
-      number: args.number.replace(/\s/g, ""),
+      number: num,
       ownerName: args.ownerName.trim(),
       enabled: true,
       order: args.order,
@@ -81,7 +92,6 @@ export const cardToggle = mutation({
   },
 });
 
-/** ارسال رسید توسط کاربر → PENDING_REVIEW. */
 export const cardToCardSubmit = mutation({
   args: {
     token: v.string(),
@@ -92,13 +102,7 @@ export const cardToCardSubmit = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
-    const method = await ctx.db
-      .query("paymentMethods")
-      .withIndex("by_key", (q) => q.eq("key", "card_to_card"))
-      .unique();
-    if (!method?.globallyEnabled) {
-      throw new Error("FORBIDDEN: روش کارت به کارت غیرفعال است");
-    }
+    await requireMethodEnabled(ctx, "card_to_card");
     const card = await ctx.db.get(args.cardId);
     if (!card || !card.enabled) throw new Error("NOT_FOUND: کارت فعال یافت نشد");
     await requireTenantScope(ctx, actor, card.tenantId);
@@ -134,7 +138,6 @@ export const cardToCardSubmit = mutation({
   },
 });
 
-/** تصمیم ادمین: تایید / رد / رسید جعلی — اتمی و idempotent (بند ۱۸). */
 export const cardReview = mutation({
   args: {
     token: v.string(),
@@ -155,7 +158,6 @@ export const cardReview = mutation({
       throw new Error("CONFLICT: این پرداخت قبلاً بررسی شده است");
     }
     if (args.decision === "approve") {
-      // credit دقیقاً یک‌بار — از طریق Ledger با idempotencyKey مشتق از paymentId
       const walletId = await ctx.runMutation(internal.wallet.getOrCreateWalletId, {
         userId: payment.userId,
       });
@@ -181,7 +183,6 @@ export const cardReview = mutation({
         reviewedAt: Date.now(),
       });
     } else {
-      // fraud: بدون credit + مسدودسازی کاربر
       await ctx.db.patch(args.paymentId, {
         status: "fraud",
         reviewedBy: actor.userId,
@@ -201,8 +202,6 @@ export const cardReview = mutation({
   },
 });
 
-// ————— بررسی صف پرداخت‌های در انتظار —————
-
 export const pendingPayments = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -217,7 +216,25 @@ export const pendingPayments = query({
   },
 });
 
-// ————— روش‌های پرداخت: کنترل سراسری Super Admin —————
+export const myPayments = query({
+  args: { token: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    const rows = await ctx.db
+      .query("payments")
+      .withIndex("by_user", (q) => q.eq("userId", actor.userId))
+      .order("desc")
+      .take(Math.min(args.limit ?? 50, 100));
+    return rows.map((p) => ({
+      _id: p._id,
+      method: p.method,
+      amount: p.amount,
+      status: p.status,
+      createdAt: p.createdAt,
+      paymentLink: p.paymentLink ?? null,
+    }));
+  },
+});
 
 export const methodSetEnabled = mutation({
   args: { token: v.string(), key: v.string(), enabled: v.boolean() },
@@ -226,6 +243,10 @@ export const methodSetEnabled = mutation({
     requirePermission(actor, "ManagePayments");
     if (actor.role !== "super_admin") {
       throw new Error("FORBIDDEN: فقط Super Admin");
+    }
+    const allowed = ["admin_manual", "card_to_card", "cubepay", "tetraminator"];
+    if (!allowed.includes(args.key)) {
+      throw new Error("VALIDATION_ERROR: روش پرداخت ناشناخته");
     }
     const doc = await ctx.db
       .query("paymentMethods")
@@ -255,9 +276,190 @@ export const methodList = query({
   },
 });
 
-// ————— ثبت پرداخت provider (state machine مشترک) —————
+/** پیکربندی درگاه کاربر — بدون برگرداندن secret */
+export const myProviderConfigList = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    const rows = await ctx.db
+      .query("userPaymentConfigs")
+      .withIndex("by_user_provider", (q) => q.eq("userId", actor.userId))
+      .collect();
+    return rows.map((r) => ({
+      provider: r.provider,
+      enabled: r.enabled,
+      baseUrl: r.baseUrl ?? null,
+      label: r.label ?? null,
+      hasSecret: r.credentialsEncrypted.length > 0,
+      updatedAt: r.updatedAt,
+    }));
+  },
+});
 
-/** ایجاد رکورد پرداخت provider — بدون credit؛ credit فقط بعد از verify. */
+export const saveUserProviderConfig = internalMutation({
+  args: {
+    token: v.string(),
+    provider: v.string(),
+    credentialsEncrypted: v.string(),
+    baseUrl: v.string(),
+    enabled: v.boolean(),
+    label: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    const existing = await ctx.db
+      .query("userPaymentConfigs")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", actor.userId).eq("provider", args.provider),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        credentialsEncrypted: args.credentialsEncrypted,
+        baseUrl: args.baseUrl,
+        enabled: args.enabled,
+        ...(args.label !== undefined ? { label: args.label } : {}),
+        updatedAt: Date.now(),
+      });
+      return { configId: existing._id };
+    }
+    const id = await ctx.db.insert("userPaymentConfigs", {
+      userId: actor.userId,
+      tenantId: actor.tenantId,
+      provider: args.provider,
+      credentialsEncrypted: args.credentialsEncrypted,
+      baseUrl: args.baseUrl,
+      enabled: args.enabled,
+      ...(args.label !== undefined ? { label: args.label } : {}),
+      updatedAt: Date.now(),
+    });
+    return { configId: id };
+  },
+});
+
+export const deleteUserProviderConfig = mutation({
+  args: { token: v.string(), provider: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    const existing = await ctx.db
+      .query("userPaymentConfigs")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", actor.userId).eq("provider", args.provider),
+      )
+      .unique();
+    if (!existing) throw new Error("NOT_FOUND: پیکربندی یافت نشد");
+    await ctx.db.delete(existing._id);
+    await ctx.runMutation(internal.audit.log, {
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      action: "payment.user_provider_delete",
+      entityType: "userPaymentConfigs",
+      entityId: existing._id,
+      metadata: { provider: args.provider },
+    });
+    return { ok: true };
+  },
+});
+
+export const getUserProviderEnvelope = internalQuery({
+  args: { userId: v.id("users"), provider: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("userPaymentConfigs")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", args.userId).eq("provider", args.provider),
+      )
+      .unique();
+    if (!row) return null;
+    return {
+      credentialsEncrypted: row.credentialsEncrypted,
+      baseUrl: row.baseUrl,
+      enabled: row.enabled,
+    };
+  },
+});
+
+export const getPaymentInternal = internalQuery({
+  args: { paymentId: v.id("payments") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.paymentId);
+  },
+});
+
+/** آماده‌سازی رکورد پرداخت provider قبل از تماس API خارجی */
+export const prepareProviderPayment = internalMutation({
+  args: {
+    token: v.string(),
+    method: v.string(),
+    amount: v.number(),
+    idempotencyKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    await requireMethodEnabled(ctx, args.method);
+    if (!Number.isInteger(args.amount) || args.amount <= 0) {
+      throw new Error("VALIDATION_ERROR: مبلغ نامعتبر است");
+    }
+    const dupe = await ctx.db
+      .query("payments")
+      .withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey))
+      .first();
+    if (dupe) {
+      return {
+        paymentId: dupe._id,
+        userId: dupe.userId,
+        paymentLink: dupe.paymentLink,
+        deduped: true,
+      };
+    }
+    const paymentId = await ctx.db.insert("payments", {
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      method: args.method,
+      amount: args.amount,
+      status: "awaiting_verify",
+      idempotencyKey: args.idempotencyKey,
+      attemptCount: 0,
+      createdAt: Date.now(),
+    });
+    return { paymentId, userId: actor.userId, paymentLink: undefined, deduped: false };
+  },
+});
+
+export const attachProviderInvoice = internalMutation({
+  args: {
+    paymentId: v.id("payments"),
+    providerPaymentId: v.string(),
+    paymentLink: v.optional(v.string()),
+    payload: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) throw new Error("NOT_FOUND");
+    if (isTerminalPaid(payment.status)) return { ok: true };
+    await ctx.db.patch(args.paymentId, {
+      providerPaymentId: args.providerPaymentId,
+      ...(args.paymentLink !== undefined ? { paymentLink: args.paymentLink } : {}),
+      ...(args.payload !== undefined ? { providerPayload: args.payload } : {}),
+      status: "awaiting_verify",
+    });
+    return { ok: true };
+  },
+});
+
+export const markPaymentFailed = internalMutation({
+  args: { paymentId: v.id("payments"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment || isTerminalPaid(payment.status)) return { ok: false };
+    await ctx.db.patch(args.paymentId, {
+      status: "failed",
+      providerPayload: { ...(payment.providerPayload as object ?? {}), failReason: args.reason },
+    });
+    return { ok: true };
+  },
+});
+
 export const providerPaymentCreate = internalMutation({
   args: {
     tenantId: v.id("tenants"),
@@ -292,11 +494,6 @@ export const providerPaymentCreate = internalMutation({
   },
 });
 
-/**
- * acceptProviderPayment — تنها مسیر credit شدن Wallet از پرداخت provider.
- * Webhook هرگز مستقیماً Wallet را credit نمی‌کند؛ این mutation فقط پس از
- * verify موفق adapter صدا زده می‌شود و ضد-replay است.
- */
 export const acceptProviderPayment = internalMutation({
   args: {
     paymentId: v.id("payments"),
@@ -306,10 +503,10 @@ export const acceptProviderPayment = internalMutation({
   handler: async (ctx, args) => {
     const payment = await ctx.db.get(args.paymentId);
     if (!payment) return { ok: false, reason: "NOT_FOUND" };
-    if (payment.status === "paid") {
-      return { ok: true, alreadyPaid: true }; // ضد-replay
+    if (payment.status === "paid" || payment.status === "approved") {
+      return { ok: true, alreadyPaid: true };
     }
-    if (payment.status !== "awaiting_verify") {
+    if (payment.status !== "awaiting_verify" && payment.status !== "processing") {
       return { ok: false, reason: `status=${payment.status}` };
     }
     if (payment.providerPaymentId !== args.providerPaymentId) {
@@ -323,14 +520,14 @@ export const acceptProviderPayment = internalMutation({
     });
     const res: { ledgerEntryId: Id<"ledgerEntries">; balanceAfter: number; deduped: boolean } =
       await ctx.runMutation(internal.wallet.ledgerApply, {
-      walletId,
-      type: "deposit",
-      amount: payment.amount,
-      direction: "credit",
-      reason: `provider payment ${payment.method}`,
-      idempotencyKey: `provider_accept:${args.paymentId}`,
-      metadata: { paymentId: args.paymentId },
-    });
+        walletId,
+        type: "deposit",
+        amount: payment.amount,
+        direction: "credit",
+        reason: `provider payment ${payment.method}`,
+        idempotencyKey: `provider_accept:${args.paymentId}`,
+        metadata: { paymentId: args.paymentId },
+      });
     await ctx.db.patch(args.paymentId, {
       status: "paid",
       ledgerEntryId: res.ledgerEntryId,
