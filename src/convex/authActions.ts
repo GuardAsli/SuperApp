@@ -1,9 +1,10 @@
 "use node";
-/** GuardAsli — login/register با rate-limit و سیاست رمز. */
+/** GuardAsli — login/register با rate-limit و تأخیر side-channel. */
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { assertStrongPassword, scryptHashSync, scryptVerifySync } from "../core/password";
+import { authFailureDelay } from "../core/sidechannel";
 import type { Doc } from "./_generated/dataModel";
 
 export const registerAction = action({
@@ -24,14 +25,12 @@ export const registerAction = action({
     if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(args.username)) {
       throw new Error("VALIDATION_ERROR: نام کاربری نامعتبر است");
     }
-    // همه کاربران: حداقل ۸ + mixed + digit
     assertStrongPassword(args.password, 8);
-    const role = "user";
     const { hash } = scryptHashSync(args.password);
     return await ctx.runMutation(internal.auth.persistUser, {
       username: args.username,
       passwordEnvelope: hash,
-      role,
+      role: "user",
       parentUsername: args.parentUsername,
     });
   },
@@ -52,23 +51,34 @@ export const loginAction = action({
       windowMs: 60_000,
       maxPerWindow: 10,
     });
-    if (!rl.allowed) throw new Error("RATE_LIMITED: ورود موقتاً محدود است");
+    if (!rl.allowed) {
+      await authFailureDelay();
+      throw new Error("RATE_LIMITED: ورود موقتاً محدود است");
+    }
 
     const user: Doc<"users"> | null = await ctx.runQuery(internal.auth.getUserByUsername, {
       username: args.username,
     });
-    // پیام یکسان — جلوگیری از user enumeration
-    if (!user) throw new Error("UNAUTHENTICATED: نام کاربری یا رمز عبور نادرست است");
+    // مسیر یکسان پیام خطا + تأخیر در شکست
+    if (!user) {
+      // کار ساختگی scrypt برای نزدیک کردن زمان به مسیر کاربر موجود
+      scryptVerifySync(args.password, "scrypt$32768$8$1$00000000000000000000000000000000$" + "00".repeat(64));
+      await authFailureDelay();
+      throw new Error("UNAUTHENTICATED: نام کاربری یا رمز عبور نادرست است");
+    }
     const now = Date.now();
     if (user.blockedUntil && user.blockedUntil > now) {
+      await authFailureDelay();
       throw new Error("FORBIDDEN: حساب موقتاً قفل است");
     }
     if (user.status !== "active") {
+      await authFailureDelay();
       throw new Error("FORBIDDEN: حساب غیرفعال است");
     }
     const ok = scryptVerifySync(args.password, user.passwordHash);
     if (!ok) {
       await ctx.runMutation(internal.auth.recordFailedLogin, { userId: user._id });
+      await authFailureDelay();
       throw new Error("UNAUTHENTICATED: نام کاربری یا رمز عبور نادرست است");
     }
     await ctx.runMutation(internal.auth.clearFailedLogins, { userId: user._id });
@@ -95,7 +105,10 @@ export const refreshAction = action({
     const res = await ctx.runMutation(internal.auth.rotateSession, {
       refreshToken: args.refreshToken,
     });
-    if (!res) throw new Error("UNAUTHENTICATED: refresh token نامعتبر است");
+    if (!res) {
+      await authFailureDelay(30, 40);
+      throw new Error("UNAUTHENTICATED: refresh token نامعتبر است");
+    }
     return res;
   },
 });
