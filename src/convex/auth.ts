@@ -1,4 +1,4 @@
-/** GuardAsli — احراز هویت سخت‌شده: فقط SHA-256 peppered برای توکن. */
+/** GuardAsli — احراز هویت؛ pepper اجباری در production. */
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { generateSecureCredentialRuntime, sha256Hex } from "./runtime";
@@ -9,10 +9,22 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 1000 * 60 * 15;
 
-/**
- * Pepper توکن: از env در صورت وجود، وگرنه ثابت نسخه‌دار محصول.
- * در production مقدار GUARDASLI_TOKEN_PEPPER را جدا از MASTER تنظیم کنید.
- */
+function isProd(): boolean {
+  try {
+    const n =
+      typeof process !== "undefined"
+        ? (process as { env?: Record<string, string> }).env?.NODE_ENV
+        : undefined;
+    const g =
+      typeof process !== "undefined"
+        ? (process as { env?: Record<string, string> }).env?.GUARDASLI_ENV
+        : undefined;
+    return n === "production" || g === "production";
+  } catch {
+    return false;
+  }
+}
+
 function tokenPepper(): string {
   try {
     const env =
@@ -21,12 +33,14 @@ function tokenPepper(): string {
         : undefined;
     if (env && env.length >= 16) return env;
   } catch {
-    /* Convex query ممکن است process نداشته باشد */
+    /* */
+  }
+  if (isProd()) {
+    throw new Error("INTERNAL_ERROR: GUARDASLI_TOKEN_PEPPER در production الزامی است");
   }
   return "GuardAsli.session.v2";
 }
 
-/** هش یک‌طرفه SHA-256 برای جستجوی توکن نشست / API key — بدون fallback ضعیف. */
 export async function stableTokenHash(input: string): Promise<string> {
   if (!input || input.length < 16) {
     throw new Error("VALIDATION_ERROR: توکن نامعتبر است");
@@ -181,7 +195,6 @@ export const rotateSession = internalMutation({
     if (!session || session.status !== "active" || session.expiresAt < Date.now()) {
       return null;
     }
-    // invalidate old immediately by rotation
     const accessToken = generateSecureCredentialRuntime(40);
     const refreshToken = generateSecureCredentialRuntime(40);
     const expiresAt = Date.now() + SESSION_TTL_MS;
