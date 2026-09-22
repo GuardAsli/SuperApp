@@ -13,7 +13,9 @@
     "typecheck": "tsc -b --noEmit",
     "test": "bun test",
     "lint": "tsc -b --noEmit",
-    "ci": "bun run typecheck && bun test && bun run build"
+    "release-check": "bun scripts/release-check.mjs",
+    "ci": "bun run typecheck && bun test && bun run build",
+    "prod-start": "bash scripts/prod-start.sh"
   },
   "dependencies": {
     "convex": "^1.19.0",

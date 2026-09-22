@@ -13,99 +13,46 @@
 <p align="center">
   <a href="README.md">English</a> ·
   <a href="Docs.fa.md">مستندات</a> ·
-  <a href="Learn.fa.md">آموزش</a> ·
-  <a href="docs/ARCHITECTURE.md">معماری</a> ·
-  <a href="docs/API.md">API</a> ·
-  <a href="docs/BRANDING.md">برندینگ</a>
+  <a href="docs/RUNBOOK.md">راهنمای اجرا</a> ·
+  <a href="docs/PAYMENTS.md">پرداخت</a> ·
+  <a href="docs/SECURITY.md">امنیت</a>
 </p>
 
 ---
 
-<div dir="rtl">
+**GuardAsli** پلتفرم کنترل‌پلن **AsliCode** برای فروش و مدیریت سرویس پروکسی/VPN است: چندمستأجری، RBAC سمت سرور، کیف‌پول با Ledger، چهار درگاه پرداخت، آداپتور Provider، ربات و مینی‌اپ تلگرام، داشبورد وب، نسخه‌گذاری مستقل اجزا.
 
-**GuardAsli** کنترل‌پلن فروش و بهره‌برداری از سرویس‌های پروکسی/VPN است — ساخته‌ی **AsliCode**.
+هویت Core ثابت است: **GuardAsli** / **AsliCode**.
 
-یک بک‌اند واحد داشبورد وب، بات تلگرام، مینی‌اپ تلگرام و اپ‌های برند هر مشتری را تغذیه می‌کند؛ همراه با سلسله‌مراتب ریسلر، دفتر کل تغییرناپذیر کیف پول، چهار کانال پرداخت و چهار سرور بالادستی.
-
-| فیلد | مقدار |
-|---|---|
-| محصول | **GuardAsli** |
-| توسعه‌دهنده | **AsliCode** |
-| قالب نسخه | `isMAJOR.MINOR.PATCH` |
-| انتشار فعلی | `is0.0.1` |
-
-هویت مرکزی ثابت است. هیچ نقش یا مشتری نمی‌تواند آن را تغییر نام دهد یا پنهان کند.
-
-## نصب ویزارد — یک دستور
+## نصب یک‌خطی
 
 ```bash
 git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && sh ./scripts/cli.mjs install
 ```
 
-این دستور **ویزارد guardasli** را اجرا می‌کند: بررسی سیستم → نصب وابستگی‌ها → ساخت محیط.
-
-بعد از نصب:
+## مسیر اجرای مطمئن (Production)
 
 ```bash
-sh ./scripts/cli.mjs doctor       # بررسی سلامت
-sh ./scripts/cli.mjs reconfigure  # دامنه اصلی + ادمین
-sh ./scripts/cli.mjs status       # نسخه و مسیر
-bun convex dev --once && bun dev # اتصال Convex + اجرا
-```
+cp .env.example .env.local
+# GUARDASLI_MASTER_SECRET=$(openssl rand -hex 32)
 
-## شروع سریع دستی
-
-```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
 bun install
-bun convex dev --once
-bun dev
+bun run ci
+bun run release-check
+bunx convex login && bunx convex deploy
+bunx convex run authActions:bootstrapAdminAction \
+  '{"username":"admin","password":"رمز_قوی_حداقل_۱۲_کاراکتر"}'
+bun run preview
 ```
 
-ساخت اولین super admin:
+چک‌لیست کامل: **[docs/RUNBOOK.md](docs/RUNBOOK.md)**
 
-```bash
-bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password":"<رمز-قوی>"}'
-```
+## قوانین مهم پرداخت
 
-## قابلیت‌ها
+- Webhook **هرگز** کیف را شارژ نمی‌کند.
+- Credit فقط بعد از verify/inquiry سمت سرور و یک‌بار (idempotent).
+- روش غیرفعال سراسری در backend رد می‌شود.
 
-| حوزه | توضیح |
-|---|---|
-| نقش‌ها | `super_admin`، `admin`، `reseller`، `sub_reseller`، `user` — فقط سمت سرور |
-| قابلیت‌ها | ۱۸ کلید با زنجیره ۶مرحله‌ای: سراسری → پلن → نقش → مشتری → مالکیت → سهمیه |
-| کیف پول | دفتر کل فقط‌الحاقی شماره‌دار و تکرارناپذیر |
-| پرداخت | شارژ دستی · کارت‌به‌کارت · CubePay · Tetraminator (ضد-replay) |
-| سرورها | 3X-UI، Sanaei، PasarGuard، Rebecca |
-| کانال‌ها | بات تلگرام (توکن مخفی) + مینی‌اپ (HMAC روی `initData`) |
-| API | `/api/v1` · OpenAPI 3.1 · خطای یکسان |
-| بهره‌برداری | ویزارد CLI، کارهای پس‌زمینه، لاگ حسابرسی، پشتیبان |
+## لایسنس
 
-## محیط production
-
-```bash
-bun run build
-bun convex deploy
-```
-
-`GUARDASLI_MASTER_SECRET` و اطلاعات پرداخت را از پنل ادمین تنظیم کنید.
-
-## مستندات
-
-| سند | کاربرد |
-|---|---|
-| [README.md](README.md) | نمای کلی انگلیسی |
-| [Docs.fa.md](Docs.fa.md) | مرجع فنی فارسی |
-| [Docs.md](Docs.md) | مرجع فنی انگلیسی |
-| [Learn.fa.md](Learn.fa.md) | آموزش گام‌به‌گام فارسی |
-| [Learn.md](Learn.md) | آموزش گام‌به‌گام انگلیسی |
-| [معماری](docs/ARCHITECTURE.md) | لایه Core، جریان خرید، امنیت |
-| [API](docs/API.md) | مسیرها، خطاها، وب‌هوک |
-| [برندینگ](docs/BRANDING.md) | فیلدهای مشتری و مرز Core |
-| [حسابرسی](docs/AUDIT.md) | تاریخچه بررسی مخزن |
-
-## مجوز
-
-نرم‌افزار مالکیتی **AsliCode**. تمام حقوق محفوظ است.
-
-</div>
+اختصاصی **AsliCode**. تمام حقوق محفوظ است.
