@@ -18,7 +18,10 @@
     "prod-start": "bash scripts/prod-start.sh",
     "prod-env": "bun scripts/prod-env-check.mjs",
     "wizard": "bash scripts/wizard.sh",
-    "install:wizard": "bash scripts/wizard.sh"
+    "install:wizard": "bash scripts/wizard.sh",
+    "up": "bash scripts/up.sh",
+    "bootstrap": "bun scripts/auto-bootstrap.mjs",
+    "sync-env": "bun scripts/sync-convex-env.mjs"
   },
   "dependencies": {
     "convex": "^1.19.0",

@@ -4,28 +4,44 @@
 
 Control-plane for sales, wallet, payments, resellers, Telegram, and provisioning.
 
-Completion record: **[FINAL_AUDIT.md](FINAL_AUDIT.md)**
+[FINAL_AUDIT.md](FINAL_AUDIT.md)
 
-## One-line install
-
-```bash
-git clone https://github.com/GuardAsli/SuperApp.git && cd SuperApp && bun run wizard
-```
-
-## After wizard
+## Fully automatic path
 
 ```bash
-bunx convex dev
-# Copy VITE_CONVEX_URL into .env.local
-# Mirror secrets into Convex Dashboard → Environment Variables
-
-bunx convex run authActions:bootstrapAdminAction \
-  '{"username":"admin","password":"Abcd1234!xyz"}'
-
-bun run dev
+git clone https://github.com/GuardAsli/SuperApp.git && cd SuperApp
+bun run wizard    # deps + secrets + tests + try Convex + bootstrap
+bun run up        # sync env + bootstrap + start UI (+ convex backend)
 ```
 
-Open `http://127.0.0.1:5173` — default UI language: Persian.
+Open **http://127.0.0.1:5173** — login with credentials printed by wizard (also in `.env.local`).
+
+### First time only (Convex account)
+
+Convex requires a one-time browser login if you have never used it on this machine:
+
+```bash
+bunx convex login
+bunx convex dev     # creates deployment; Ctrl+C after URL appears
+bun run up
+```
+
+If you already have `CONVEX_DEPLOY_KEY`, set it before wizard — deploy stays non-interactive.
+
+```bash
+export CONVEX_DEPLOY_KEY=...
+bun run wizard && bun run up
+```
+
+## Commands
+
+| Command | Role |
+|---|---|
+| `bun run wizard` | Full install, no prompts |
+| `bun run up` | Bring stack up automatically |
+| `bun run bootstrap` | Super Admin only |
+| `bun run sync-env` | Push secrets to Convex env |
+| `bun run prod-start` | Production gate + CI |
 
 ## Production
 
@@ -36,23 +52,14 @@ export GUARDASLI_TOKEN_PEPPER="$(openssl rand -hex 32)"
 export GUARDASLI_AEAD_SALT="$(openssl rand -hex 32)"
 export GUARDASLI_CORS_ORIGINS=https://your-domain.com
 export GUARDASLI_PUBLIC_URL=https://your-domain.com
-bun run prod-start
-bunx convex deploy
+export CONVEX_DEPLOY_KEY=...
+bun run prod-start && bunx convex deploy
 ```
 
 ## Docs
 
-| Doc | |
-|---|---|
-| [FINAL_AUDIT.md](FINAL_AUDIT.md) | Completion & security sign-off |
-| [Docs.md](Docs.md) / [Docs.fa.md](Docs.fa.md) | Reference |
-| [Learn.md](Learn.md) / [Learn.fa.md](Learn.fa.md) | Guides |
-| [docs/SECURITY.md](docs/SECURITY.md) | Security model |
-| [docs/PRODUCTION.md](docs/PRODUCTION.md) | Production env |
-| [docs/KMS_AND_SIDECHANNEL.md](docs/KMS_AND_SIDECHANNEL.md) | KMS + timing |
-| [docs/PAYMENTS.md](docs/PAYMENTS.md) | Payments |
-| [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operations |
+- [FINAL_AUDIT.md](FINAL_AUDIT.md)
+- [Docs.md](Docs.md) / [Docs.fa.md](Docs.fa.md)
+- [docs/SECURITY.md](docs/SECURITY.md) · [docs/PRODUCTION.md](docs/PRODUCTION.md)
 
-## Identity
-
-Core names are fixed: **GuardAsli** by **AsliCode**. Versions: `isMAJOR.MINOR.PATCH`.
+**GuardAsli** by **AsliCode** · `isMAJOR.MINOR.PATCH`
