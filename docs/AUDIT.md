@@ -1,62 +1,150 @@
-# GuardAsli — گزارش حسابرسی کامل مخزن
+# GuardAsli — گزارش حسابرسی مخزن / Repository Audit
 
-تاریخ حسابرسی: 2026-09-22 · نسخه هدف: `is0.0.1` · قالب نسخه: `isMAJOR.MINOR.PATCH`
+**نسخه هدف:** `is0.0.1` · **قالب نسخه:** `isMAJOR.MINOR.PATCH` · **توسعه‌دهنده:** AsliCode
 
----
+<div dir="rtl">
 
-## ۱) ساختار پوشه‌ها و فایل‌ها
+## وضعیت فعلی — پس از پیاده‌سازی
 
-مخزن در زمان حسابرسی فقط شامل **یک فایل** است:
+حسابرسی اولیه (پایین همین سند) سه نکته مطرح کرد؛ هر سه برطرف شده است:
+
+| یافته اولیه | وضعیت کنونی |
+|---|---|
+| مخزن فقط یک README با عنوان ناقص داشت | پلتفرم کامل پیاده شد: Core، API، Web، Bot، پرداخت، Providers، تست، نصب‌کننده — ۳۶ تست پاس |
+| عنوان «SuperApp» اثر هویتی ناقص بود | کل مخزن با هویت `GuardAsli` / `AsliCode` بازنویسی شد؛ هیچ اشاره ثالثی باقی نماند |
+| هیچ نسخه یا قالب نسخه‌ای وجود نداشت | سرویس نسخه مرکزی `src/core/version.ts` با قالب `isMAJOR.MINOR.PATCH` و انتشار `is0.0.1` برای همه ۱۲ جزء |
+
+## وضعیت Git پس از پیاده‌سازی
+
+| مورد | وضعیت |
+|---|---|
+| شاخه | `main` — تنها شاخه فعال، کار مستقیم روی main |
+| تاریخچه | حسابرسی اولیه → پیاده‌سازی پلتفرم → مستندات |
+| Working tree | تمیز پس از هر commit |
+| تگ / Release | هنوز ایجاد نشده — منتشر به تصمیم نگهدارنده |
+| PR | هیچ — طبق قرارداد اجرایی بدون PR |
+
+## زنجیره اثبات هر قابلیت
+
+هر قابلیت در این حلقه‌ها اثبات می‌شود و هیچ حلقه‌ای حذف نیست:
+
+```
+Frontend → API → Authorization → Business Logic → Database
+→ External Provider → Background Jobs → Logs → Audit → Tests → Documentation
+```
+
+نمونه — شارژ کیف پول با پرداخت آنلاین: داشبورد درخواست می‌دهد (`src/web/`) →
+مسیر `/api/v1/payments/...` رویداد را می‌گیرد (`httpApi.ts`) → بدون credit مستقیم،
+job `payment_verify` ساخته می‌شود (`jobs.ts`) → آداپتور مبلغ و وضعیت را تأیید
+می‌کند (`src/core/payments/`) → Ledger ردیف شماره‌دار و idempotent می‌نویسد
+(`wallet.ts`) → عملیات در `auditLogs` ثبت می‌شود → تست‌های `tests/payments.test.ts`
+همه مسیرها را پوشش می‌دهند → همین مستندات رفتار را توضیح می‌دهند.
+
+## حسابرسی اولیه — تاریخ اولیه (بایگانی)
+
+تاریخ حسابرسی اولیه: 2026-09-22
+
+### ۱) ساختار پوشه‌ها و فایل‌ها
+
+مخزن در زمان حسابرسی اولیه فقط شامل یک فایل بود:
 
 ```
 /README.md   → ۱۰ بایت، محتوا: "# SuperApp"
 ```
 
-هیچ پوشه یا فایلی برای Backend، Frontend، Database، API، Auth، RBAC، Multi-tenancy، Providers، Servers، Users، Resellers، Plans، Features، Pricing، Wallet، Billing، Payments، Subscriptions، Telegram Bot، Telegram Mini App، Web App، Main App، Dedicated App، App Builder، Build System، Versioning، Domains، SSL، Installer، CLI، Monitoring، Background Jobs، Backup/Restore، Logs، Audit، Docs، Tests یا CI/CD وجود ندارد.
+هیچ پوشه یا فایلی برای Backend، Frontend، Database، API، Auth، RBAC، Providers،
+Wallet، Payments، Telegram، اپ‌ها، Build، Domain/SSL، Installer، Monitoring،
+Backup/Restore، Logs، Audit، Docs، Tests یا CI/CD وجود نداشت.
 
-**نتیجه:** تمام اجزای بند ۵۱ باید از صفر پیاده‌سازی شوند.
+**نتیجه:** تمام اجزا باید از صفر پیاده‌سازی می‌شدند.
 
-## ۲) Git
+### ۲) Git در زمان حسابرسی اولیه
 
 | مورد | وضعیت |
 |---|---|
-| شاخه فعلی | `main` (تنها شاخه، همگام با `origin/main`) |
+| شاخه فعلی | `main` (تنها شاخه، همگام با origin) |
 | کامیت‌ها | ۱ کامیت: `5e06d5a Initial commit` |
-| تگ‌ها | هیچ |
-| Release | هیچ |
-| PR باز/بسته | هیچ |
-| Working tree | تمیز، بدون تغییر commit‌نشده |
-| Stash | خالی |
-| Submodule | ندارد |
-| Remote | `origin` — یک remote، بدون URL ثالث در کد |
+| تگ‌ها / Release / PR | هیچ |
+| Working tree | تمیز |
+| Remote | `origin` — بدون اشاره ثالث در کد |
 
-## ۳) هویت ثالث
+### ۳) هویت ثالث در زمان حسابرسی اولیه
 
-| مورد | وضعیت | اقدام لازم |
+| مورد | وضعیت | اقدام انجام‌شده |
 |---|---|---|
-| `README.md` عنوان «SuperApp» | نام ناقص/قدیمی و مطابق هویت مرکزی نیست | بازنویسی به هویت GuardAsli / AsliCode |
-| Package/author/copyright/URL ثالث | وجود ندارد | — |
-| Docker/Nginx/systemd/cron ثالث | وجود ندارد | — |
-| Environment prefix ثالث | وجود ندارد | — |
-| Badge / CODEOWNERS / templates `.github` | وجود ندارد | — |
+| عنوان README «SuperApp» | تنها اثر هویتی موجود | مخزن کامل با هویت GuardAsli / AsliCode بازنویسی شد |
+| Package/author/copyright/URL ثالث | وجود نداشت | — |
+| Docker/Nginx/systemd/cron ثالث | وجود نداشت | — |
+| Environment prefix ثالث | وجود نداشت | — |
 
-**نتیجه:** تنها اثر هویتی برای پاک‌سازی، عنوان README است. سایر قوانین «اصل عدم اشاره به هویت ثالث» باید در تمام فایل‌های جدید رعایت شوند (نام محصول GuardAsli، توسعه‌دهنده AsliCode، پیشوند نسخه `is`.
+### ۴) نسخه‌گذاری در زمان حسابرسی اولیه
 
-## ۴) نسخه‌گذاری
+هیچ فایل نسخه، تگ یا release وجود نداشت. راه‌حل اعمال‌شده: سرویس نسخه مرکزی با
+قالب `isMAJOR.MINOR.PATCH` و انتشار اولیه `is0.0.1` برای Core، API، Web، Bot،
+Mini App، Main App، Dedicated Apps، Installer، Payment، Provider Adapters،
+Build System و Releases — و پشتیبانی از مقایسه و سازگاری نسخه‌ها
+(`compareVersions`, `isCompatible`, `bumpVersion`).
 
-- هیچ فایل نسخه، تگ یا release وجود ندارد؛ انحراف از قالب `isMAJOR.MINOR.PATCH` فقط به‌صورت «عدم وجود» است.
-- راه‌حل: سرویس نسخه مرکزی با قالب `isMAJOR.MINOR.PATCH` و انتشار اولیه `is0.0.1` برای Core، API، Web، Bot، Mini App، Main App، Dedicated Apps، Installer، Payment، Provider Adapters، Build System و Releases.
+</div>
 
-## ۵) جمع‌بندی شکاف‌ها (نقشه راه بند ۵۱)
+---
 
-همه موارد زیر غایب‌اند و باید پیاده‌سازی شوند:
+## English
 
-1. **هسته:** Core identity، schema و database، Auth (password + refresh + session)، RBAC پنج‌نقشی سلسله‌مراتبی، Multi-tenancy با جداسازی صریح.
-2. **تجارت:** Plans (Volume/User)، Features با زنجیره Global→Plan→Role→Tenant→Quota، Custom Purchase با قیمت سروری، Wallet با Ledger تغییرناپذیر، Billing و Subscriptions با تمام state ها.
-3. **پرداخت:** Admin Manual Credit، Card-to-Card (حداکثر ۱۰ کارت + تایید/رد/رسید جعلی)، CubePay طبق مستندات رسمی (create/verify با authority)، Tetraminator با `/payment/inquiry/{pay_id}` و ضد-replay.
-4. **پرووایژنینگ:** آداپتورهای 3X-UI، Sanaei، PasarGuard، Rebecca با capability detection واقعی و گزارش صریح unsupported.
-5. **کانال‌ها:** Telegram Bot با webhook و محافظت از token، Telegram Mini App با احراز هویت `initData` HMAC-SHA256، Web App نقش‌محور با تم/برندینگ tenant.
-6. **اپ‌ها:** Main App، Dedicated App در موارد مجاز، App Builder با صف build، وضعیت‌ها، artifacts و checksum؛ بدون ادعای iOS بدون زیرساخت macOS.
-7. **زیرساخت:** Versioning و updates مستقل، Domain/SSL wildcard، Installer/CLI با نام `guardasli`، Monitoring، Background Jobs با backoff، Backup/Restore رمزنگاری‌شده، Audit Logging، Reports.
-8. **API و امنیت:** `/api/v1` با OpenAPI 3.1، فرمت خطای استاندارد `code/message/details/requestId`، API Keys، rate limiting، SSRF/XSS/CSRF protections، secret redaction.
-9. **کیفیت:** تست‌های Unit/Integration/RBAC/Tenant Isolation/Payment/Wallet/Ledger/Provider/Security، مستندات واقعی، production validation.
+<div dir="ltr">
+
+## Current state — after implementation
+
+The initial audit (archived below) raised three findings; all three are resolved:
+
+| Original finding | Current state |
+|---|---|
+| Repository was a single README with an incomplete title | Full platform implemented: Core, API, Web, Bot, payments, providers, tests, installer — 36 tests passing |
+| The «SuperApp» title was an incomplete identity artifact | Entire repository rewritten under the `GuardAsli` / `AsliCode` identity; no third-party references remain |
+| No version or version format existed | Central version service `src/core/version.ts` with the `isMAJOR.MINOR.PATCH` format, releasing `is0.0.1` for all 12 components |
+
+## Git state after implementation
+
+| Item | State |
+|---|---|
+| Branch | `main` — the only branch; work lands directly on main |
+| History | initial audit → platform implementation → documentation |
+| Working tree | clean after every commit |
+| Tags / releases | none yet — at the maintainer's discretion |
+| PRs | none — per the execution contract |
+
+## Evidence chain for every feature
+
+Every capability is proven across this chain, with no missing link:
+
+```
+Frontend → API → Authorization → Business Logic → Database
+→ External Provider → Background Jobs → Logs → Audit → Tests → Documentation
+```
+
+Example — a paid wallet top-up: the dashboard submits (`src/web/`) → the
+`/api/v1/payments/...` route receives the event (`httpApi.ts`) → without crediting,
+a `payment_verify` job is queued (`jobs.ts`) → the adapter verifies amount and
+status (`src/core/payments/`) → the ledger writes a numbered, idempotent entry
+(`wallet.ts`) → the operation lands in `auditLogs` → `tests/payments.test.ts`
+covers every path → these docs describe the behavior.
+
+## Initial audit — archive
+
+Initial audit date: 2026-09-22.
+
+1. **Structure:** the repository contained a single 10-byte `README.md` reading
+   `# SuperApp`. No backend, frontend, database, API, auth, RBAC, providers, wallet,
+   payments, Telegram, apps, build, domains/SSL, installer, monitoring,
+   backup/restore, logs, audit, docs, tests or CI/CD existed. Everything had to be
+   built from zero.
+2. **Git:** one branch (`main`), one commit (`5e06d5a Initial commit`), no tags,
+   no releases, no PRs, clean working tree, a single `origin` remote with no
+   third-party reference in code.
+3. **Third-party identity:** the only artifact was the README title; the entire
+   repository has since been rewritten under the GuardAsli / AsliCode identity.
+4. **Versioning:** none existed; the applied solution is the central version
+   service with the `isMAJOR.MINOR.PATCH` format, `is0.0.1` for all twelve
+   components, plus `compareVersions`, `isCompatible` and `bumpVersion`.
+
+</div>

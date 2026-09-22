@@ -3,8 +3,8 @@ import { GUARDASLI } from "../core/identity";
 
 const FEATURES = [
   {
-    title: "چندمستأجری کامل",
-    desc: "جداسازی واقعی tenant با سلسله‌مراتب Reseller و Sub-reseller و مجوزهای granular سمت سرور.",
+    title: "مدیریت کامل مشتریان و ریسلرها",
+    desc: "سلسله‌مراتب ریسلر و زیرریسلر با مجوزهای دقیق و اعمال‌شده سمت سرور؛ هر مشتری فقط داده خودش را می‌بیند.",
     icon: "🛡️",
   },
   {
@@ -19,7 +19,7 @@ const FEATURES = [
   },
   {
     title: "برندینگ بی‌نهایت",
-    desc: "هر tenant لوگو، رنگ، دامنه، بات تلگرام و اپ اختصاصی خودش را دارد — با هویت Core ثابت.",
+    desc: "هر مشتری لوگو، رنگ، دامنه، بات تلگرام و اپ اختصاصی خودش را دارد — با هویت Core ثابت.",
     icon: "🎨",
   },
   {
@@ -69,14 +69,14 @@ export default function LandingPage() {
         <section className="mt-16 grid gap-8 md:grid-cols-2 md:items-center">
           <div>
             <h1 className="text-4xl font-black leading-tight md:text-5xl">
-              پلتفرم کنترل چندمستأجری،
+              فروش سرویس، مدیریت ریسلر، پرداخت و پرووایژنینگ —
               <br />
-              از فروش تا پرووایژنینگ
+              همه در یک کنترل‌پلن
             </h1>
             <p className="mt-4 text-lg leading-relaxed text-core-muted">
               {GUARDASLI.product} کل زنجیره را یک‌جا جمع می‌کند: کاربران، ریسلرها، پلن‌ها،
-              ویژگی‌ها، کیف پول، پرداخت، سرورها، بات تلگرام و اپ اختصاصی — با امنیت
-              سمت سرور و جداسازی کامل مستأجرها.
+              ویژگی‌ها، کیف پول، پرداخت، سرورها، بات تلگرام و اپ اختصاصی — با اعمال
+              مجوزها سمت سرور و جداسازی کامل داده هر مشتری.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a

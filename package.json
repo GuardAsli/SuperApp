@@ -1,7 +1,7 @@
 {
   "name": "guardasli",
   "version": "0.0.1",
-  "description": "GuardAsli multi-tenant control-plane platform by AsliCode",
+  "description": "GuardAsli control-plane platform by AsliCode",
   "author": "AsliCode",
   "license": "UNLICENSED",
   "private": true,
