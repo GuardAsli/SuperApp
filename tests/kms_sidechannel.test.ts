@@ -22,7 +22,7 @@ describe("envelope local KMS", () => {
     const aad = "tenant:t1|purpose:test";
     const { blob, mode } = await envelopeEncrypt("super-secret", aad);
     expect(mode).toBe("local");
-    expect(blob.startsWith("e1.")).toBe(true);
+    expect(blob.startsWith("e1|")).toBe(true);
     expect(await envelopeDecrypt(blob, aad)).toBe("super-secret");
     await expect(envelopeDecrypt(blob, "wrong-aad")).rejects.toThrow();
   });
