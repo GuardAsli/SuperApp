@@ -1,4 +1,4 @@
-/** GuardAsli — هسته پرداخت: چهار روش، وضعیت‌ها و جریان‌های اتمی. */
+/** GuardAsli — هسته پرداخت با پاسخ‌های redact شده. */
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -18,7 +18,6 @@ async function requireMethodEnabled(ctx: { db: any }, key: string): Promise<void
   }
 }
 
-/** فقط فیلدهای غیرحساس — هرگز number کامل به کلاینت برنمی‌گردد. */
 function publicCard(c: {
   _id: Id<"paymentCards">;
   ownerName: string;
@@ -49,11 +48,12 @@ export const cardList = query({
       .query("paymentCards")
       .withIndex("by_tenant_order", (q) => q.eq("tenantId", actor.tenantId))
       .collect();
-    return cards.filter((c) => c.enabled || ["admin", "super_admin"].includes(actor.role)).map(publicCard);
+    return cards
+      .filter((c) => c.enabled || ["admin", "super_admin"].includes(actor.role))
+      .map(publicCard);
   },
 });
 
-/** ذخیره کارت با envelope رمزنگاری‌شده (از action). */
 export const cardInsertEncrypted = internalMutation({
   args: {
     token: v.string(),
@@ -78,16 +78,15 @@ export const cardInsertEncrypted = internalMutation({
     if (!/^\d{4}$/.test(args.numberLast4)) {
       throw new Error("VALIDATION_ERROR: last4 نامعتبر");
     }
-    if (!args.ownerName.trim()) {
-      throw new Error("VALIDATION_ERROR: نام صاحب کارت لازم است");
+    if (!args.ownerName.trim() || args.ownerName.length > 120) {
+      throw new Error("VALIDATION_ERROR: نام صاحب کارت نامعتبر است");
     }
     const id = await ctx.db.insert("paymentCards", {
       tenantId: actor.tenantId,
-      // فیلد number برای سازگاری schema — مقدار masked فقط
       number: `****${args.numberLast4}`,
       numberLast4: args.numberLast4,
       numberEncrypted: args.numberEncrypted,
-      ownerName: args.ownerName.trim(),
+      ownerName: args.ownerName.trim().slice(0, 120),
       enabled: true,
       order: args.order,
     });
@@ -103,7 +102,6 @@ export const cardInsertEncrypted = internalMutation({
   },
 });
 
-/** سازگاری: اگر کسی هنوز mutation قدیمی را صدا بزند — فقط last4 ذخیره می‌شود نه plaintext. */
 export const cardAdd = mutation({
   args: {
     token: v.string(),
@@ -128,13 +126,12 @@ export const cardAdd = mutation({
     if (!/^\d{16,24}$/.test(num)) {
       throw new Error("VALIDATION_ERROR: شماره کارت نامعتبر است");
     }
-    // عمداً plaintext کامل ذخیره نمی‌شود — از cardAddAction استفاده کنید
     const last4 = num.slice(-4);
     const id = await ctx.db.insert("paymentCards", {
       tenantId: actor.tenantId,
       number: `****${last4}`,
       numberLast4: last4,
-      ownerName: args.ownerName.trim(),
+      ownerName: args.ownerName.trim().slice(0, 120),
       enabled: true,
       order: args.order,
     });
@@ -144,7 +141,7 @@ export const cardAdd = mutation({
       action: "payment.card_add_masked_only",
       entityType: "paymentCards",
       entityId: id,
-      metadata: { last4, note: "use cardAddAction for encrypted full number" },
+      metadata: { last4 },
     });
     return { cardId: id };
   },
@@ -174,10 +171,13 @@ export const cardToCardSubmit = mutation({
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     await requireMethodEnabled(ctx, "card_to_card");
+    if (args.idempotencyKey.length < 8 || args.idempotencyKey.length > 128) {
+      throw new Error("VALIDATION_ERROR: idempotencyKey نامعتبر است");
+    }
     const card = await ctx.db.get(args.cardId);
     if (!card || !card.enabled) throw new Error("NOT_FOUND: کارت فعال یافت نشد");
     await requireTenantScope(ctx, actor, card.tenantId);
-    if (!Number.isInteger(args.amount) || args.amount <= 0) {
+    if (!Number.isInteger(args.amount) || args.amount <= 0 || args.amount > 1_000_000_000) {
       throw new Error("VALIDATION_ERROR: مبلغ نامعتبر است");
     }
     const dupe = await ctx.db
@@ -228,6 +228,7 @@ export const cardReview = mutation({
     if (payment.status !== "pending_review") {
       throw new Error("CONFLICT: این پرداخت قبلاً بررسی شده است");
     }
+    const reason = (args.reason ?? "").slice(0, 500);
     if (args.decision === "approve") {
       const walletId = await ctx.runMutation(internal.wallet.getOrCreateWalletId, {
         userId: payment.userId,
@@ -267,23 +268,34 @@ export const cardReview = mutation({
       action: `payment.card_review_${args.decision}`,
       entityType: "payments",
       entityId: args.paymentId,
-      metadata: { amount: payment.amount, reason: args.reason },
+      metadata: { amount: payment.amount, reason },
     });
     return { ok: true };
   },
 });
 
+/** فقط فیلدهای لازم برای review — بدون providerPayload خام. */
 export const pendingPayments = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "ManagePayments");
-    return await ctx.db
+    const rows = await ctx.db
       .query("payments")
       .withIndex("by_tenant_status", (q) =>
         q.eq("tenantId", actor.tenantId).eq("status", "pending_review"),
       )
       .collect();
+    return rows.map((p) => ({
+      _id: p._id,
+      userId: p.userId,
+      method: p.method,
+      amount: p.amount,
+      status: p.status,
+      cardId: p.cardId ?? null,
+      hasReceipt: Boolean(p.receiptStorageId),
+      createdAt: p.createdAt,
+    }));
   },
 });
 
@@ -466,8 +478,11 @@ export const prepareProviderPayment = internalMutation({
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     await requireMethodEnabled(ctx, args.method);
-    if (!Number.isInteger(args.amount) || args.amount <= 0) {
+    if (!Number.isInteger(args.amount) || args.amount <= 0 || args.amount > 1_000_000_000) {
       throw new Error("VALIDATION_ERROR: مبلغ نامعتبر است");
+    }
+    if (args.idempotencyKey.length < 8 || args.idempotencyKey.length > 128) {
+      throw new Error("VALIDATION_ERROR: idempotencyKey نامعتبر است");
     }
     const dupe = await ctx.db
       .query("payments")
@@ -523,7 +538,7 @@ export const markPaymentFailed = internalMutation({
     if (!payment || isTerminalPaid(payment.status)) return { ok: false };
     await ctx.db.patch(args.paymentId, {
       status: "failed",
-      providerPayload: { ...(payment.providerPayload as object ?? {}), failReason: args.reason },
+      providerPayload: { ...(payment.providerPayload as object ?? {}), failReason: args.reason.slice(0, 200) },
     });
     return { ok: true };
   },

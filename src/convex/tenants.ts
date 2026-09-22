@@ -1,7 +1,7 @@
-/** GuardAsli — Bootstrap سیستم و مالکیت Super Admin. */
+/** GuardAsli — Bootstrap و تنظیمات سیستم با audit کامل. */
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
-import { DEFAULT_ROLE_PERMISSIONS } from "../core/rbac";
+import { internal } from "./_generated/api";
 import { requireActor, requireSuperAdmin } from "./auth";
 
 const DEFAULT_FEATURES = [
@@ -11,13 +11,17 @@ const DEFAULT_FEATURES = [
   "ConfigImport", "MultiDevice",
 ];
 
+const SETTINGS_KEY_RE = /^[a-zA-Z0-9_.-]{1,64}$/;
+
 export const systemSettingsGet = query({
   args: { token: v.string(), key: v.string() },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
-    // تنظیمات عمومی فقط برای نقش‌های مدیریتی
     if (!["super_admin", "admin"].includes(actor.role)) {
       throw new Error("FORBIDDEN: دسترسی تنظیمات سیستم مجاز نیست");
+    }
+    if (!SETTINGS_KEY_RE.test(args.key)) {
+      throw new Error("VALIDATION_ERROR: کلید نامعتبر است");
     }
     const doc = await ctx.db
       .query("systemSettings")
@@ -32,7 +36,9 @@ export const systemSettingsSet = mutation({
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requireSuperAdmin(actor);
-    // جلوگیری از تغییر هویت Core از طریق settings
+    if (!SETTINGS_KEY_RE.test(args.key)) {
+      throw new Error("VALIDATION_ERROR: کلید نامعتبر است");
+    }
     if (args.key === "identity") {
       throw new Error("FORBIDDEN: هویت Core قابل تغییر نیست");
     }
@@ -45,6 +51,12 @@ export const systemSettingsSet = mutation({
     } else {
       await ctx.db.insert("systemSettings", { key: args.key, value: args.value });
     }
+    await ctx.runMutation(internal.audit.log, {
+      actorUserId: actor.userId,
+      action: "system.settings_set",
+      entityType: "systemSettings",
+      entityId: args.key,
+    });
   },
 });
 
@@ -90,6 +102,13 @@ export const featureFlagsSet = mutation({
         ...(args.resellerPrice !== undefined ? { resellerPrice: args.resellerPrice } : {}),
       });
     }
+    await ctx.runMutation(internal.audit.log, {
+      actorUserId: actor.userId,
+      action: "system.feature_flag_set",
+      entityType: "featureFlags",
+      entityId: args.key,
+      metadata: patch,
+    });
   },
 });
 
@@ -101,7 +120,6 @@ export const featureFlagsList = query({
   },
 });
 
-/** ایجاد tenant سیستم و اولین Super Admin — یک‌بار و idempotent. */
 export const bootstrapSystem = internalMutation({
   args: {
     username: v.string(),
