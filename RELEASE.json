@@ -1,0 +1,20 @@
+{
+  "product": "GuardAsli",
+  "developer": "AsliCode",
+  "format": "isMAJOR.MINOR.PATCH",
+  "release": "is0.0.1",
+  "components": {
+    "core": "is0.0.1",
+    "api": "is0.0.1",
+    "web": "is0.0.1",
+    "bot": "is0.0.1",
+    "miniapp": "is0.0.1",
+    "mainapp": "is0.0.1",
+    "dedicated": "is0.0.1",
+    "installer": "is0.0.1",
+    "payment": "is0.0.1",
+    "providers": "is0.0.1",
+    "build": "is0.0.1",
+    "releases": "is0.0.1"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "guardasli",
   "version": "0.0.1",
-  "description": "GuardAsli control-plane platform by AsliCode",
+  "description": "GuardAsli control-plane platform by AsliCode — release is0.0.1",
   "author": "AsliCode",
   "license": "UNLICENSED",
   "private": true,
@@ -12,7 +12,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -b --noEmit",
     "test": "bun test",
-    "lint": "tsc -b --noEmit"
+    "lint": "tsc -b --noEmit",
+    "ci": "bun run typecheck && bun test && bun run build"
   },
   "dependencies": {
     "convex": "^1.19.0",
