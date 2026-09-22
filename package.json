@@ -21,7 +21,11 @@
     "install:wizard": "bash scripts/wizard.sh",
     "up": "bash scripts/up.sh",
     "bootstrap": "bun scripts/auto-bootstrap.mjs",
-    "sync-env": "bun scripts/sync-convex-env.mjs"
+    "sync-env": "bun scripts/sync-convex-env.mjs",
+    "monitor": "bash scripts/monitor-convex.sh",
+    "monitor:follow": "bash scripts/monitor-convex.sh --follow",
+    "monitor:jobs": "bash scripts/monitor-convex.sh --jobs",
+    "nginx:apply": "bash scripts/apply-nginx.sh"
   },
   "dependencies": {
     "convex": "^1.19.0",

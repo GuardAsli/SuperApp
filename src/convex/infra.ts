@@ -41,9 +41,43 @@ export const healthLatest = query({
         .withIndex("by_target_time", (q) => q.eq("target", t))
         .order("desc")
         .take(1);
-      out.push(rows[0] ? { target: t, state: rows[0].state, checkedAt: rows[0].checkedAt } : { target: t, state: "unknown", checkedAt: 0 });
+      out.push(
+        rows[0]
+          ? { target: t, state: rows[0].state, checkedAt: rows[0].checkedAt }
+          : { target: t, state: "unknown", checkedAt: 0 },
+      );
     }
     return out;
+  },
+});
+
+/** آمار صف jobs برای مانیتور CLI (بدون auth — فقط شمارش وضعیت؛ deploy محدود). */
+export const jobStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const statuses = ["queued", "running", "done", "dead"] as const;
+    const counts: Record<string, number> = {};
+    for (const s of statuses) {
+      const rows = await ctx.db
+        .query("jobs")
+        .withIndex("by_status_next", (q) => q.eq("status", s))
+        .take(500);
+      counts[s] = rows.length;
+    }
+    const deadSample = await ctx.db
+      .query("jobs")
+      .withIndex("by_status_next", (q) => q.eq("status", "dead"))
+      .take(10);
+    return {
+      counts,
+      deadSample: deadSample.map((j) => ({
+        id: j._id,
+        kind: j.kind,
+        attempts: j.attempts,
+        lastError: j.lastError ?? null,
+      })),
+      checkedAt: Date.now(),
+    };
   },
 });
 
@@ -81,7 +115,14 @@ export const jobPickDue = internalMutation({
     for (const j of due) {
       await ctx.db.patch(j._id, { status: "running" });
     }
-    return due.map((j) => ({ id: j._id, kind: j.kind, payload: j.payload ?? null, tenantId: j.tenantId ?? null, attempts: j.attempts, maxAttempts: j.maxAttempts }));
+    return due.map((j) => ({
+      id: j._id,
+      kind: j.kind,
+      payload: j.payload ?? null,
+      tenantId: j.tenantId ?? null,
+      attempts: j.attempts,
+      maxAttempts: j.maxAttempts,
+    }));
   },
 });
 
@@ -156,7 +197,6 @@ export const backupList = query({
       throw new Error("FORBIDDEN: دسترسی backup مجاز نیست");
     }
     const rows = await ctx.db.query("backups").withIndex("by_time").order("desc").take(100);
-    // بدون storageId خام در لیست عمومی ادمین — فقط metadata
     return rows.map((b) => ({
       _id: b._id,
       kind: b.kind,
@@ -208,7 +248,6 @@ export const domainAdd = mutation({
       entityId: id,
       metadata: { domain: d, isWildcard: args.isWildcard },
     });
-    // verificationToken فقط یک‌بار در پاسخ create برگردانده می‌شود
     return { domainId: id, verificationToken };
   },
 });
@@ -262,7 +301,6 @@ export const domainList = query({
       .query("customDomains")
       .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
       .collect();
-    // verificationToken در لیست برنمی‌گردد
     return rows.map((d) => ({
       _id: d._id,
       domain: d.domain,
@@ -275,7 +313,12 @@ export const domainList = query({
 });
 
 export const apiKeyCreate = mutation({
-  args: { token: v.string(), name: v.string(), scopes: v.array(v.string()), expiresInDays: v.optional(v.number()) },
+  args: {
+    token: v.string(),
+    name: v.string(),
+    scopes: v.array(v.string()),
+    expiresInDays: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "Manage");
@@ -361,7 +404,11 @@ export const rateLimitCheck = internalMutation({
       if (bucket) {
         await ctx.db.patch(bucket._id, { windowStart: now, count: 1 });
       } else {
-        await ctx.db.insert("rateLimits", { bucketKey: args.bucketKey, windowStart: now, count: 1 });
+        await ctx.db.insert("rateLimits", {
+          bucketKey: args.bucketKey,
+          windowStart: now,
+          count: 1,
+        });
       }
       return { allowed: true, remaining: args.maxPerWindow - 1 };
     }
@@ -374,7 +421,12 @@ export const rateLimitCheck = internalMutation({
 });
 
 export const reportGenerate = query({
-  args: { token: v.string(), kind: v.string(), periodStart: v.number(), periodEnd: v.number() },
+  args: {
+    token: v.string(),
+    kind: v.string(),
+    periodStart: v.number(),
+    periodEnd: v.number(),
+  },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "View");
@@ -403,8 +455,12 @@ export const reportGenerate = query({
           ),
         )
         .collect();
-      data.credits = entries.filter((e) => e.direction === "credit").reduce((s, e) => s + e.amount, 0);
-      data.debits = entries.filter((e) => e.direction === "debit").reduce((s, e) => s + e.amount, 0);
+      data.credits = entries
+        .filter((e) => e.direction === "credit")
+        .reduce((s, e) => s + e.amount, 0);
+      data.debits = entries
+        .filter((e) => e.direction === "debit")
+        .reduce((s, e) => s + e.amount, 0);
       data.entryCount = entries.length;
     } else if (args.kind === "subscriptions") {
       const subs = await ctx.db
