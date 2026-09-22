@@ -100,7 +100,7 @@ export const jobFinish = internalMutation({
       status: dead ? "dead" : "queued",
       attempts,
       nextRunAt: Date.now() + Math.min(30_000 * 2 ** attempts, 3600_000),
-      ...(args.error !== undefined ? { lastError: args.error } : {}),
+      ...(args.error !== undefined ? { lastError: args.error.slice(0, 500) } : {}),
     });
     return { ok: true, dead };
   },
@@ -155,7 +155,18 @@ export const backupList = query({
     if (!["super_admin", "admin"].includes(actor.role)) {
       throw new Error("FORBIDDEN: دسترسی backup مجاز نیست");
     }
-    return await ctx.db.query("backups").withIndex("by_time").order("desc").take(100);
+    const rows = await ctx.db.query("backups").withIndex("by_time").order("desc").take(100);
+    // بدون storageId خام در لیست عمومی ادمین — فقط metadata
+    return rows.map((b) => ({
+      _id: b._id,
+      kind: b.kind,
+      scope: b.scope,
+      tenantId: b.tenantId ?? null,
+      checksum: b.checksum,
+      encrypted: b.encrypted,
+      status: b.status,
+      createdAt: b.createdAt,
+    }));
   },
 });
 
@@ -197,11 +208,11 @@ export const domainAdd = mutation({
       entityId: id,
       metadata: { domain: d, isWildcard: args.isWildcard },
     });
+    // verificationToken فقط یک‌بار در پاسخ create برگردانده می‌شود
     return { domainId: id, verificationToken };
   },
 });
 
-/** درخواست تأیید دامنه — verified فقط بعد از تأیید DNS توسط worker/Node action. */
 export const domainVerify = mutation({
   args: { token: v.string(), domainId: v.id("customDomains") },
   handler: async (ctx, args) => {
@@ -210,7 +221,6 @@ export const domainVerify = mutation({
     if (!dom) throw new Error("NOT_FOUND: دامنه یافت نشد");
     await requireTenantScope(ctx, actor, dom.tenantId);
     requirePermission(actor, "ManageDomains");
-    // هرگز verified=true بدون DNS واقعی — فقط صف بررسی
     await ctx.db.patch(args.domainId, { sslStatus: "pending" });
     await ctx.db.insert("jobs", {
       kind: "domain_dns_verify",
@@ -232,7 +242,6 @@ export const domainVerify = mutation({
   },
 });
 
-/** تکمیل تأیید DNS — فقط internal پس از بررسی واقعی. */
 export const domainMarkVerified = internalMutation({
   args: { domainId: v.id("customDomains"), ok: v.boolean() },
   handler: async (ctx, args) => {
@@ -249,10 +258,19 @@ export const domainList = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
-    return await ctx.db
+    const rows = await ctx.db
       .query("customDomains")
       .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
       .collect();
+    // verificationToken در لیست برنمی‌گردد
+    return rows.map((d) => ({
+      _id: d._id,
+      domain: d.domain,
+      verified: d.verified,
+      sslStatus: d.sslStatus,
+      sslExpiresAt: d.sslExpiresAt ?? null,
+      isWildcard: d.isWildcard,
+    }));
   },
 });
 
@@ -261,16 +279,19 @@ export const apiKeyCreate = mutation({
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "Manage");
+    if (!args.name.trim() || args.name.length > 80) {
+      throw new Error("VALIDATION_ERROR: نام کلید نامعتبر است");
+    }
     const raw = `ga_${randomToken(24)}`;
     const prefix = raw.slice(0, 10);
     const keyHash = await stableTokenHash(raw);
     const id = await ctx.db.insert("apiKeys", {
       tenantId: actor.tenantId,
       createdBy: actor.userId,
-      name: args.name,
+      name: args.name.trim(),
       prefix,
       keyHash,
-      scopes: args.scopes,
+      scopes: args.scopes.slice(0, 32),
       status: "active",
       ...(args.expiresInDays !== undefined
         ? { expiresAt: Date.now() + args.expiresInDays * 24 * 60 * 60 * 1000 }
@@ -357,6 +378,9 @@ export const reportGenerate = query({
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "View");
+    if (args.periodEnd < args.periodStart) {
+      throw new Error("VALIDATION_ERROR: بازه زمانی نامعتبر است");
+    }
     const data: Record<string, unknown> = {};
     if (args.kind === "users") {
       const users = await ctx.db
@@ -371,9 +395,9 @@ export const reportGenerate = query({
     } else if (args.kind === "wallet" || args.kind === "revenue") {
       const entries = await ctx.db
         .query("ledgerEntries")
+        .withIndex("by_tenant_time", (q) => q.eq("tenantId", actor.tenantId))
         .filter((q) =>
           q.and(
-            q.eq(q.field("tenantId"), actor.tenantId),
             q.gte(q.field("createdAt"), args.periodStart),
             q.lte(q.field("createdAt"), args.periodEnd),
           ),
