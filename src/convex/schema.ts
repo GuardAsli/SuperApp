@@ -44,7 +44,8 @@ export default defineSchema(
     })
       .index("by_token", ["tokenHash"])
       .index("by_user", ["userId"])
-      .index("by_refresh", ["refreshTokenHash"]),
+      .index("by_refresh", ["refreshTokenHash"])
+      .index("by_status_expires", ["status", "expiresAt"]),
 
     plans: defineTable({
       tenantId: v.id("tenants"),
@@ -109,7 +110,8 @@ export default defineSchema(
       createdAt: v.number(),
     })
       .index("by_wallet_seq", ["walletId", "seq"])
-      .index("by_idempotency", ["idempotencyKey"]),
+      .index("by_idempotency", ["idempotencyKey"])
+      .index("by_tenant_time", ["tenantId", "createdAt"]),
 
     payments: defineTable({
       tenantId: v.id("tenants"),
@@ -136,7 +138,10 @@ export default defineSchema(
 
     paymentCards: defineTable({
       tenantId: v.id("tenants"),
+      /** فقط masked یا placeholder — هرگز plaintext کامل در API */
       number: v.string(),
+      numberLast4: v.optional(v.string()),
+      numberEncrypted: v.optional(v.string()),
       ownerName: v.string(),
       enabled: v.boolean(),
       order: v.number(),
@@ -194,7 +199,7 @@ export default defineSchema(
       tenantId: v.id("tenants"),
       userId: v.id("users"),
       planId: v.optional(v.id("plans")),
-      serverId: v.optional(v.id("servers")),
+      serverId: v.optional(v.id("servers")) ,
       remoteUserId: v.optional(v.string()),
       kind: v.string(),
       trafficLimitGb: v.optional(v.number()),

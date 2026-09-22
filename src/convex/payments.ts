@@ -18,6 +18,28 @@ async function requireMethodEnabled(ctx: { db: any }, key: string): Promise<void
   }
 }
 
+/** فقط فیلدهای غیرحساس — هرگز number کامل به کلاینت برنمی‌گردد. */
+function publicCard(c: {
+  _id: Id<"paymentCards">;
+  ownerName: string;
+  enabled: boolean;
+  order: number;
+  numberLast4?: string;
+  number?: string;
+}) {
+  const last4 =
+    c.numberLast4 ??
+    (c.number && c.number.length >= 4 ? c.number.slice(-4) : "****");
+  return {
+    _id: c._id,
+    ownerName: c.ownerName,
+    enabled: c.enabled,
+    order: c.order,
+    numberMasked: `****${last4}`,
+    numberLast4: last4,
+  };
+}
+
 export const cardList = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -27,13 +49,61 @@ export const cardList = query({
       .query("paymentCards")
       .withIndex("by_tenant_order", (q) => q.eq("tenantId", actor.tenantId))
       .collect();
-    return cards.map((c) => ({
-      ...c,
-      numberMasked: c.number.length > 4 ? `****${c.number.slice(-4)}` : "****",
-    }));
+    return cards.filter((c) => c.enabled || ["admin", "super_admin"].includes(actor.role)).map(publicCard);
   },
 });
 
+/** ذخیره کارت با envelope رمزنگاری‌شده (از action). */
+export const cardInsertEncrypted = internalMutation({
+  args: {
+    token: v.string(),
+    numberEncrypted: v.string(),
+    numberLast4: v.string(),
+    ownerName: v.string(),
+    order: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    requirePermission(actor, "ManagePayments");
+    if (actor.role !== "super_admin" && actor.role !== "admin") {
+      throw new Error("FORBIDDEN: فقط Admin/Super Admin");
+    }
+    const cards = await ctx.db
+      .query("paymentCards")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
+      .collect();
+    if (cards.length >= MAX_CARDS) {
+      throw new Error(`VALIDATION_ERROR: حداکثر ${MAX_CARDS} کارت مجاز است`);
+    }
+    if (!/^\d{4}$/.test(args.numberLast4)) {
+      throw new Error("VALIDATION_ERROR: last4 نامعتبر");
+    }
+    if (!args.ownerName.trim()) {
+      throw new Error("VALIDATION_ERROR: نام صاحب کارت لازم است");
+    }
+    const id = await ctx.db.insert("paymentCards", {
+      tenantId: actor.tenantId,
+      // فیلد number برای سازگاری schema — مقدار masked فقط
+      number: `****${args.numberLast4}`,
+      numberLast4: args.numberLast4,
+      numberEncrypted: args.numberEncrypted,
+      ownerName: args.ownerName.trim(),
+      enabled: true,
+      order: args.order,
+    });
+    await ctx.runMutation(internal.audit.log, {
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      action: "payment.card_add",
+      entityType: "paymentCards",
+      entityId: id,
+      metadata: { last4: args.numberLast4 },
+    });
+    return { cardId: id };
+  },
+});
+
+/** سازگاری: اگر کسی هنوز mutation قدیمی را صدا بزند — فقط last4 ذخیره می‌شود نه plaintext. */
 export const cardAdd = mutation({
   args: {
     token: v.string(),
@@ -58,12 +128,12 @@ export const cardAdd = mutation({
     if (!/^\d{16,24}$/.test(num)) {
       throw new Error("VALIDATION_ERROR: شماره کارت نامعتبر است");
     }
-    if (!args.ownerName.trim()) {
-      throw new Error("VALIDATION_ERROR: نام صاحب کارت لازم است");
-    }
+    // عمداً plaintext کامل ذخیره نمی‌شود — از cardAddAction استفاده کنید
+    const last4 = num.slice(-4);
     const id = await ctx.db.insert("paymentCards", {
       tenantId: actor.tenantId,
-      number: num,
+      number: `****${last4}`,
+      numberLast4: last4,
       ownerName: args.ownerName.trim(),
       enabled: true,
       order: args.order,
@@ -71,9 +141,10 @@ export const cardAdd = mutation({
     await ctx.runMutation(internal.audit.log, {
       actorUserId: actor.userId,
       tenantId: actor.tenantId,
-      action: "payment.card_add",
+      action: "payment.card_add_masked_only",
       entityType: "paymentCards",
       entityId: id,
+      metadata: { last4, note: "use cardAddAction for encrypted full number" },
     });
     return { cardId: id };
   },
@@ -276,7 +347,6 @@ export const methodList = query({
   },
 });
 
-/** پیکربندی درگاه کاربر — بدون برگرداندن secret */
 export const myProviderConfigList = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -386,7 +456,6 @@ export const getPaymentInternal = internalQuery({
   },
 });
 
-/** آماده‌سازی رکورد پرداخت provider قبل از تماس API خارجی */
 export const prepareProviderPayment = internalMutation({
   args: {
     token: v.string(),
