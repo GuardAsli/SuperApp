@@ -1,27 +1,34 @@
 /** GuardAsli — احراز هویت: مرزهای مجوز، نشست‌ها و ماندگاری کاربر (بدون Node API). */
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { generateSecureCredentialRuntime } from "./runtime";
+import { generateSecureCredentialRuntime, sha256Hex } from "./runtime";
 import { DEFAULT_ROLE_PERMISSIONS } from "../core/rbac";
 import type { Id } from "./_generated/dataModel";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 روز
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 1000 * 60 * 15;
+/** pepper ثابت محصول برای هش توکن — توکن خام هرگز ذخیره نمی‌شود. */
+const TOKEN_PEPPER = "GuardAsli.session.v1";
 
-/** هش پایدار و سریع برای جستجوی توکن نشست (بدون نیاز به crypto در mutation). */
-export function stableTokenHash(input: string): string {
-  let h1 = 0xdeadbeef ^ input.length;
-  let h2 = 0x41c6ce57 ^ input.length;
-  for (let i = 0; i < input.length; i++) {
-    const ch = input.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
+/** هش یک‌طرفه SHA-256 برای جستجوی توکن نشست / API key. */
+export async function stableTokenHash(input: string): Promise<string> {
+  return sha256Hex(`${TOKEN_PEPPER}:${input}`);
+}
+
+/** نسخهٔ همگام برای مسیرهایی که هنوز sync هستند — از همان pepper استفاده می‌کند. */
+export function stableTokenHashSync(input: string): string {
+  // فقط برای سازگاری موقت؛ مسیرهای جدید باید async استفاده کنند.
+  // پیاده‌سازی سبک: ترکیب طول + checksum ساده روی peppered input
+  const s = `${TOKEN_PEPPER}:${input}`;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ c, 0x811c9dc5);
   }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  const out = (h2 >>> 0) * 4294967296 + (h1 >>> 0);
-  return out.toString(36) + "." + input.length.toString(36);
+  return `${(h1 >>> 0).toString(16)}${(h2 >>> 0).toString(16)}.${s.length.toString(16)}`;
 }
 
 export interface ActorContext {
@@ -38,11 +45,19 @@ export async function requireActor(
   token: string | undefined | null,
 ): Promise<ActorContext> {
   if (!token) throw new Error("UNAUTHENTICATED: نشست ارائه نشده است");
-  const th = stableTokenHash(token);
-  const session = await ctx.db
+  const th = await stableTokenHash(token);
+  let session = await ctx.db
     .query("sessions")
     .withIndex("by_token", (q: any) => q.eq("tokenHash", th))
     .unique();
+  // سازگاری با نشست‌های قدیمی که با hash sync ذخیره شده‌اند
+  if (!session) {
+    const thSync = stableTokenHashSync(token);
+    session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q: any) => q.eq("tokenHash", thSync))
+      .unique();
+  }
   if (!session || session.status !== "active" || session.expiresAt < Date.now()) {
     throw new Error("UNAUTHENTICATED: نشست نامعتبر یا منقضی است");
   }
@@ -63,7 +78,7 @@ export async function requireActor(
   };
 }
 
-/** اعمال مجوز granular در سمت سرور (بند ۵). */
+/** اعمال مجوز granular در سمت سرور. */
 export function requirePermission(
   actor: ActorContext,
   permission: string,
@@ -71,8 +86,15 @@ export function requirePermission(
 ): void {
   const perms =
     extra ?? DEFAULT_ROLE_PERMISSIONS[actor.role as keyof typeof DEFAULT_ROLE_PERMISSIONS] ?? [];
-  if (!perms.includes(permission)) {
+  if (!perms.includes(permission as never)) {
     throw new Error(`FORBIDDEN: مجوز ${permission} لازم است`);
+  }
+}
+
+/** فقط Super Admin. */
+export function requireSuperAdmin(actor: ActorContext): void {
+  if (actor.role !== "super_admin") {
+    throw new Error("FORBIDDEN: فقط Super Admin");
   }
 }
 
@@ -125,10 +147,12 @@ export const createSession = internalMutation({
     ip: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const tokenHash = await stableTokenHash(args.accessToken);
+    const refreshTokenHash = await stableTokenHash(args.refreshToken);
     return await ctx.db.insert("sessions", {
       userId: args.userId,
-      tokenHash: stableTokenHash(args.accessToken),
-      refreshTokenHash: stableTokenHash(args.refreshToken),
+      tokenHash,
+      refreshTokenHash,
       status: "active",
       ...(args.userAgent !== undefined ? { userAgent: args.userAgent } : {}),
       ...(args.ip !== undefined ? { ip: args.ip } : {}),
@@ -162,11 +186,18 @@ export const clearFailedLogins = internalMutation({
 export const rotateSession = internalMutation({
   args: { refreshToken: v.string() },
   handler: async (ctx, args) => {
-    const rh = stableTokenHash(args.refreshToken);
-    const session = await ctx.db
+    const rh = await stableTokenHash(args.refreshToken);
+    let session = await ctx.db
       .query("sessions")
       .withIndex("by_refresh", (q: any) => q.eq("refreshTokenHash", rh))
       .unique();
+    if (!session) {
+      const rhSync = stableTokenHashSync(args.refreshToken);
+      session = await ctx.db
+        .query("sessions")
+        .withIndex("by_refresh", (q: any) => q.eq("refreshTokenHash", rhSync))
+        .unique();
+    }
     if (!session || session.status !== "active" || session.expiresAt < Date.now()) {
       return null;
     }
@@ -174,8 +205,8 @@ export const rotateSession = internalMutation({
     const refreshToken = generateSecureCredentialRuntime(40);
     const expiresAt = Date.now() + SESSION_TTL_MS;
     await ctx.db.patch(session._id, {
-      tokenHash: stableTokenHash(accessToken),
-      refreshTokenHash: stableTokenHash(refreshToken),
+      tokenHash: await stableTokenHash(accessToken),
+      refreshTokenHash: await stableTokenHash(refreshToken),
       expiresAt,
     });
     return { accessToken, refreshToken, userId: session.userId, expiresAt };
@@ -220,10 +251,15 @@ export const persistUser = internalMutation({
   args: {
     username: v.string(),
     passwordEnvelope: v.string(),
+    /** فقط نقش‌های غیرممتاز از ثبت‌نام عمومی — هرگز admin/super_admin */
     role: v.string(),
     parentUsername: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const allowedPublic = new Set(["user", "reseller", "sub_reseller"]);
+    if (!allowedPublic.has(args.role)) {
+      throw new Error("FORBIDDEN: نقش در ثبت‌نام عمومی مجاز نیست");
+    }
     const existing = await ctx.db
       .query("users")
       .withIndex("by_username", (q) => q.eq("username", args.username))
@@ -251,7 +287,7 @@ export const persistUser = internalMutation({
     const userId = await ctx.db.insert("users", {
       username: args.username,
       passwordHash: args.passwordEnvelope,
-      passwordSalt: "", // salt داخل پاکت scrypt است
+      passwordSalt: "",
       role: args.role,
       tenantId,
       ...(parentUserId !== undefined ? { parentUserId } : {}),
