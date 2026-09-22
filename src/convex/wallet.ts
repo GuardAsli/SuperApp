@@ -1,11 +1,10 @@
-/** GuardAsli — Wallet با Ledger تغییرناپذیر و idempotency (بند ۱۵ و ۴۳). */
+/** GuardAsli — Wallet با Ledger تغییرناپذیر و idempotency. */
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { requireActor, requirePermission, requireTenantScope, type ActorContext } from "./auth";
+import { requireActor, requirePermission, requireTenantScope } from "./auth";
 
-/** ثبت یک Ledger Entry اتمی روی Wallet — تنها راه تغییر balance. */
 export const ledgerApply = internalMutation({
   args: {
     walletId: v.id("wallets"),
@@ -20,7 +19,6 @@ export const ledgerApply = internalMutation({
     if (!Number.isInteger(args.amount) || args.amount <= 0) {
       throw new Error("VALIDATION_ERROR: مبلغ باید عدد صحیح مثبت باشد");
     }
-    // idempotency: همان کلید → همان نتیجه بدون اثر مجدد
     if (args.idempotencyKey) {
       const dupe = await ctx.db
         .query("ledgerEntries")
@@ -78,6 +76,26 @@ export const getOrCreateWallet = internalMutation({
   },
 });
 
+export const getOrCreateWalletId = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("wallets")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (existing) return existing._id;
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("NOT_FOUND: کاربر یافت نشد");
+    return await ctx.db.insert("wallets", {
+      tenantId: user.tenantId,
+      userId: args.userId,
+      balance: 0,
+      seq: 0,
+      status: "active",
+    });
+  },
+});
+
 export const walletGet = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -101,16 +119,15 @@ export const walletHistory = query({
       .unique();
     if (!wallet) return [];
     await requireTenantScope(ctx, actor, wallet.tenantId);
-    const entries = await ctx.db
+    return await ctx.db
       .query("ledgerEntries")
       .withIndex("by_wallet_seq", (q) => q.eq("walletId", wallet._id))
       .order("desc")
       .take(Math.min(args.limit ?? 50, 200));
-    return entries;
   },
 });
 
-/** شارژ دستی توسط Admin/Super Admin (بند ۱۷) — Ledger + idempotency. */
+/** شارژ دستی — فقط اگر admin_manual سراسری فعال باشد. */
 export const adminManualCredit = mutation({
   args: {
     token: v.string(),
@@ -122,26 +139,32 @@ export const adminManualCredit = mutation({
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "ManageWallet");
+    const method = await ctx.db
+      .query("paymentMethods")
+      .withIndex("by_key", (q) => q.eq("key", "admin_manual"))
+      .unique();
+    if (!method?.globallyEnabled) {
+      throw new Error("FORBIDDEN: روش شارژ دستی ادمین غیرفعال است");
+    }
     const target = await ctx.db.get(args.targetUserId);
     if (!target) throw new Error("NOT_FOUND: کاربر مقصد یافت نشد");
     await requireTenantScope(ctx, actor, target.tenantId);
     if (!Number.isInteger(args.amount) || args.amount <= 0) {
       throw new Error("VALIDATION_ERROR: مبلغ نامعتبر است");
     }
-    const wallet = await ctx.db
-      .query("wallets")
-      .withIndex("by_user", (q) => q.eq("userId", args.targetUserId))
-      .unique();
-    const walletId =
-      wallet?._id ??
-      (await ctx.runMutation(internal.wallet.getOrCreateWalletId, { userId: args.targetUserId }));
+    if (!args.reason.trim()) {
+      throw new Error("VALIDATION_ERROR: دلیل الزامی است");
+    }
+    const walletId = await ctx.runMutation(internal.wallet.getOrCreateWalletId, {
+      userId: args.targetUserId,
+    });
     const res: { ledgerEntryId: Id<"ledgerEntries">; balanceAfter: number; deduped: boolean } =
       await ctx.runMutation(internal.wallet.ledgerApply, {
         walletId: walletId as Id<"wallets">,
         type: "admin_credit",
         amount: args.amount,
         direction: "credit",
-        reason: args.reason,
+        reason: args.reason.trim(),
         idempotencyKey: args.idempotencyKey,
         metadata: { actorUserId: actor.userId },
       });
@@ -154,25 +177,5 @@ export const adminManualCredit = mutation({
       metadata: { amount: args.amount, targetUserId: args.targetUserId, reason: args.reason },
     });
     return res;
-  },
-});
-
-export const getOrCreateWalletId = internalMutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("wallets")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .unique();
-    if (existing) return existing._id;
-    const user = await ctx.db.get(args.userId);
-    if (!user) throw new Error("NOT_FOUND: کاربر یافت نشد");
-    return await ctx.db.insert("wallets", {
-      tenantId: user.tenantId,
-      userId: args.userId,
-      balance: 0,
-      seq: 0,
-      status: "active",
-    });
   },
 });
