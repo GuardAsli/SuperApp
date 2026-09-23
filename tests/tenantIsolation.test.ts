@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { tenantScopeWalk, tenantTreeIds, type TenantRef } from "../src/core/tenantScope";
-import { stableTokenHash } from "../src/convex/auth";
+import { stableTokenHash } from "../src/core/sessionToken";
 
 // ————— Harness واقعی DB —————
 

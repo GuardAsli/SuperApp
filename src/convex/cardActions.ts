@@ -20,7 +20,7 @@ export const cardAddAction = action({
     ownerName: v.string(),
     order: v.number(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ cardId: string }> => {
     const num = args.number.replace(/\s/g, "");
     if (!/^\d{16,24}$/.test(num)) {
       throw new Error("VALIDATION_ERROR: شماره کارت نامعتبر است");

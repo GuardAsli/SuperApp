@@ -125,9 +125,14 @@ export const runAutoBackup = internalAction({
   },
 });
 
+type WorkerResult = {
+  processed: number;
+  results: Array<{ id: string; kind: string; ok: boolean }>;
+};
+
 export const runWorkerOnce = action({
   args: { token: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<WorkerResult> => {
     const who = await ctx.runQuery(api.auth.whoami, { token: args.token });
     if (who.role !== "super_admin") throw new Error("FORBIDDEN: فقط Super Admin");
     return await ctx.runAction(internal.workerActions.processDueJobs, { limit: 20 });

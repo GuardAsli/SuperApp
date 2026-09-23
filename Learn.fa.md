@@ -13,7 +13,7 @@
 ## ۱. نصب با ویزارد (یک دستور)
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && sh ./scripts/cli.mjs install
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && bash scripts/guardasli.sh install
 ```
 
 ویزارد این کارها را انجام می‌دهد:
@@ -26,8 +26,8 @@ git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli &&
 راستی‌آزمایی:
 
 ```bash
-sh ./scripts/cli.mjs status
-sh ./scripts/cli.mjs doctor
+bash scripts/guardasli.sh status
+bash scripts/guardasli.sh doctor
 ```
 
 ---
@@ -60,7 +60,7 @@ bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password"
 ## ۴. پیکربندی پلتفرم (ویزارد)
 
 ```bash
-sh ./scripts/cli.mjs reconfigure
+bash scripts/guardasli.sh reconfigure
 ```
 
 دامنه اصلی پلتفرم (دامنه هویت Core) را تنظیم کنید. دامنه‌های سفارشی مشتریان بعداً از پنل ادمین مدیریت می‌شوند و نمی‌توانند دامنه Core را تصاحب کنند.
@@ -101,12 +101,12 @@ sh ./scripts/cli.mjs reconfigure
 ## ۷. عملیات روزانه با CLI
 
 ```bash
-sh ./scripts/cli.mjs          # منوی تعاملی
-sh ./scripts/cli.mjs doctor   # سلامت
-sh ./scripts/cli.mjs backup   # پشتیبان رمزنگاری‌شده
-sh ./scripts/cli.mjs status   # نسخه is0.0.1 و مسیر
-sh ./scripts/cli.mjs logs     # لاگ‌های اخیر
-sh ./scripts/cli.mjs update   # به‌روزرسانی اجزا، حفظ داده
+bash scripts/guardasli.sh          # منوی تعاملی
+bash scripts/guardasli.sh doctor   # سلامت
+bash scripts/guardasli.sh backup   # پشتیبان رمزنگاری‌شده
+bash scripts/guardasli.sh status   # نسخه is0.0.1 و مسیر
+bash scripts/guardasli.sh logs     # لاگ‌های اخیر
+bash scripts/guardasli.sh update   # به‌روزرسانی اجزا، حفظ داده
 ```
 
 ---

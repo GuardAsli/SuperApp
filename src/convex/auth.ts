@@ -4,26 +4,15 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { generateSecureCredentialRuntime } from "./runtime";
 import { DEFAULT_ROLE_PERMISSIONS, isRole } from "../core/rbac";
 import { tenantScopeWalk } from "../core/tenantScope";
+import { stableTokenHash } from "../core/sessionToken";
 import type { Id } from "./_generated/dataModel";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 روز
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 1000 * 60 * 15;
 
-/** هش پایدار و سریع برای جستجوی توکن نشست — بدون node:crypto (محدودیت runtime Convex). */
-export function stableTokenHash(input: string): string {
-  let h1 = 0xdeadbeef ^ input.length;
-  let h2 = 0x41c6ce57 ^ input.length;
-  for (let i = 0; i < input.length; i++) {
-    const ch = input.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  const out = (h2 >>> 0) * 4294967296 + (h1 >>> 0);
-  return out.toString(36) + "." + input.length.toString(36);
-}
+// هش توکن نشست از core — همان پیاده‌سازی در تست‌ها و runtime.
+export { stableTokenHash };
 
 export interface ActorContext {
   userId: Id<"users">;

@@ -179,7 +179,7 @@ Full reference: [docs/API.md](docs/API.md).
 **One-line install:**
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && sh ./scripts/cli.mjs install
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && bash scripts/guardasli.sh install
 ```
 
 CLI commands:
@@ -195,7 +195,7 @@ CLI commands:
 | `logs` | Tail install logs |
 | *(no args)* | Interactive menu |
 
-Script: `scripts/cli.mjs`. Default install root: `/opt/guardasli`.
+Script: `scripts/guardasli.sh`. Default install root: `/opt/guardasli`.
 
 ---
 

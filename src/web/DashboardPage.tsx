@@ -51,7 +51,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
   );
   const jobStats = useQuery(
     api.infra.jobStats,
-    token && whoami && ["admin", "super_admin"].includes(whoami.role) ? {} : "skip",
+    token && whoami && ["admin", "super_admin"].includes(whoami.role) ? { token } : "skip",
   );
   const logout = useMutation(api.auth.revokeSession);
   const methodToggle = useMutation(api.payments.methodSetEnabled);

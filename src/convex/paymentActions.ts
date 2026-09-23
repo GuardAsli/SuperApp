@@ -39,7 +39,7 @@ export const saveUserProviderConfigAction = action({
     enabled: v.boolean(),
     label: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ configId: string }> => {
     if (args.apiKeyOrToken.length < 8) {
       throw new Error("VALIDATION_ERROR: کلید/توکن نامعتبر است");
     }
@@ -74,6 +74,26 @@ function decryptCred(envelope: string, userId: string, provider: string): string
   }
 }
 
+type PreparedPayment = {
+  paymentId: string;
+  userId: string;
+  paymentLink?: string | undefined;
+  deduped: boolean;
+};
+
+type InvoiceResult = {
+  paymentId: string;
+  paymentLink: string | null;
+  deduped: boolean;
+  authority?: string;
+  payId?: string;
+};
+
+/** ساختار بازگشتی مشترک verify: ok + reason اختیاری + نتیجه accept */
+type VerifyResult =
+  | { ok: false; reason: string }
+  | { ok: true; alreadyPaid: boolean; balanceAfter?: number };
+
 export const createCubePayInvoiceAction = action({
   args: {
     token: v.string(),
@@ -81,8 +101,8 @@ export const createCubePayInvoiceAction = action({
     description: v.optional(v.string()),
     idempotencyKey: v.string(),
   },
-  handler: async (ctx, args) => {
-    const prepared = await ctx.runMutation(internal.payments.prepareProviderPayment, {
+  handler: async (ctx, args): Promise<InvoiceResult> => {
+    const prepared: PreparedPayment = await ctx.runMutation(internal.payments.prepareProviderPayment, {
       token: args.token,
       method: "cubepay",
       amount: args.amountRials,
@@ -128,13 +148,13 @@ export const createTetraminatorInvoiceAction = action({
     priceToman: v.number(),
     idempotencyKey: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<InvoiceResult> => {
     if (args.priceToman < TETRAMINATOR_MIN || args.priceToman > TETRAMINATOR_MAX) {
       throw new Error(
         `VALIDATION_ERROR: مبلغ باید بین ${TETRAMINATOR_MIN} و ${TETRAMINATOR_MAX} تومان باشد`,
       );
     }
-    const prepared = await ctx.runMutation(internal.payments.prepareProviderPayment, {
+    const prepared: PreparedPayment = await ctx.runMutation(internal.payments.prepareProviderPayment, {
       token: args.token,
       method: "tetraminator",
       amount: args.priceToman,
@@ -175,7 +195,7 @@ export const verifyProviderPaymentAction = action({
     provider: v.string(),
     providerPaymentId: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<VerifyResult> => {
     const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
       paymentId: args.paymentId,
     });
@@ -209,7 +229,7 @@ export const verifyProviderPaymentAction = action({
           paymentId: args.paymentId,
           reason: result.reason ?? "inquiry_rejected",
         });
-        return { ok: false, reason: result.reason };
+        return { ok: false, reason: result.reason ?? "inquiry_rejected" };
       }
     } else if (args.provider === "cubepay") {
       const verified = await cubePayAdapter.verifyPayment(
@@ -226,10 +246,23 @@ export const verifyProviderPaymentAction = action({
     } else {
       return { ok: false, reason: "UNKNOWN_PROVIDER" };
     }
-    return await ctx.runMutation(internal.payments.acceptProviderPayment, {
+    const rawAccepted = (await ctx.runMutation(internal.payments.acceptProviderPayment, {
       paymentId: args.paymentId,
       expectedAmount: payment.amount,
       providerPaymentId: args.providerPaymentId,
-    });
+    })) as unknown as {
+      ok: boolean;
+      reason?: string;
+      alreadyPaid?: boolean;
+      balanceAfter?: number;
+    };
+    if (!rawAccepted.ok) {
+      return { ok: false, reason: rawAccepted.reason ?? "accept_failed" };
+    }
+    return {
+      ok: true,
+      alreadyPaid: rawAccepted.alreadyPaid ?? false,
+      balanceAfter: rawAccepted.balanceAfter,
+    };
   },
 });

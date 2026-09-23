@@ -65,7 +65,7 @@ systemctl is-active guardasli
 ## Backup
 
 ```bash
-sh ./scripts/cli.mjs backup
+bash scripts/guardasli.sh backup
 ```
 
 Encrypted only.

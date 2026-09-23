@@ -10,9 +10,9 @@ import { randomToken } from "./runtime";
 import { validateOutboundUrl } from "../core/ssrf";
 
 function masterSecret(): string {
-  const s = process.env.GA_MASTER_SECRET ?? "";
+  const s = process.env.GUARDASLI_MASTER_SECRET ?? "";
   if (s.length < 16) {
-    throw new Error("INTERNAL_ERROR: GA_MASTER_SECRET پیکربندی نشده است");
+    throw new Error("INTERNAL_ERROR: GUARDASLI_MASTER_SECRET پیکربندی نشده است");
   }
   return s;
 }

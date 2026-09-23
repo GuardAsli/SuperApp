@@ -26,7 +26,7 @@ const mustExist = [
   "src/convex/crons.ts",
   "src/core/payments/cubepay.ts",
   "src/core/payments/tetraminator.ts",
-  "scripts/cli.mjs",
+  "scripts/guardasli.sh",
   "scripts/wizard.sh",
   "scripts/prod-start.sh",
   "RELEASE.json",

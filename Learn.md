@@ -11,7 +11,7 @@ Persian version: [Learn.fa.md](Learn.fa.md) · Technical reference: [Docs.md](Do
 ## 1. Install with the wizard (one command)
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && sh ./scripts/cli.mjs install
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && bash scripts/guardasli.sh install
 ```
 
 What the wizard does:
@@ -24,8 +24,8 @@ What the wizard does:
 Verify:
 
 ```bash
-sh ./scripts/cli.mjs status
-sh ./scripts/cli.mjs doctor
+bash scripts/guardasli.sh status
+bash scripts/guardasli.sh doctor
 ```
 
 ---
@@ -58,7 +58,7 @@ Then open the app → **ورود / ثبت‌نام** (or `#auth`) → sign in wi
 ## 4. Configure the platform (wizard)
 
 ```bash
-sh ./scripts/cli.mjs reconfigure
+bash scripts/guardasli.sh reconfigure
 ```
 
 Set the main platform domain (core identity domain). Tenant custom domains are managed later from the admin UI and cannot claim the core domain.
@@ -99,12 +99,12 @@ If provisioning fails, the job retries with backoff; it never reports false succ
 ## 7. Daily ops with the CLI
 
 ```bash
-sh ./scripts/cli.mjs          # interactive menu
-sh ./scripts/cli.mjs doctor   # health
-sh ./scripts/cli.mjs backup   # encrypted backup
-sh ./scripts/cli.mjs status   # version is0.0.1 + path
-sh ./scripts/cli.mjs logs     # recent logs
-sh ./scripts/cli.mjs update   # update components, keep data
+bash scripts/guardasli.sh          # interactive menu
+bash scripts/guardasli.sh doctor   # health
+bash scripts/guardasli.sh backup   # encrypted backup
+bash scripts/guardasli.sh status   # version is0.0.1 + path
+bash scripts/guardasli.sh logs     # recent logs
+bash scripts/guardasli.sh update   # update components, keep data
 ```
 
 ---

@@ -14,7 +14,7 @@ export const registerAction = action({
     role: v.optional(v.string()),
     parentUsername: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ userId: string; tenantId: string }> => {
     const rl = await ctx.runMutation(internal.infra.rateLimitCheck, {
       bucketKey: `register:${args.username.toLowerCase()}`,
       windowMs: 60_000,
@@ -35,6 +35,14 @@ export const registerAction = action({
     });
   },
 });
+
+/** ساختار بازگشتی rotateSession از internal.auth */
+type SessionPair = {
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+  expiresAt: number;
+};
 
 interface LoginResult {
   accessToken: string;
@@ -95,7 +103,7 @@ export const loginAction = action({
 
 export const refreshAction = action({
   args: { refreshToken: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<SessionPair> => {
     const rl = await ctx.runMutation(internal.infra.rateLimitCheck, {
       bucketKey: `refresh:${args.refreshToken.slice(0, 16)}`,
       windowMs: 60_000,
@@ -118,7 +126,7 @@ export const bootstrapAdminAction = action({
     username: v.string(),
     password: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ tenantId: string; created: boolean }> => {
     if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(args.username)) {
       throw new Error("VALIDATION_ERROR: نام کاربری نامعتبر است");
     }

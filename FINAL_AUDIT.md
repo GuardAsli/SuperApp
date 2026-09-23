@@ -41,7 +41,7 @@ This document is the authoritative completion record. Do not claim incomplete ar
 | Storage uploads | `storage.ts` | PASS |
 | Referrals | `referrals.ts` | PASS |
 | Installer wizard | `scripts/wizard.sh` | PASS |
-| CLI | `scripts/cli.mjs` | PASS |
+| CLI | `scripts/guardasli.sh` | PASS |
 | Production gates | `prodEnv.ts`, `prod-start.sh` | PASS |
 | Crypto AEAD / HKDF | `aead.ts` | PASS |
 | Password scrypt | `password.ts` | PASS |

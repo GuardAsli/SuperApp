@@ -49,6 +49,29 @@ export const healthLatest = query({
   },
 });
 
+/** آمار صف jobs برای پنل مانیتور (فقط ادمین+). */
+export const jobStats = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    if (actor.role !== "super_admin" && actor.role !== "admin") {
+      throw new Error("FORBIDDEN: دسترسی monitoring مجاز نیست");
+    }
+    const jobs = await ctx.db.query("jobs").collect();
+    const counts: Record<string, number> = {};
+    for (const j of jobs) {
+      const key = `${j.kind}:${j.status}`;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return {
+      counts,
+      total: jobs.length,
+      queued: jobs.filter((j) => j.status === "queued").length,
+      failed: jobs.filter((j) => j.status === "failed").length,
+    };
+  },
+});
+
 // ————— Background Jobs (بند ۳۵) —————
 
 export const jobEnqueue = internalMutation({
@@ -368,7 +391,7 @@ export const reportGenerate = query({
         .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
         .collect();
       data.totalUsers = users.length;
-      data.byStatus = users.reduce<Record<string, number>>((acc, u) => {
+      data.byStatus = users.reduce((acc: Record<string, number>, u) => {
         acc[u.status] = (acc[u.status] ?? 0) + 1;
         return acc;
       }, {});
@@ -389,7 +412,7 @@ export const reportGenerate = query({
         .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
         .collect();
       data.total = subs.length;
-      data.byStatus = subs.reduce<Record<string, number>>((acc, s) => {
+      data.byStatus = subs.reduce((acc: Record<string, number>, s) => {
         acc[s.status] = (acc[s.status] ?? 0) + 1;
         return acc;
       }, {});

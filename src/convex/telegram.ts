@@ -27,7 +27,7 @@ export const getBotConfigInternal = internalQuery({
 export const verifyMasterSecretProof = internalQuery({
   args: { masterSecret: v.string() },
   handler: async (_ctx, args) => {
-    const expected = process.env.GA_MASTER_SECRET ?? "";
+    const expected = process.env.GUARDASLI_MASTER_SECRET ?? "";
     return { ok: expected.length > 0 && args.masterSecret === expected };
   },
 });
