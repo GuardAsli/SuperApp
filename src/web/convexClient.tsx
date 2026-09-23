@@ -7,11 +7,11 @@ const rawUrl =
   (import.meta as unknown as { env: Record<string, string> }).env.VITE_CONVEX_URL ?? "";
 
 /**
- * URL فقط در صورت واقعی بودن معتبر است — لوکال‌هاست یا fallback ساختگی به‌عنوان
- * بک‌اند زنده شناخته نمی‌شود. UI با useConvexUrl وضعیت اتصال را نشان می‌دهد.
+ * هر URL غیرخالی معتبر است — چه بک‌اند ابری (*.convex.cloud) و چه بک‌اند لوکال
+ * (127.0.0.1:3210 هنگام توسعه). فقط وقتی URL اصلاً تنظیم نشده بک‌اند «زنده» نیست
+ * و UI بنر شفاف نشان می‌دهد.
  */
-export const convexUrl =
-  rawUrl && !rawUrl.includes("//127.0.0.1") && !rawUrl.includes("//localhost") ? rawUrl : "";
+export const convexUrl = rawUrl.trim();
 export const backendLive = convexUrl.length > 0;
 
 const client = new ConvexReactClient(backendLive ? convexUrl : "http://127.0.0.1:3210");

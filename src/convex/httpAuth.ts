@@ -4,8 +4,8 @@ import { internalQuery } from "./_generated/server";
 
 type Headers = Record<string, string>;
 
-/** پروب واقعی دیتابیس — در ctx یک internalQuery اجرا می‌شود (نه httpAction). */
-const dbProbe = internalQuery({
+/** پروب واقعی دیتابیس — به‌صورت internalQuery ثبت‌شده تا از طریق internal.httpAuth.dbProbe صدا زده شود. */
+export const dbProbe = internalQuery({
   args: {},
   handler: async (ctx) => {
     const settings = await ctx.db
@@ -31,14 +31,19 @@ function errorResponse(requestId: string, status: number, code: string, message:
 
 /** نگاشت خطا به کد/وضعیت استاندارد — بدون افشای جزئیات داخلی. */
 function mapError(requestId: string, err: unknown, headers: Headers): Response {
-  const msg = err instanceof Error ? err.message : String(err);
+  const raw = err instanceof Error ? err.message : String(err);
+  // خطای اکشن فرزند در متن "Uncaught Error: CODE: ..." پیچیده می‌شود — کد را از هر جای متن پیدا کن.
   const known: Array<[string, number]> = [
     ["UNAUTHENTICATED", 401], ["FORBIDDEN", 403], ["NOT_FOUND", 404], ["CONFLICT", 409],
     ["VALIDATION_ERROR", 400], ["QUOTA_EXCEEDED", 402], ["RATE_LIMITED", 429],
   ];
   for (const [code, status] of known) {
-    if (msg.startsWith(code)) {
-      return errorResponse(requestId, status, code, msg.replace(`${code}: `, ""), headers);
+    const marker = `${code}:`;
+    if (raw.includes(marker)) {
+      // پیام تا اولین خطای ثانویه/استک: قبل از "\n" یا "    at" قطع کن.
+      const after = raw.slice(raw.indexOf(marker) + marker.length);
+      const msg = after.split("\n")[0].split("    at")[0].trim();
+      return errorResponse(requestId, status, code, msg || "درخواست ناموفق بود", headers);
     }
   }
   return errorResponse(requestId, 500, "INTERNAL_ERROR", "خطای داخلی سرور", headers);
@@ -49,7 +54,7 @@ export const healthHandler = async (ctx: {
 }, requestId: string, headers: Headers): Promise<Response> => {
   const startedAt = Date.now();
   try {
-    await ctx.runQuery(dbProbe, {});
+    await ctx.runQuery(internal.httpAuth.dbProbe, {});
     return jsonResponse(requestId, 200, {
       code: "OK",
       product: "GuardAsli",
