@@ -1,5 +1,16 @@
 # Changelog — GuardAsli
 
+## is0.0.1 — Unreleased (working)
+
+### Telegram bot & Mini App (full admin parity)
+- Bot admin identified by numeric Telegram ID; if unset, the first `/admin` sender claims it
+- Web commands: `/admin`, `/id`, `/me`, `/botinfo`, `/bot on|off`, `/setadmin`, `/token`, `/miniapp`, `/webhook`, `/stats`, `/broadcast`
+- Full bot management from the bot itself AND from the web admin panel (Bot & Mini App tab)
+- Mini App URL + menu button settable from web panel or `/miniapp` command
+- Webhook auto-setup from web panel or `/webhook` command (secret validated)
+- Bot token rotation from the bot (`/token`), stored AES-256-GCM encrypted
+- Broadcast to linked users with per-send failure isolation
+
 ## is0.0.1 — 2026-09-22 — FINAL
 
 ### Security
@@ -28,4 +39,3 @@
 - **GuardAsli** by **AsliCode**
 - Component versions `is0.0.1`
 - Bilingual documentation (EN/FA)
-- See `FINAL_AUDIT.md` for the completion record

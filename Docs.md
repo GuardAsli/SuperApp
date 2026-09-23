@@ -151,6 +151,20 @@ Contracts and detection live under `src/core/providers/`.
 
 Bot tokens and payment keys are stored under AES-256-GCM envelope encryption.
 
+### Bot administration (full parity web ↔ bot ↔ mini app)
+
+The bot admin is identified by a **numeric Telegram ID**. If none is stored, the
+first person to send `/admin` claims the bot.
+
+| Surface | Capabilities |
+|---|---|
+| Web panel (Bot & Mini App tab) | Save config, rotate token, set admin ID, set Mini App URL + menu button, auto-set webhook |
+| Bot commands | `/admin`, `/id`, `/me`, `/botinfo`, `/bot on\|off`, `/setadmin`, `/token`, `/miniapp`, `/webhook`, `/stats`, `/broadcast` |
+| SSH CLI | `guardasli telegram` (token handoff), backend deploy, service control |
+
+Bot commands run through the jobs queue (`bot_command` → worker → internal
+actions); replies are sent with a server-held token, never from client input.
+
 ---
 
 ## 9. HTTP API
@@ -261,7 +275,7 @@ Frontend → API → Authorization → Business Logic → Database
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, purchase flow, security model |
 | [docs/API.md](docs/API.md) | Routes, error codes, webhook security |
 | [docs/BRANDING.md](docs/BRANDING.md) | Customizable fields + core boundary |
-| [docs/AUDIT.md](docs/AUDIT.md) | Repository audit history |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Server install guide |
 | [Learn.md](Learn.md) | Step-by-step tutorials |
 | [README.md](README.md) | Product overview |
 

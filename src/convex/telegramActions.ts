@@ -211,6 +211,71 @@ export const sendTelegramMessage = action({
   },
 });
 
+/** ارسال پاسخ bot از worker — فقط internal، بدون apiBase از کلاینت. */
+export const sendBotReply = internalAction({
+  args: {
+    botToken: v.string(),
+    chatId: v.string(),
+    text: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const res = await fetch(`https://api.telegram.org/bot${args.botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: args.chatId, text: args.text.slice(0, 4000) }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`PROVIDER_ERROR: sendMessage HTTP ${res.status}`);
+    return { ok: true };
+  },
+});
+
+/** تنظیم webhook با secret — نسخه internal برای worker (/webhook ادمین). */
+export const setBotWebhookInternal = internalAction({
+  args: {
+    botToken: v.string(),
+    webhookUrl: v.string(),
+    webhookSecret: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const cb = validateOutboundUrl(args.webhookUrl);
+    if (!cb.ok) throw new Error(`PROVIDER_ERROR: ${cb.reason}`);
+    const res = await fetch(`https://api.telegram.org/bot${args.botToken}/setWebhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: args.webhookUrl,
+        secret_token: args.webhookSecret,
+        allowed_updates: ["message", "callback_query"],
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`PROVIDER_ERROR: setWebhook HTTP ${res.status}`);
+    return { ok: true };
+  },
+});
+
+/** دکمه منوی bot برای باز کردن مینی‌اپ — نسخه internal. */
+export const setBotMenuButtonInternal = internalAction({
+  args: {
+    botToken: v.string(),
+    miniAppUrl: v.string(),
+    text: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const res = await fetch(`https://api.telegram.org/bot${args.botToken}/setChatMenuButton`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        menu_button: { type: "web_app", text: args.text.slice(0, 60), web_app: { url: args.miniAppUrl } },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`PROVIDER_ERROR: setChatMenuButton HTTP ${res.status}`);
+    return { ok: true };
+  },
+});
+
 /** تنظیم webhook با secret هر tenant. */
 export const setTelegramWebhook = action({
   args: {

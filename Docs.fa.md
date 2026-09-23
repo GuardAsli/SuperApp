@@ -4,7 +4,7 @@
 
 > محصول **GuardAsli** · توسعه‌دهنده **AsliCode**
 
-انگلیسی: [Docs.md](Docs.md) · آموزش: [Learn.fa.md](Learn.fa.md) · ممیزی: [FINAL_AUDIT.md](FINAL_AUDIT.md)
+انگلیسی: [Docs.md](Docs.md) · آموزش: [Learn.fa.md](Learn.fa.md) · نصب سرور: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 <div dir="rtl">
 
@@ -74,6 +74,18 @@ super_admin → admin → reseller → sub_reseller → user — فقط سمت �
 ## ۴–۶. قابلیت، کیف، پرداخت
 
 Ledger فقط‌الحاقی و idempotent. چهار روش: admin_manual، card_to_card، CubePay، Tetraminator. Webhook مستقیم شارژ نمی‌کند.
+
+## ۸. تلگرام
+
+ادمین ربات با **شناسه عددی تلگرام** شناخته می‌شود؛ اگر تنظیم نباشد، نخستین کسی که `/admin` بفرستد ادمین می‌شود.
+
+| سطح | کارها |
+|---|---|
+| پنل وب (تب ربات و مینی‌اپ) | ذخیره پیکربندی، تعویض توکن، ثبت شناسه ادمین، تنظیم مینی‌اپ + دکمه منو، تنظیم خودکار webhook |
+| فرمان‌های ربات | `/admin` · `/id` · `/me` · `/botinfo` · `/bot on\|off` · `/setadmin` · `/token` · `/miniapp` · `/webhook` · `/stats` · `/broadcast` |
+| SSH | `guardasli telegram` و مدیریت سرویس و بک‌اند |
+
+فرمان‌ها از صف jobs اجرا می‌شوند و پاسخ‌ها با توکن سمت سرور ارسال می‌گردند — نه از ورودی کلاینت.
 
 ## ۱۰. نصب و پنل
 

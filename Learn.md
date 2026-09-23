@@ -98,6 +98,8 @@ Set the main platform domain (core identity domain). Tenant custom domains are m
 | Enable a payment method | Payments section |
 | Create a reseller under the tenant | Reseller tree |
 | Bootstrap a Telegram bot for the tenant | Bot config (token stored encrypted) |
+| Claim the bot admin | First `/admin` in the bot — or set the numeric ID in the web Bot tab |
+| Set the Mini App URL | Web Bot tab or `/miniapp <https-url>` in the bot |
 
 Every sensitive action is written to the audit log.
 

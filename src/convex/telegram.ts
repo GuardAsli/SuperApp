@@ -19,7 +19,65 @@ export const getBotConfigInternal = internalQuery({
       webhookSecret: cfg.webhookSecret,
       displayName: cfg.displayName,
       username: cfg.username ?? null,
+      adminTelegramUserId: cfg.adminTelegramUserId ?? null,
+      miniAppUrl: cfg.miniAppUrl ?? null,
     };
+  },
+});
+
+/** زمینه کامل فرمان bot برای worker — فقط internal. */
+export const botCommandContext = internalQuery({
+  args: { botConfigId: v.id("botConfigs") },
+  handler: async (ctx, args) => {
+    const cfg = await ctx.db.get(args.botConfigId);
+    if (!cfg) return null;
+    return {
+      _id: cfg._id,
+      tenantId: cfg.tenantId,
+      tokenEncrypted: cfg.tokenEncrypted,
+      enabled: cfg.enabled,
+      webhookSecret: cfg.webhookSecret,
+      displayName: cfg.displayName,
+      username: cfg.username ?? null,
+      adminTelegramUserId: cfg.adminTelegramUserId ?? null,
+      miniAppUrl: cfg.miniAppUrl ?? null,
+    };
+  },
+});
+
+/** شمارش کاربران bot و کاربران متصل — برای /stats ادمین. */
+export const botStatsInternal = internalQuery({
+  args: { botConfigId: v.id("botConfigs"), tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("botUsers")
+      .withIndex("by_bot_user", (q) => q.eq("botConfigId", args.botConfigId))
+      .collect();
+    const tenantUsers = await ctx.db
+      .query("users")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
+      .collect();
+    const telegramLinked = tenantUsers.filter((u) => u.telegramUserId !== undefined).length;
+    return {
+      botUsers: rows.length,
+      linked: rows.filter((r) => r.platformUserId !== undefined).length,
+      tenantUsers: tenantUsers.length,
+      telegramLinked,
+    };
+  },
+});
+
+/** شناسه‌های تلگرامِ همه‌ی کاربران متصل — برای broadcast ادمین. */
+export const botLinkedChatIds = internalQuery({
+  args: { botConfigId: v.id("botConfigs") },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("botUsers")
+      .withIndex("by_bot_user", (q) => q.eq("botConfigId", args.botConfigId))
+      .collect();
+    return rows
+      .filter((r) => r.platformUserId !== undefined)
+      .map((r) => r.telegramUserId);
   },
 });
 
@@ -48,6 +106,8 @@ export const botConfigSave = mutation({
     description: v.optional(v.string()),
     enabled: v.boolean(),
     webhookSecret: v.string(),
+    adminTelegramUserId: v.optional(v.number()),
+    miniAppUrl: v.optional(v.string()),
     proof: v.string(),
   },
   handler: async (ctx, args) => {
@@ -71,6 +131,10 @@ export const botConfigSave = mutation({
         ...(args.description !== undefined ? { description: args.description } : {}),
         enabled: args.enabled,
         webhookSecret: args.webhookSecret,
+        ...(args.adminTelegramUserId !== undefined
+          ? { adminTelegramUserId: args.adminTelegramUserId }
+          : {}),
+        ...(args.miniAppUrl !== undefined ? { miniAppUrl: args.miniAppUrl } : {}),
       });
       await ctx.runMutation(internal.audit.log, {
         actorUserId: actor.userId,
@@ -89,6 +153,10 @@ export const botConfigSave = mutation({
       ...(args.description !== undefined ? { description: args.description } : {}),
       enabled: args.enabled,
       webhookSecret: args.webhookSecret,
+      ...(args.adminTelegramUserId !== undefined
+        ? { adminTelegramUserId: args.adminTelegramUserId }
+        : {}),
+      ...(args.miniAppUrl !== undefined ? { miniAppUrl: args.miniAppUrl } : {}),
     });
     await ctx.runMutation(internal.audit.log, {
       actorUserId: actor.userId,
@@ -118,6 +186,194 @@ export const botConfigGet = query({
       description: cfg.description ?? null,
       enabled: cfg.enabled,
       hasToken: cfg.tokenEncrypted.length > 0,
+      adminTelegramUserId: cfg.adminTelegramUserId ?? null,
+      miniAppUrl: cfg.miniAppUrl ?? null,
+    };
+  },
+});
+
+/** تنظیم/تغییر شناسه عددی ادمین bot — از پنل وب یا bootstrap. */
+export const botConfigSetAdmin = mutation({
+  args: { token: v.string(), adminTelegramUserId: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    requirePermission(actor, "ManageTelegramBot");
+    const cfg = await ctx.db
+      .query("botConfigs")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
+      .unique();
+    if (!cfg) throw new Error("NOT_FOUND: ابتدا پیکربندی bot را ذخیره کنید");
+    await ctx.db.patch(cfg._id, {
+      ...(args.adminTelegramUserId !== undefined
+        ? { adminTelegramUserId: args.adminTelegramUserId }
+        : { adminTelegramUserId: undefined }),
+    });
+    await ctx.runMutation(internal.audit.log, {
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      action: "bot.admin_set",
+      entityType: "botConfigs",
+      entityId: cfg._id,
+      metadata: { adminTelegramUserId: args.adminTelegramUserId ?? null },
+    });
+    return { ok: true, adminTelegramUserId: args.adminTelegramUserId ?? null };
+  },
+});
+
+/** تنظیم URL مینی‌اپ bot — از پنل وب. */
+export const botConfigSetMiniApp = mutation({
+  args: { token: v.string(), miniAppUrl: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    requirePermission(actor, "ManageTelegramBot");
+    const url = args.miniAppUrl;
+    if (url !== undefined && url !== "" && !/^https:\/\//.test(url)) {
+      throw new Error("VALIDATION_ERROR: آدرس مینی‌اپ باید با https:// شروع شود");
+    }
+    const cfg = await ctx.db
+      .query("botConfigs")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
+      .unique();
+    if (!cfg) throw new Error("NOT_FOUND: ابتدا پیکربندی bot را ذخیره کنید");
+    await ctx.db.patch(cfg._id, {
+      ...(url !== undefined && url !== ""
+        ? { miniAppUrl: url }
+        : { miniAppUrl: undefined }),
+    });
+    await ctx.runMutation(internal.audit.log, {
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      action: "bot.miniapp_set",
+      entityType: "botConfigs",
+      entityId: cfg._id,
+    });
+    return { ok: true };
+  },
+});
+
+// ————— internal mutations فرمان‌های ربات (فقط از worker) —————
+
+/** روشن/خاموش کردن bot — فرمان /bot on|off ادمین. */
+export const botSetEnabledInternal = internalMutation({
+  args: { botConfigId: v.id("botConfigs"), enabled: v.boolean() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.botConfigId, { enabled: args.enabled });
+    return { ok: true };
+  },
+});
+
+/** ثبت/تغییر ادمین از خود ربات — claim اولین ادمین یا تغییر توسط ادمین فعلی. */
+export const botClaimAdminInternal = internalMutation({
+  args: { botConfigId: v.id("botConfigs"), telegramUserId: v.number() },
+  handler: async (ctx, args) => {
+    const cfg = await ctx.db.get(args.botConfigId);
+    if (!cfg) throw new Error("NOT_FOUND: bot یافت نشد");
+    await ctx.db.patch(cfg._id, { adminTelegramUserId: args.telegramUserId });
+    await ctx.runMutation(internal.audit.log, {
+      tenantId: cfg.tenantId,
+      action: "bot.admin_claim",
+      entityType: "botConfigs",
+      entityId: cfg._id,
+      metadata: { adminTelegramUserId: args.telegramUserId },
+    });
+    return { ok: true };
+  },
+});
+
+/** جایگزینی token bot از ربات — envelope رمزنگاری‌شده از worker می‌آید. */
+export const botSetTokenInternal = internalMutation({
+  args: {
+    botConfigId: v.id("botConfigs"),
+    tokenEncrypted: v.string(),
+    byTelegramUserId: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const cfg = await ctx.db.get(args.botConfigId);
+    if (!cfg) throw new Error("NOT_FOUND: bot یافت نشد");
+    await ctx.db.patch(cfg._id, { tokenEncrypted: args.tokenEncrypted });
+    await ctx.runMutation(internal.audit.log, {
+      tenantId: cfg.tenantId,
+      action: "bot.token_rotate",
+      entityType: "botConfigs",
+      entityId: cfg._id,
+      metadata: { byTelegramUserId: args.byTelegramUserId },
+    });
+    return { ok: true };
+  },
+});
+
+/** تنظیم URL مینی‌اپ از ربات. */
+export const botSetMiniAppInternal = internalMutation({
+  args: { botConfigId: v.id("botConfigs"), miniAppUrl: v.string() },
+  handler: async (ctx, args) => {
+    const cfg = await ctx.db.get(args.botConfigId);
+    if (!cfg) throw new Error("NOT_FOUND: bot یافت نشد");
+    await ctx.db.patch(cfg._id, { miniAppUrl: args.miniAppUrl });
+    return { ok: true };
+  },
+});
+
+/** اتصال مستقیم chat تلگرام به یک حساب پلتفرم از طرف ادمین ربات. */
+export const botAdminLinkInternal = internalMutation({
+  args: {
+    botConfigId: v.id("botConfigs"),
+    telegramUserId: v.number(),
+    username: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const cfg = await ctx.db.get(args.botConfigId);
+    if (!cfg) throw new Error("NOT_FOUND: bot یافت نشد");
+    const target = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .unique();
+    if (!target) throw new Error("NOT_FOUND: کاربر یافت نشد");
+    if (target.tenantId !== cfg.tenantId) {
+      throw new Error("FORBIDDEN: کاربر متعلق به این bot نیست");
+    }
+    await ctx.db.patch(target._id, { telegramUserId: args.telegramUserId });
+    const existing = await ctx.db
+      .query("botUsers")
+      .withIndex("by_bot_user", (q) =>
+        q.eq("botConfigId", args.botConfigId).eq("telegramUserId", args.telegramUserId),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, { platformUserId: target._id, state: "linked" });
+    } else {
+      await ctx.db.insert("botUsers", {
+        botConfigId: args.botConfigId,
+        telegramUserId: args.telegramUserId,
+        platformUserId: target._id,
+        state: "linked",
+      });
+    }
+    return { ok: true, userId: target._id };
+  },
+});
+
+/** موجودی حساب متصل به یک chat — برای /me. */
+export const botWalletInternal = internalQuery({
+  args: { botConfigId: v.id("botConfigs"), telegramUserId: v.number() },
+  handler: async (ctx, args) => {
+    const link = await ctx.db
+      .query("botUsers")
+      .withIndex("by_bot_user", (q) =>
+        q.eq("botConfigId", args.botConfigId).eq("telegramUserId", args.telegramUserId),
+      )
+      .unique();
+    if (!link?.platformUserId) return { linked: false as const };
+    const user = await ctx.db.get(link.platformUserId);
+    if (!user) return { linked: false as const };
+    const wallet = await ctx.db
+      .query("wallets")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    return {
+      linked: true as const,
+      username: user.username,
+      role: user.role,
+      balance: wallet?.balance ?? 0,
     };
   },
 });

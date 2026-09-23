@@ -15,6 +15,7 @@ import type * as authActions from "../authActions.js";
 import type * as backupAuto from "../backupAuto.js";
 import type * as billing from "../billing.js";
 import type * as botActions from "../botActions.js";
+import type * as botCommands from "../botCommands.js";
 import type * as cardActions from "../cardActions.js";
 import type * as clientApi from "../clientApi.js";
 import type * as crons from "../crons.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   backupAuto: typeof backupAuto;
   billing: typeof billing;
   botActions: typeof botActions;
+  botCommands: typeof botCommands;
   cardActions: typeof cardActions;
   clientApi: typeof clientApi;
   crons: typeof crons;

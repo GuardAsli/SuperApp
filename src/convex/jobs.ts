@@ -7,13 +7,19 @@ export const dispatchBotCommand = internalMutation({
     botConfigId: v.id("botConfigs"),
     chatId: v.string(),
     text: v.string(),
+    telegramUserId: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     // محدود کردن طول متن bot برای جلوگیری از payload عظیم
     const text = args.text.slice(0, 4096);
     await ctx.db.insert("jobs", {
       kind: "bot_command",
-      payload: { botConfigId: args.botConfigId, chatId: args.chatId, text },
+      payload: {
+        botConfigId: args.botConfigId,
+        chatId: args.chatId,
+        text,
+        telegramUserId: args.telegramUserId ?? null,
+      },
       status: "queued",
       attempts: 0,
       maxAttempts: 3,

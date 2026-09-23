@@ -1,5 +1,5 @@
 /** GuardAsli — داشبورد با تب‌های مدیریت حرفه‌ای */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -36,6 +36,7 @@ type Tab =
   | "payments"
   | "plans"
   | "branding"
+  | "bot"
   | "admin"
   | "monitor";
 
@@ -124,6 +125,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
       base.push(["branding", t("branding", locale)]);
     }
     if (isAdmin) {
+      base.push(["bot", locale === "fa" ? "ربات و مینی‌اپ" : "Bot & Mini App"]);
       base.push(["admin", t("admin", locale)]);
       base.push(["monitor", t("monitor", locale)]);
     }
@@ -532,6 +534,8 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
           <BrandingPanel branding={branding} onChange={onBrandingChange} />
         )}
 
+        {tab === "bot" && isAdmin && <BotPanel token={token} />}
+
         {tab === "monitor" && isAdmin && (
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="card p-6">
@@ -760,6 +764,174 @@ function BrandingPanel({
       >
         {fa ? "بازگشت به تم پیش‌فرض" : "Reset to default"}
       </button>
+    </div>
+  );
+}
+
+type BotConfigInfo = {
+  botConfigId: string;
+  displayName: string;
+  username: string | null;
+  description: string | null;
+  enabled: boolean;
+  hasToken: boolean;
+  adminTelegramUserId: number | null;
+  miniAppUrl: string | null;
+};
+
+/** مدیریت کامل ربات و مینی‌اپ — معادل کامل بخش ربات در ربات (/admin). */
+function BotPanel({ token }: { token: string }) {
+  const fa = getLocale() === "fa";
+  const cfg = useQuery(api.telegram.botConfigGet, { token });
+  const saveConfig = useAction(api.botActions.saveBotConfigAction);
+  const setAdmin = useAction(api.botActions.setBotAdminAction);
+  const setMiniApp = useAction(api.botActions.setBotMiniAppAction);
+  const setWebhook = useAction(api.botActions.setBotWebhookAction);
+
+  const [displayName, setDisplayName] = useState("");
+  const [botToken, setBotToken] = useState("");
+  const [enabled, setEnabled] = useState(true);
+  const [adminId, setAdminId] = useState("");
+  const [miniAppUrl, setMiniAppUrl] = useState("");
+  const [publicBase, setPublicBase] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [seeded, setSeeded] = useState(false);
+
+  // پیش‌فرض‌های فرم از پیکربندی فعلی — فقط یک‌بار
+  useEffect(() => {
+    if (cfg && !seeded) {
+      setDisplayName(cfg.displayName);
+      setEnabled(cfg.enabled);
+      setAdminId(cfg.adminTelegramUserId ? String(cfg.adminTelegramUserId) : "");
+      setMiniAppUrl(cfg.miniAppUrl ?? "");
+      setSeeded(true);
+    }
+  }, [cfg, seeded]);
+
+  const run = async (fn: () => Promise<string>) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      setMsg(await fn());
+    } catch (e) {
+      setMsg(friendlyMsg(e instanceof Error ? e.message : String(e), getLocale()));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const info = (c: BotConfigInfo) => (
+    <ul className="mt-3 space-y-1 text-sm" dir="ltr">
+      <li>• {c.displayName}{c.username ? ` (@${c.username})` : ""}</li>
+      <li>• {fa ? "وضعیت" : "Status"}: {c.enabled ? (fa ? "روشن" : "on") : fa ? "خاموش" : "off"}</li>
+      <li>• {fa ? "توکن" : "Token"}: {c.hasToken ? "✓" : "—"}</li>
+      <li>• {fa ? "ادمین (شناسه عددی)" : "Admin (numeric ID)"}: {c.adminTelegramUserId ?? "—"}</li>
+      <li>• Mini App: {c.miniAppUrl ?? "—"}</li>
+    </ul>
+  );
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <div className="card p-6">
+        <h2 className="text-lg font-extrabold">{fa ? "وضعیت ربات" : "Bot status"}</h2>
+        {cfg ? info(cfg) : <p className="mt-3 text-sm text-core-muted">{fa ? "هنوز پیکربندی نشده — از فرم ردیف ذخیره کنید." : "Not configured yet — save the form on the right."}</p>}
+        <h3 className="mt-6 font-bold">{fa ? "مدیریت از خود ربات" : "Manage from the bot itself"}</h3>
+        <ul className="mt-2 space-y-1 text-sm text-core-muted" dir="ltr">
+          <li>/admin — {fa ? "اولین نفر ادمین می‌شود" : "first sender becomes admin"}</li>
+          <li>/id — {fa ? "شناسه عددی شما" : "your numeric ID"}</li>
+          <li>/bot on|off · /setadmin · /token · /miniapp · /webhook · /stats · /broadcast</li>
+        </ul>
+      </div>
+
+      <div className="card p-6">
+        <h2 className="text-lg font-extrabold">{fa ? "پیکربندی ربات" : "Bot configuration"}</h2>
+        <label className="mt-3 block text-sm font-semibold">
+          {fa ? "نام نمایشی" : "Display name"}
+          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input mt-1 w-full px-3 py-2" />
+        </label>
+        <label className="mt-3 block text-sm font-semibold">
+          {fa ? `توکن BotFather ${cfg?.hasToken ? "(خالی = بدون تغییر)" : ""}` : `BotFather token ${cfg?.hasToken ? "(blank = keep current)" : ""}`}
+          <input type="password" value={botToken} onChange={(e) => setBotToken(e.target.value)} className="input mt-1 w-full px-3 py-2" dir="ltr" />
+        </label>
+        <label className="mt-3 block text-sm font-semibold">
+          {fa ? "شناسه عددی ادمین ربات" : "Bot admin numeric Telegram ID"}
+          <input value={adminId} onChange={(e) => setAdminId(e.target.value.replace(/[^0-9]/g, ""))} placeholder="123456789" className="input mt-1 w-full px-3 py-2" dir="ltr" />
+        </label>
+        <label className="mt-3 block text-sm font-semibold">
+          {fa ? "آدرس مینی‌اپ (https)" : "Mini App URL (https)"}
+          <input value={miniAppUrl} onChange={(e) => setMiniAppUrl(e.target.value)} placeholder="https://…" className="input mt-1 w-full px-3 py-2" dir="ltr" />
+        </label>
+        <label className="mt-3 flex items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          {fa ? "ربات روشن باشد" : "Bot enabled"}
+        </label>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(async () => {
+              await saveConfig({
+                token,
+                botToken: botToken || "0".repeat(24),
+                displayName: displayName || "GuardAsli Bot",
+                enabled,
+                ...(adminId ? { adminTelegramUserId: Number(adminId) } : {}),
+                ...(miniAppUrl ? { miniAppUrl } : {}),
+              });
+              return fa ? "پیکربندی ذخیره شد (webhook secret جدید)" : "Configuration saved (new webhook secret)";
+            })}
+            className="btn-primary px-4 py-2 font-bold"
+          >
+            {fa ? "ذخیره پیکربندی" : "Save configuration"}
+          </button>
+          <button
+            type="button"
+            disabled={busy || !adminId}
+            onClick={() => run(async () => {
+              await setAdmin({ token, adminTelegramUserId: Number(adminId) });
+              return fa ? `ادمین ربات: ${adminId}` : `Bot admin: ${adminId}`;
+            })}
+            className="rounded-lg border px-4 py-2 text-sm font-bold"
+          >
+            {fa ? "ثبت ادمین" : "Set admin"}
+          </button>
+          <button
+            type="button"
+            disabled={busy || !/^https:\/\//.test(miniAppUrl)}
+            onClick={() => run(async () => {
+              await setMiniApp({ token, miniAppUrl });
+              return fa ? "مینی‌اپ و دکمه منو ثبت شد" : "Mini App + menu button set";
+            })}
+            className="rounded-lg border px-4 py-2 text-sm font-bold"
+          >
+            {fa ? "ثبت مینی‌اپ" : "Set Mini App"}
+          </button>
+        </div>
+
+        <h3 className="mt-6 font-bold">{fa ? "تنظیم خودکار webhook" : "Automatic webhook"}</h3>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            value={publicBase}
+            onChange={(e) => setPublicBase(e.target.value)}
+            placeholder="https://panel.example.com"
+            className="input flex-1 px-3 py-2"
+            dir="ltr"
+          />
+          <button
+            type="button"
+            disabled={busy || !/^https:\/\//.test(publicBase)}
+            onClick={() => run(async () => {
+              const res = await setWebhook({ token, publicBaseUrl: publicBase });
+              return `${fa ? "webhook تنظیم شد" : "webhook set"}: ${res.webhookUrl}`;
+            })}
+            className="rounded-lg bg-core-primary px-4 py-2 text-sm font-bold text-core-primaryFg"
+          >
+            {fa ? "تنظیم webhook" : "Set webhook"}
+          </button>
+        </div>
+        {msg && <p className="mt-3 text-sm font-semibold" role="status">{msg}</p>}
+      </div>
     </div>
   );
 }

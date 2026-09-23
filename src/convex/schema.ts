@@ -252,6 +252,8 @@ export default defineSchema(
       description: v.optional(v.string()),
       webhookSecret: v.string(),
       enabled: v.boolean(),
+      adminTelegramUserId: v.optional(v.number()),
+      miniAppUrl: v.optional(v.string()),
     }).index("by_tenant", ["tenantId"]),
 
     botUsers: defineTable({

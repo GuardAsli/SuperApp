@@ -48,12 +48,25 @@ export const processDueJobs = internalAction({
             success: true,
           });
           results.push({ id: String(job.id), kind: job.kind, ok: true });
-        } else if (job.kind === "bot_command") {
+        } else if (job.kind === "bot_command" && job.payload) {
+          const p = job.payload as {
+            botConfigId: string;
+            chatId: string;
+            text: string;
+            telegramUserId: number | null;
+          };
+          const botRes = (await ctx.runAction(internal.botCommands.handleBotCommand, {
+            botConfigId: p.botConfigId as never,
+            chatId: p.chatId,
+            text: p.text,
+            telegramUserId: p.telegramUserId ?? null,
+          })) as { ok: boolean; reason?: string };
           await ctx.runMutation(internal.infra.jobFinish, {
             jobId: job.id as never,
-            success: true,
+            success: botRes.ok === true,
+            error: botRes.ok === true ? undefined : botRes.reason,
           });
-          results.push({ id: String(job.id), kind: job.kind, ok: true });
+          results.push({ id: String(job.id), kind: job.kind, ok: botRes.ok === true });
         } else {
           await ctx.runMutation(internal.infra.jobFinish, {
             jobId: job.id as never,

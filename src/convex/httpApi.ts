@@ -127,7 +127,7 @@ const routes: RouteDef[] = [
       const botConfigId = url.pathname.split("/").pop() ?? "";
       const secret = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
       const body = (await req.json().catch(() => ({}))) as {
-        message?: { chat?: { id?: number | string }; text?: string };
+        message?: { chat?: { id?: number | string }; from?: { id?: number }; text?: string };
         callback_query?: { from?: { id?: number } };
       };
       const verification = await ctx.runQuery(internal.telegram.verifyWebhookSecret, {
@@ -139,7 +139,13 @@ const routes: RouteDef[] = [
       }
       const text = body.message?.text ?? "";
       const chatId = String(body.message?.chat?.id ?? body.callback_query?.from?.id ?? "");
-      await ctx.runMutation(internal.jobs.dispatchBotCommand, { botConfigId, chatId, text });
+      const telegramUserId = body.message?.from?.id ?? body.callback_query?.from?.id;
+      await ctx.runMutation(internal.jobs.dispatchBotCommand, {
+        botConfigId,
+        chatId,
+        text,
+        telegramUserId,
+      });
       return jsonResponse(requestId, 200, { ok: true }, headers);
     },
   },
