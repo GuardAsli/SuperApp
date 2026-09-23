@@ -473,6 +473,50 @@ do_uninstall() {
   ok "Uninstalled"
 }
 
+convex_deploy() {
+  title "Convex backend deploy"
+  (
+    cd "${GUARDASLI_APP_DIR}" || exit 1
+    set -a; . "${GUARDASLI_ENV}" 2>/dev/null; set +a
+    if [ -n "${CONVEX_DEPLOY_KEY:-}" ] || [ -n "${VITE_CONVEX_URL:-}" ]; then
+      bunx convex deploy --yes 2>&1 | tail -5 \
+        && ok "Convex backend deployed" \
+        || warn "deploy had errors — check CONVEX_DEPLOY_KEY"
+      bun scripts/auto-bootstrap.mjs 2>/dev/null && ok "super admin ensured" || true
+    else
+      warn "No CONVEX_DEPLOY_KEY / VITE_CONVEX_URL in ${GUARDASLI_ENV}"
+      printf "Paste a Convex deploy key (blank to abort): "
+      read -r KEY
+      if [ -n "${KEY}" ]; then
+        env_upsert CONVEX_DEPLOY_KEY "${KEY}"
+        export CONVEX_DEPLOY_KEY="${KEY}"
+        bunx convex deploy --yes 2>&1 | tail -5 \
+          && ok "Convex backend deployed" \
+          || warn "deploy failed — verify the key"
+        bun scripts/auto-bootstrap.mjs 2>/dev/null && ok "super admin ensured" || true
+      else
+        info "Aborted — get a key at dashboard.convex.dev (Settings > Deploy Keys)"
+      fi
+    fi
+  )
+  svc_start
+}
+
+show_admin_info() {
+  title "Admin credentials"
+  local user pass
+  user="$(env_get GUARDASLI_ADMIN_USER admin)"
+  pass="$(env_get GUARDASLI_ADMIN_PASS '')"
+  ok "Username: ${user}"
+  if [ -n "${pass}" ]; then
+    ok "Password: ${pass}"
+  else
+    warn "No password stored — reset it with menu 5 (Create super admin)"
+  fi
+  ok "URL: $(env_get GUARDASLI_PUBLIC_URL "http://127.0.0.1:$(env_get GUARDASLI_PORT 3000)")"
+  warn "Keep these credentials private — stored in ${GUARDASLI_ENV} (mode 600)"
+}
+
 # ----------------------------------------------------------------------------
 # 14. Management panel (interactive TUI)
 # ----------------------------------------------------------------------------
@@ -498,6 +542,9 @@ do_panel() {
     printf "║ 13) Logs                                     ║\n"
     printf "║ 14) Doctor (system checks)                   ║\n"
     printf "║ 15) Status                                   ║\n"
+    printf "║ 16) Convex backend deploy                    ║\n"
+    printf "║ 17) Admin credentials                        ║\n"
+    printf "║ 18) Install 'guardasli' command              ║\n"
     printf "║  0) Exit                                     ║\n"
     printf "${C_BOLD}╚══════════════════════════════════════════════╝${C_OFF}\n"
     printf "Select: "
@@ -518,6 +565,9 @@ do_panel() {
       13) do_logs ;;
       14) doctor_checks ;;
       15) do_status ;;
+      16) convex_deploy ;;
+      17) show_admin_info ;;
+      18) install_command ;;
       0) printf "\n"; break ;;
       *) warn "Invalid choice" ;;
     esac
