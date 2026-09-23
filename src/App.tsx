@@ -4,7 +4,7 @@ import LandingPage from "./web/LandingPage";
 import AuthPage from "./web/AuthPage";
 import DashboardPage from "./web/DashboardPage";
 import MiniAppPage from "./web/MiniAppPage";
-import { ConvexProvider } from "./web/convexClient";
+import { ConvexProvider, useBackendLive } from "./web/convexClient";
 import { readBranding, applyBranding, type TenantBranding } from "./web/branding";
 
 type Route = { name: "landing" } | { name: "auth" } | { name: "dashboard" } | { name: "miniapp" };
@@ -20,6 +20,7 @@ function parseHash(): Route {
 export default function App() {
   const [route, setRoute] = useState<Route>(parseHash);
   const [branding, setBranding] = useState<TenantBranding>(readBranding);
+  const live = useBackendLive();
 
   useEffect(() => {
     const onHash = () => setRoute(parseHash());
@@ -47,6 +48,12 @@ export default function App() {
   return (
     <ConvexProvider>
       <div className="min-h-full bg-core-bg text-core-text">
+        {!live && (
+          <div className="bg-core-surface border-b border-core-border px-4 py-2 text-center text-sm text-core-muted">
+            بک‌اند متصل نیست — برای اتصال، یک‌بار <code className="px-1">bunx convex dev</code> اجرا کنید یا
+            <code className="px-1">VITE_CONVEX_URL</code> را تنظیم کنید.
+          </div>
+        )}
         {content}
       </div>
     </ConvexProvider>
