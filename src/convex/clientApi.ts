@@ -1,4 +1,4 @@
-/** GuardAsli — API کلاینت VPN (تجربه Express/Nord). */
+/** GuardAsli — API کلاینت VPN (تجربه حرفه‌ای اتصال). */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireActor, requireTenantScope } from "./auth";
