@@ -10,7 +10,7 @@
 
 | یافته اولیه | وضعیت کنونی |
 |---|---|
-| مخزن فقط یک README با عنوان ناقص داشت | پلتفرم کامل پیاده شد: Core، API، Web، Bot، پرداخت، Providers، تست، نصب‌کننده — ۳۶ تست پاس |
+| مخزن فقط یک README با عنوان ناقص داشت | پلتفرم کامل پیاده شد: Core، API، Web، Bot، پرداخت، Providers، تست، نصب‌کننده — ۸۲ تست پاس |
 | عنوان «SuperApp» اثر هویتی ناقص بود | کل مخزن با هویت `GuardAsli` / `AsliCode` بازنویسی شد؛ هیچ اشاره ثالثی باقی نماند |
 | هیچ نسخه یا قالب نسخه‌ای وجود نداشت | سرویس نسخه مرکزی `src/core/version.ts` با قالب `isMAJOR.MINOR.PATCH` و انتشار `is0.0.1` برای همه ۱۲ جزء |
 
@@ -99,7 +99,7 @@ The initial audit (archived below) raised three findings; all three are resolved
 
 | Original finding | Current state |
 |---|---|
-| Repository was a single README with an incomplete title | Full platform implemented: Core, API, Web, Bot, payments, providers, tests, installer — 36 tests passing |
+| Repository was a single README with an incomplete title | Full platform implemented: Core, API, Web, Bot, payments, providers, tests, installer — 82 tests passing |
 | The «SuperApp» title was an incomplete identity artifact | Entire repository rewritten under the `GuardAsli` / `AsliCode` identity; no third-party references remain |
 | No version or version format existed | Central version service `src/core/version.ts` with the `isMAJOR.MINOR.PATCH` format, releasing `is0.0.1` for all 12 components |
 

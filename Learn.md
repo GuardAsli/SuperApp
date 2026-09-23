@@ -8,24 +8,31 @@ Persian version: [Learn.fa.md](Learn.fa.md) · Technical reference: [Docs.md](Do
 
 ---
 
-## 1. Install with the wizard (one command)
+## 1. Install on a server (two commands)
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && bash scripts/guardasli.sh install
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
+sudo bash install.sh
 ```
 
-What the wizard does:
+The installer asks for your domain and email, then does everything itself:
+installs bun and packages, creates secrets, builds the app, sets up Nginx
+and SSL, starts the service, installs the `guardasli` command and opens
+the management panel.
 
-1. Checks OS, RAM, disk, ports, network (`doctor`)
-2. Installs Bun if missing
-3. Creates install root (default `/opt/guardasli`) and a starter `.env`
-4. Prints next steps
+With a domain (SSL is automatic):
+
+```bash
+sudo bash install.sh --domain panel.example.com --email you@example.com
+```
+
+At the end it prints the panel URL and the admin password. Save them.
 
 Verify:
 
 ```bash
-bash scripts/guardasli.sh status
-bash scripts/guardasli.sh doctor
+sudo guardasli status
+sudo guardasli doctor
 ```
 
 ---
@@ -130,7 +137,7 @@ bun typecheck
 bun run build
 ```
 
-Expect 36 tests passing and a clean TypeScript build.
+Expect 82 tests passing and a clean TypeScript build.
 
 ---
 

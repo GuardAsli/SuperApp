@@ -8,19 +8,30 @@
 
 <div dir="rtl">
 
-## نصب یک‌خطی VPS + دامنه
+## نصب روی سرور — دو دستور ساده
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
+sudo bash install.sh
 ```
 
-با کلید Convex:
+نصب‌کننده چند سؤال می‌پرسد (دامنه، ایمیل) و بقیه‌اش خودش انجام می‌دهد:
+bun، بسته‌ها، رمزها، build، deploy بک‌اند (با کلید)، Nginx، SSL،
+سرویس systemd، دستور `guardasli` و باز شدن پنل مدیریت.
+
+با دامنه:
 
 ```bash
-export CONVEX_DEPLOY_KEY=... ; curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
+sudo bash install.sh --domain panel.example.com --email you@example.com
 ```
 
-جزئیات OS/منابع: [README.fa.md](README.fa.md)
+پنل مدیریت — ۱۸ گزینه (آخر نصب خودش باز می‌شود):
+
+```bash
+sudo guardasli panel
+```
+
+جزئیات بیشتر: [README.fa.md](README.fa.md)
 
 ---
 
@@ -64,11 +75,12 @@ super_admin → admin → reseller → sub_reseller → user — فقط سمت �
 
 Ledger فقط‌الحاقی و idempotent. چهار روش: admin_manual، card_to_card، CubePay، Tetraminator. Webhook مستقیم شارژ نمی‌کند.
 
-## ۱۰. نصب
+## ۱۰. نصب و پنل
 
 | مسیر | دستور |
 |---|---|
-| VPS | `install.sh` یک‌خطی بالا |
+| VPS | `sudo bash install.sh` (بعد از clone) |
+| پنل | `sudo guardasli panel` — ۱۸ گزینه |
 | Lab | `bun run wizard && bun run up` |
 | تکمیل | `bash scripts/finish-vps.sh` |
 

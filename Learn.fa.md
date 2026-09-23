@@ -10,24 +10,30 @@
 
 ---
 
-## ۱. نصب با ویزارد (یک دستور)
+## ۱. نصب روی سرور (دو دستور)
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && bash scripts/guardasli.sh install
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
+sudo bash install.sh
 ```
 
-ویزارد این کارها را انجام می‌دهد:
+نصب‌کننده دامنه و ایمیل را می‌پرسد و بقیه‌اش خودش انجام می‌دهد:
+نصب bun و بسته‌ها، ساخت رمزها، build برنامه، تنظیم Nginx و SSL،
+راه‌اندازی سرویس، نصب دستور `guardasli` و باز شدن پنل مدیریت.
 
-1. بررسی OS، رم، دیسک، پورت‌ها و شبکه (`doctor`)
-2. نصب Bun در صورت نبود
-3. ساخت مسیر نصب (پیش‌فرض `/opt/guardasli`) و فایل `.env` اولیه
-4. نمایش گام‌های بعدی
+با دامنه (SSL خودکار):
+
+```bash
+sudo bash install.sh --domain panel.example.com --email you@example.com
+```
+
+در پایان آدرس پنل و رمز ادمین را نشان می‌دهد. ذخیره‌شان کنید.
 
 راستی‌آزمایی:
 
 ```bash
-bash scripts/guardasli.sh status
-bash scripts/guardasli.sh doctor
+sudo guardasli status
+sudo guardasli doctor
 ```
 
 ---
@@ -132,7 +138,7 @@ bun typecheck
 bun run build
 ```
 
-انتظار: ۳۶ تست پاس و بیلد تایپ‌اسکریپت تمیز.
+انتظار: ۸۲ تست پاس و بیلد تایپ‌اسکریپت تمیز.
 
 ---
 

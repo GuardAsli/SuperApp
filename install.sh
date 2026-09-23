@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  GuardAsli — VPS installer (single command, full pipeline)
+#  GuardAsli — نصب‌کننده سرور (فقط انگلیسی برای SSH)
 #  Product:   GuardAsli
 #  Developer: AsliCode
 #  Release:   is0.0.1   (format isMAJOR.MINOR.PATCH)
 #
 #  Usage:
+#    sudo bash install.sh                  <- wizard: asks everything interactively
 #    sudo bash install.sh --domain panel.example.com --email admin@example.com
-#    sudo bash install.sh                          # minimal, no SSL
-#    CONVEX_DEPLOY_KEY=... sudo -E bash install.sh --domain ... --email ...
 #
 #  What it does:
 #    system packages -> bun -> source -> secrets -> install -> build
 #    -> Convex deploy (optional key) -> admin bootstrap -> Nginx -> SSL
 #    -> systemd service -> firewall -> 'guardasli' command -> management panel
-#
-#  All output is English-only and safe to run over SSH.
 # =============================================================================
 set -uo pipefail
 
@@ -30,6 +27,29 @@ SKIP_SSL="${GUARDASLI_SKIP_SSL:-0}"
 SKIP_NGINX="${GUARDASLI_SKIP_NGINX:-0}"
 PORT_UI="${GUARDASLI_PORT:-4173}"
 
+wizard() {
+  echo ""
+  echo "  GuardAsli installer — by AsliCode"
+  echo "  Press Enter to accept the default shown in [brackets]."
+  echo ""
+  if [ -z "${DOMAIN}" ]; then
+    printf "Domain for the panel, e.g. panel.example.com [skip SSL]: "
+    read -r DOMAIN
+  fi
+  if [ -n "${DOMAIN}" ] && [ -z "${EMAIL}" ]; then
+    printf "Email for the SSL certificate (Let's Encrypt): "
+    read -r EMAIL
+  fi
+  if [ -z "${PORT_UI}" ] || [ "${PORT_UI}" = "4173" ]; then
+    printf "Internal web port [4173]: "
+    read -r P
+    PORT_UI="${P:-4173}"
+  fi
+  echo ""
+  info "Starting install${DOMAIN:+ for ${DOMAIN}}..."
+  echo ""
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain)  DOMAIN="$2";  shift 2 ;;
@@ -39,7 +59,8 @@ while [ $# -gt 0 ]; do
     --repo)    REPO_URL="$2"; shift 2 ;;
     --skip-ssl)   SKIP_SSL=1; shift ;;
     --skip-nginx) SKIP_NGINX=1; shift ;;
-    --help|-h) sed -n '2,26p' "$0"; exit 0 ;;
+    --yes|-y)  shift ;;
+    --help|-h) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)"; exit 1 ;;
   esac
 done
@@ -373,6 +394,7 @@ echo " GuardAsli installer · AsliCode · is0.0.1"
 echo " OS: $(detect_os)"
 echo ""
 need_root
+wizard
 install_system_packages
 install_bun
 clone_or_update

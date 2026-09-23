@@ -174,28 +174,54 @@ Full reference: [docs/API.md](docs/API.md).
 
 ---
 
-## 10. Wizard installer & CLI
+## 10. Installer & management panel
 
-**One-line install:**
+**Server install — two commands:**
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli && bash scripts/guardasli.sh install
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
+sudo bash install.sh
 ```
 
-CLI commands:
+The installer asks a few questions (domain, email) and does the rest:
+bun, packages, secrets, build, Convex deploy (if a deploy key is present),
+Nginx, SSL, systemd service, the `guardasli` command, and opens the panel.
 
-| Command | Action |
+With a domain:
+
+```bash
+sudo bash install.sh --domain panel.example.com --email you@example.com
+```
+
+Management panel — 18 options (opens automatically at the end of install):
+
+```bash
+sudo guardasli panel
+```
+
+| Option | Action |
 |---|---|
-| `install` | System check + dependencies + env bootstrap |
-| `doctor` | OS, RAM, disk, ports, network |
-| `reconfigure` | Main domain + initial admin prompts |
-| `backup` | Encrypted backup under install root |
-| `status` | Version `is0.0.1` + install path |
-| `update` | Component update (data & config kept) |
-| `logs` | Tail install logs |
-| *(no args)* | Interactive menu |
+| 1 | Full install |
+| 2 | Reconfigure (domain, repo, port) |
+| 3 | SSL certificate |
+| 4 | Telegram bot setup |
+| 5 | Create super admin |
+| 6 / 7 | Start / stop service |
+| 8 | Service status |
+| 9 | Update |
+| 10 | Repair |
+| 11 / 12 | Backup / restore |
+| 13 | Logs |
+| 14 | Doctor (system checks) |
+| 15 | Status |
+| 16 | Convex backend deploy |
+| 17 | Admin credentials |
+| 18 | Install the `guardasli` command |
 
-Script: `scripts/guardasli.sh`. Default install root: `/opt/guardasli`.
+Direct commands: `guardasli status | doctor | ssl | telegram | backup | restore <file> | logs | update | repair | reconfigure | version`.
+
+Script: `install.sh` (installer) and `scripts/guardasli.sh` (manager).
+Default install root: `/opt/guardasli`.
 
 ---
 
@@ -214,7 +240,7 @@ SSRF protection validates outbound URLs; private ranges and internal hosts are r
 ## 12. Testing & quality
 
 ```bash
-bun test        # 36 unit + integration tests
+bun test        # 82 unit + integration tests
 bun typecheck   # TypeScript, zero errors
 bun run build   # production bundle → dist/
 ```
