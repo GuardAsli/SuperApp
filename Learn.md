@@ -8,17 +8,25 @@ Persian version: [Learn.fa.md](Learn.fa.md) · Technical reference: [Docs.md](Do
 
 ---
 
-## 1. Install on a server (two commands)
+## 1. Install on a server (three steps)
 
 ```bash
+# Step 1 — the code
 git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
+
+# Step 2 — get your FULL deploy key from dashboard.convex.dev
+#   (project → Settings → Deploy Keys → Copy; the whole value incl. prod:...|)
+
+# Step 3 — install
 sudo bash install.sh
 ```
 
-The installer asks for your domain and email, then does everything itself:
-installs bun and packages, creates secrets, builds the app, sets up Nginx
-and SSL, starts the service, installs the `guardasli` command and opens
-the management panel.
+The installer asks for your domain and the **full deploy key**, then does
+everything itself: installs bun and packages, auto-detects the server public
+IP, creates secrets, deploys the backend to your cloud deployment, proves it
+is live with a real health check, builds the app, sets up Nginx and SSL,
+starts the service, installs the `guardasli` command and opens the
+management panel.
 
 With a domain (SSL is automatic):
 
@@ -26,7 +34,14 @@ With a domain (SSL is automatic):
 sudo bash install.sh --domain panel.example.com --email you@example.com
 ```
 
-At the end it prints the panel URL and the admin password. Save them.
+At the end it prints the panel URL (with the real server IP), the backend
+status and the admin password. Save them.
+
+> ⚠️ The deploy key must be the FULL value: it starts with `prod:` or `dev:`
+> and contains a `|`. A bare token is rejected with a clear message. No key at
+> hand? `sudo guardasli` → option 16 asks for it later.
+>
+> Full guide and troubleshooting: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 Verify:
 

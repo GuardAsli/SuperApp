@@ -31,7 +31,7 @@
 | برند | هر مشتری اسم و رنگ و دامنه‌ی خودش را دارد |
 | API | مسیر `/api/v1` با مشخصات OpenAPI |
 
-### نصب روی سرور (دو دستور ساده)
+### نصب روی سرور (سه مرحله)
 
 پیش‌نیاز: یک سرور Ubuntu/Debian تازه و دسترسی root. همین!
 
@@ -39,14 +39,20 @@
 # ۱ — کد را بگیرید
 git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
 
-# ۲ — نصب‌کننده را اجرا کنید؛ از شما می‌پرسد و همه‌چیز را خودش انجام می‌دهد
+# ۲ — کلید کامل Deploy را از dashboard.convex.dev بگیرید
+#     (پروژه → Settings → Deploy Keys → Copy — کل مقدار با پیشوند prod:...|)
+
+# ۳ — نصب‌کننده را اجرا کنید؛ کلید را از شما می‌پرسد و همه‌چیز را خودش انجام می‌دهد
 sudo bash install.sh
 ```
 
 همین! نصب‌کننده خودش:
 
 - bun و بسته‌های لازم را نصب می‌کند
+- **IP عمومی سرور را خودکار تشخیص می‌دهد** (بدون آدرس لوکال)
 - رمزها و تنظیمات را می‌سازد
+- **بک‌اند را روی دپلویمنت ابری شما deploy می‌کند** و با health-check واقعی
+  (`database: "ok"`) زنده بودنش را تأیید می‌کند
 - برنامه را build و راه می‌اندازد
 - Nginx و SSL را تنظیم می‌کند
 - دستور `guardasli` را نصب می‌کند و **پنل مدیریت را باز می‌کند**
@@ -57,7 +63,11 @@ sudo bash install.sh
 sudo bash install.sh --domain panel.example.com --email you@example.com
 ```
 
-در پایان، آدرس پنل و رمز ادمین را نشان می‌دهد.
+در پایان، آدرس پنل (با IP واقعی سرور)، وضعیت بک‌اند و رمز ادمین را نشان می‌دهد.
+
+> ⚠️ **مهم:** کلید Deploy باید «کامل» باشد — یعنی با `prod:` یا `dev:` شروع شود و
+> علامت `|` داشته باشد (مثل `prod:my-deployment|eyJ2MiI6...`). فقط توکن برهنه
+> قبول نیست. راهنمای کامل مرحله‌به‌مرحله: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ### مدیریت سرور بعد از نصب
 
@@ -98,6 +108,7 @@ bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password"
 
 | سند | محتوا |
 |---|---|
+| [راهنمای نصب](docs/DEPLOYMENT.md) | نصب مرحله‌به‌مرحله روی سرور |
 | [معماری](docs/ARCHITECTURE.md) | ساختار لایه‌ها و مدل امنیتی |
 | [API](docs/API.md) | مسیرها و کدهای خطا |
 | [پرداخت‌ها](docs/PAYMENTS.md) | روش‌های پرداخت و امنیت وب‌هوک |
@@ -130,7 +141,7 @@ Telegram Mini App and tenant-branded apps.
 | Branding | Each tenant gets its own name, colors and domain |
 | API | `/api/v1` with an OpenAPI spec |
 
-### Install on a server (two simple commands)
+### Install on a server (three simple steps)
 
 Requirement: a fresh Ubuntu/Debian server with root access. That's it.
 
@@ -138,14 +149,20 @@ Requirement: a fresh Ubuntu/Debian server with root access. That's it.
 # 1 — get the code
 git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
 
-# 2 — run the installer; it asks a few questions and does everything else
+# 2 — get your FULL deploy key from dashboard.convex.dev
+#     (project → Settings → Deploy Keys → Copy — the whole value incl. prod:...|)
+
+# 3 — run the installer; it asks for the key and does everything else
 sudo bash install.sh
 ```
 
 Done! The installer handles everything itself:
 
 - installs bun and required packages
+- **auto-detects the server public IP** (never a loopback address)
 - creates secrets and configuration
+- **deploys the backend to your cloud deployment** and proves it is live with
+  a real health check (`database: "ok"`)
 - builds and starts the app
 - sets up Nginx and SSL
 - installs the `guardasli` command and **opens the management panel**
@@ -156,7 +173,13 @@ Have a domain? Pass it directly and SSL is issued automatically:
 sudo bash install.sh --domain panel.example.com --email you@example.com
 ```
 
-At the end it prints the panel URL and the admin password.
+At the end it prints the panel URL (with the real server IP), the backend
+status and the admin password.
+
+> ⚠️ **Important:** the deploy key must be the FULL value — it starts with
+> `prod:` or `dev:` and contains a `|` (e.g. `prod:my-deployment|eyJ2MiI6...`).
+> A bare token alone is rejected. Full step-by-step guide:
+> [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ### Managing the server afterwards
 
@@ -205,6 +228,7 @@ bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password"
 
 | Document | Contents |
 |---|---|
+| [Deployment](docs/DEPLOYMENT.md) | Step-by-step server install guide |
 | [Architecture](docs/ARCHITECTURE.md) | Layers and security model |
 | [API](docs/API.md) | Endpoints and error codes |
 | [Payments](docs/PAYMENTS.md) | Payment methods and webhook security |

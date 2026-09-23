@@ -103,6 +103,7 @@ bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password"
 
 | سند | محتوا |
 |---|---|
+| [راهنمای نصب](docs/DEPLOYMENT.md) | نصب مرحله‌به‌مرحله روی سرور |
 | [معماری](docs/ARCHITECTURE.md) | ساختار لایه‌ها و مدل امنیتی |
 | [API](docs/API.md) | مسیرها و کدهای خطا |
 | [پرداخت‌ها](docs/PAYMENTS.md) | روش‌های پرداخت و امنیت وب‌هوک |
