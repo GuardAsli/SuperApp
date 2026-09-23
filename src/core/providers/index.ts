@@ -187,7 +187,7 @@ const xuiAdapter: ProviderAdapter = {
   },
 };
 
-// ————— Sanaei (marzban-style API) —————
+// ————— Sanaei (panel-style REST API) —————
 function makePanelLikeAdapter(kind: ProviderKind, basePath: string, extraCaps: ProviderCapability[]): ProviderAdapter {
   return {
     kind,

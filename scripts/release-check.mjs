@@ -58,12 +58,32 @@ if (release.product === "GuardAsli" && release.developer === "AsliCode" && relea
   ok("RELEASE.json is0.0.1");
 } else fail("RELEASE.json invalid");
 
-const banned = [/openai/i, /chatgpt/i, /anthropic/i, /claude/i, /gemini/i, /copilot/i];
-const scanFiles = ["README.md", "src/core/identity.ts", "package.json", "RELEASE.json"];
+// الگوهای ممنوعه به‌صورت split ساخته می‌شوند تا خودِ این فایل حاوی نام ثالث نباشد (بند ۴).
+const j = (parts) => new RegExp(parts.join(""), "i");
+const banned = [
+  j(["open", "ai"]),
+  j(["chat", "gpt"]),
+  j(["anthro", "pic"]),
+  j(["clau", "de"]),
+  j(["gem", "ini"]),
+  j(["copi", "lot"]),
+  j(["nord", "vpn"]),
+  j(["express", "vpn"]),
+  j(["marz", "ban"]),
+];
+const scanFiles = [
+  "README.md",
+  "src/core/identity.ts",
+  "package.json",
+  "RELEASE.json",
+  "src/core/clientExperience.ts",
+  "src/core/providers/index.ts",
+  "docs/CLIENT_EXPERIENCE.md",
+];
 for (const f of scanFiles) {
   const text = readFileSync(join(root, f), "utf8");
   for (const re of banned) {
-    if (re.test(text)) fail(`banned term in ${f}: ${re}`);
+    if (re.test(text)) fail(`banned term in ${f}: ${re.source}`);
   }
 }
 ok("brand purity scan");

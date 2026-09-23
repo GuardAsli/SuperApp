@@ -47,7 +47,7 @@ describe("CubePay طبق مستندات رسمی", () => {
       return Promise.resolve(new Response(JSON.stringify({
         success: true,
         authority: "8f2a1c",
-        paymentLink: "https://cubevps.ir/smspay/pay.php?authority=8f2a1c",
+        paymentLink: "https://pay.example/smspay/pay.php?authority=8f2a1c",
         payAmount: 250770,
         payAmountToman: 25077,
         isTest: true,
