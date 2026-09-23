@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# GuardAsli is0.0.1 — ویزارد نصب تمام‌خودکار (بدون پرسش)
-# Product: GuardAsli · Developer: AsliCode
+# GuardAsli is0.0.1 — fully automated installation wizard (no prompts)
+# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
 #
-# استفاده:
-#   bun run wizard              # نصب کامل + تلاش برای Convex + bootstrap
-#   bun run up                  # بعد از wizard: backend+UI را بالا می‌آورد
+# Usage:
+#   bun run wizard              # full install + Convex attempt + bootstrap
+#   bun run up                  # after wizard: brings up backend + UI
 #
-# اختیاری از قبل:
-#   CONVEX_DEPLOY_KEY=...       # deploy غیرتعاملی
+# Optional environment:
+#   CONVEX_DEPLOY_KEY=...       # non-interactive deploy
 #   GUARDASLI_ADMIN_USER=admin
 #   GUARDASLI_ADMIN_PASS=...
-#   GUARDASLI_SKIP_CI=1         # رد typecheck/test/build
-#   GUARDASLI_SKIP_CONVEX=1     # فقط env+deps
+#   GUARDASLI_SKIP_CI=1         # skip typecheck/test/build
+#   GUARDASLI_SKIP_CONVEX=1     # env+deps only
 #
 set -euo pipefail
 
@@ -37,33 +37,33 @@ rand_hex() {
   fi
 }
 
-# رمز bootstrap: قوی و قابل‌پیش‌بینی برای dev (قابل override)
+# Bootstrap password: strong, generated once (override via env)
 ADMIN_USER="${GUARDASLI_ADMIN_USER:-admin}"
 ADMIN_PASS="${GUARDASLI_ADMIN_PASS:-}"
 if [ -z "$ADMIN_PASS" ]; then
-  # تولید یک‌بار و ذخیره در .env.local
+  # Generated once and stored in .env.local
   ADMIN_PASS="Ga$(rand_hex | cut -c1-10)A1"
 fi
 
 echo ""
 echo "═══════════════════════════════════════════"
-echo "  GuardAsli is0.0.1 — ویزارد تمام‌خودکار"
-echo "  توسعه‌ی AsliCode"
+echo "  GuardAsli is0.0.1 — Fully Automated Wizard"
+echo "  Powered By AsliCode"
 echo "═══════════════════════════════════════════"
 echo ""
 
 # ── 1. Prerequisites ──
-info "۱) پیش‌نیازها"
-command -v bun >/dev/null 2>&1 || die "bun لازم است: curl -fsSL https://bun.sh/install | bash"
+info "1) Prerequisites"
+command -v bun >/dev/null 2>&1 || die "bun is required: curl -fsSL https://bun.sh/install | bash"
 ok "bun $(bun --version)"
 
 # ── 2. Dependencies ──
-info "۲) وابستگی‌ها"
+info "2) Dependencies"
 bun install
 ok "bun install"
 
 # ── 3. Env + secrets ──
-info "۳) secrets و .env.local"
+info "3) Secrets and .env.local"
 ENV_FILE="$ROOT/.env.local"
 STATE_FILE="$ROOT/.guardasli-install.json"
 
@@ -73,7 +73,7 @@ if [ ! -f "$ENV_FILE" ]; then
   SALT="$(rand_hex)"
   cat > "$ENV_FILE" <<EOF
 # GuardAsli is0.0.1 — wizard $(date -u +%Y-%m-%dT%H:%MZ)
-# Product: GuardAsli · Developer: AsliCode
+# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
 
 VITE_CONVEX_URL=
 CONVEX_DEPLOYMENT=
@@ -94,9 +94,9 @@ GUARDASLI_PRODUCT=GuardAsli
 GUARDASLI_DEVELOPER=AsliCode
 GUARDASLI_VERSION=is0.0.1
 EOF
-  ok ".env.local ساخته شد"
+  ok ".env.local created"
 else
-  # تکمیل فیلدهای خالی بدون overwrite secrets
+  # Fill in empty fields without overwriting secrets
   if ! grep -q '^GUARDASLI_ADMIN_USER=' "$ENV_FILE" 2>/dev/null; then
     echo "GUARDASLI_ADMIN_USER=${ADMIN_USER}" >> "$ENV_FILE"
   fi
@@ -112,7 +112,7 @@ else
   if ! grep -q '^GUARDASLI_AEAD_SALT=.' "$ENV_FILE" 2>/dev/null; then
     echo "GUARDASLI_AEAD_SALT=$(rand_hex)" >> "$ENV_FILE"
   fi
-  ok ".env.local موجود — تکمیل شد"
+  ok ".env.local exists — completed"
 fi
 
 set -a
@@ -125,75 +125,75 @@ ADMIN_PASS="${GUARDASLI_ADMIN_PASS:-Abcd1234!xyz}"
 
 # ── 4. CI gates ──
 if [ "${GUARDASLI_SKIP_CI:-0}" != "1" ]; then
-  info "۴) typecheck + test + build"
+  info "4) typecheck + test + build"
   bun run typecheck
   ok "typecheck"
   bun test
   ok "tests"
   bun run build
   ok "build"
-  bun run release-check || warn "release-check هشدار"
+  bun run release-check || warn "release-check warning"
 else
-  warn "۴) CI رد شد (GUARDASLI_SKIP_CI=1)"
+  warn "4) CI skipped (GUARDASLI_SKIP_CI=1)"
 fi
 
-# ── 5. Convex خودکار ──
+# ── 5. Convex automatic ──
 if [ "${GUARDASLI_SKIP_CONVEX:-0}" = "1" ]; then
-  warn "۵) Convex رد شد"
+  warn "5) Convex skipped"
 else
-  info "۵) Convex — تلاش خودکار"
-  bunx convex --version >/dev/null 2>&1 || warn "convex CLI از bunx"
+  info "5) Convex — automatic attempt"
+  bunx convex --version >/dev/null 2>&1 || warn "convex CLI via bunx"
 
-  # اگر deploy key هست → deploy غیرتعاملی + env set
+  # Deploy key present -> non-interactive deploy + env set
   if [ -n "${CONVEX_DEPLOY_KEY:-}" ]; then
-    info "CONVEX_DEPLOY_KEY یافت شد — deploy"
-    bunx convex deploy --cmd 'echo deployed' 2>/dev/null || bunx convex deploy || warn "deploy ناموفق"
-    # تلاش برای ست کردن env روی deployment
-    bun "$ROOT/scripts/sync-convex-env.mjs" || warn "sync env جزئی ناموفق"
+    info "CONVEX_DEPLOY_KEY found — deploying"
+    bunx convex deploy --cmd 'echo deployed' 2>/dev/null || bunx convex deploy || warn "deploy failed"
+    # Try setting env on the deployment
+    bun "$ROOT/scripts/sync-convex-env.mjs" || warn "env sync partially failed"
   elif [ -n "${VITE_CONVEX_URL:-}" ] && [ -n "${CONVEX_DEPLOYMENT:-}" ]; then
-    ok "deployment از قبل پیکربندی شده"
+    ok "deployment already configured"
     bun "$ROOT/scripts/sync-convex-env.mjs" || true
   else
-    # تلاش codegen بدون تعامل طولانی
-    info "codegen / once (اگر قبلاً login شده باشید کار می‌کند)"
+    # Attempt codegen without long interaction
+    info "codegen / once (works if you have logged in once)"
     if timeout 90 bunx convex codegen 2>/dev/null; then
       ok "codegen"
     else
-      warn "codegen نیاز به login یک‌باره دارد:"
+      warn "codegen needs a one-time login:"
       warn "  bunx convex login"
-      warn "  bunx convex dev   # یک‌بار تا URL ساخته شود، Ctrl+C"
-      warn "سپس دوباره: bun run wizard   یا   bun run up"
+      warn "  bunx convex dev   # run once until the URL is created, then Ctrl+C"
+      warn "then run again: bun run wizard   or   bun run up"
     fi
   fi
 
-  # به‌روزرسانی URL از .env.local اگر convex آن را نوشته
+  # Update URL from .env.local if convex wrote it
   if [ -f "$ROOT/.env.local" ]; then
     set -a
     source "$ROOT/.env.local" 2>/dev/null || true
     set +a
   fi
 
-  # خواندن از .env که convex گاهی می‌سازد
+  # Read from .env which convex sometimes creates
   if [ -f "$ROOT/.env" ]; then
     CONVEX_URL_LINE="$(grep -E '^VITE_CONVEX_URL=' "$ROOT/.env" 2>/dev/null | tail -1 || true)"
     if [ -n "$CONVEX_URL_LINE" ]; then
       if ! grep -q '^VITE_CONVEX_URL=.' "$ENV_FILE" 2>/dev/null; then
         echo "$CONVEX_URL_LINE" >> "$ENV_FILE"
       else
-        # به‌روزرسانی مقدار
+        # Update the value
         VAL="${CONVEX_URL_LINE#VITE_CONVEX_URL=}"
         if command -v sed >/dev/null 2>&1; then
           sed -i.bak "s|^VITE_CONVEX_URL=.*|VITE_CONVEX_URL=${VAL}|" "$ENV_FILE" 2>/dev/null || true
         fi
       fi
-      ok "VITE_CONVEX_URL همگام شد"
+      ok "VITE_CONVEX_URL synced"
     fi
   fi
 fi
 
-# ── 6. Bootstrap خودکار ──
-info "۶) Bootstrap Super Admin (خودکار در صورت آماده بودن backend)"
-bun "$ROOT/scripts/auto-bootstrap.mjs" && ok "bootstrap" || warn "bootstrap بعداً با: bun run up"
+# ── 6. Automatic bootstrap ──
+info "6) Super Admin bootstrap (automatic when the backend is ready)"
+bun "$ROOT/scripts/auto-bootstrap.mjs" && ok "bootstrap" || warn "bootstrap later with: bun run up"
 
 # ── 7. State ──
 cat > "$STATE_FILE" <<EOF
@@ -207,16 +207,16 @@ cat > "$STATE_FILE" <<EOF
 EOF
 
 echo ""
-ok "ویزارد تمام شد"
+ok "Wizard finished"
 echo ""
 echo "  Admin: ${ADMIN_USER}"
 echo "  Pass:  ${ADMIN_PASS}"
-echo "  (در .env.local ذخیره شده)"
+echo "  (stored in .env.local)"
 echo ""
-echo "  مرحله بعدی (یک دستور):"
+echo "  Next step (single command):"
 echo "    bun run up"
 echo ""
-echo "  اگر اولین‌بار Convex هستید یک‌بار:"
+echo "  First time with Convex? Run once:"
 echo "    bunx convex login && bunx convex dev"
-echo "    (URL را می‌سازد) سپس دوباره: bun run up"
+echo "    (this creates the URL) then run again: bun run up"
 echo ""

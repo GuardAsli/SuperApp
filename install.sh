@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  GuardAsli — نصب‌کننده سرور (فقط انگلیسی برای SSH)
-#  Product:   GuardAsli
-#  Developer: AsliCode
-#  Release:   is0.0.1   (format isMAJOR.MINOR.PATCH)
+#  GuardAsli — server installer (English only for SSH)
+#  Product:    GuardAsli
+#  Developer:  AsliCode · Powered By AsliCode
+#  Release:    is0.0.1   (format isMAJOR.MINOR.PATCH)
 #
 #  Usage:
 #    sudo bash install.sh                  <- wizard: asks everything interactively
@@ -33,7 +33,7 @@ SERVER_IP=""
 
 wizard() {
   echo ""
-  echo "  GuardAsli installer — by AsliCode"
+  echo "  GuardAsli installer — Powered By AsliCode"
   echo "  Press Enter to accept the default shown in [brackets]."
   echo ""
   if [ -z "${DOMAIN}" ]; then
@@ -462,7 +462,7 @@ print_summary_and_panel() {
   set +a
   echo ""
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
-  ok "GuardAsli is0.0.1 installed — by AsliCode"
+  ok "GuardAsli is0.0.1 installed — Powered By AsliCode"
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
   echo "  Path      : ${INSTALL_DIR}"
   echo "  Env file  : ${ENV_FILE}"

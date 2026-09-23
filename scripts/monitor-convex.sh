@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# GuardAsli — مانیتور لاگ و سلامت Convex + اپ
-# Product: GuardAsli · Developer: AsliCode
+# GuardAsli — Convex + app log and health monitor
+# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
 #
 # usage:
-#   bash scripts/monitor-convex.sh           # یک‌بار خلاصه
-#   bash scripts/monitor-convex.sh --follow  # دنبال کردن مداوم
-#   bash scripts/monitor-convex.sh --jobs    # وضعیت صف jobs
+#   bash scripts/monitor-convex.sh           # one-shot summary
+#   bash scripts/monitor-convex.sh --follow  # continuous follow
+#   bash scripts/monitor-convex.sh --jobs    # job queue status
 #
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

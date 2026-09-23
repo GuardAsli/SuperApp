@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# GuardAsli — اعمال Nginx بهینه از template
+# GuardAsli — apply the optimized Nginx template
+# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DOMAIN="${1:-${GUARDASLI_DOMAIN:-}}"

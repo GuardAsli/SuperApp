@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# GuardAsli — بعد از wizard همه چیز را خودکار بالا می‌آورد
-# Product: GuardAsli · Developer: AsliCode
+# GuardAsli — brings up everything automatically after the wizard
+# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -10,7 +10,7 @@ ok()   { printf "\033[1;32m[OK]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[!]\033[0m %s\n" "$*"; }
 
 if [ ! -f "$ROOT/.env.local" ]; then
-  info "env نیست — اجرای wizard…"
+  info "no env — running the wizard..."
   bash "$ROOT/scripts/wizard.sh"
 fi
 
@@ -19,12 +19,12 @@ set -a
 source "$ROOT/.env.local" 2>/dev/null || true
 set +a
 
-# همگام env به Convex
+# Sync env to Convex
 bun "$ROOT/scripts/sync-convex-env.mjs" 2>/dev/null || true
 
-# اگر URL نیست، سعی در codegen یک‌بار
+# If no URL yet, try codegen once
 if [ -z "${VITE_CONVEX_URL:-}" ]; then
-  warn "VITE_CONVEX_URL خالی — تلاش codegen"
+  warn "VITE_CONVEX_URL is empty — trying codegen"
   timeout 60 bunx convex codegen 2>/dev/null || true
   if [ -f "$ROOT/.env" ]; then
     set -a
@@ -37,24 +37,24 @@ if [ -z "${VITE_CONVEX_URL:-}" ]; then
 fi
 
 if [ -z "${VITE_CONVEX_URL:-}" ]; then
-  warn "هنوز URL ندارید. یک‌بار این دو را اجرا کنید (فقط اولین‌بار):"
+  warn "still no URL. Run these two once (first time only):"
   echo "  bunx convex login"
   echo "  bunx convex dev"
-  echo "سپس دوباره: bun run up"
+  echo "then run again: bun run up"
   exit 1
 fi
 
 ok "Convex URL: ${VITE_CONVEX_URL}"
 
 # bootstrap
-bun "$ROOT/scripts/auto-bootstrap.mjs" || warn "bootstrap — اگر قبلاً ساخته شده نادیده بگیرید"
+bun "$ROOT/scripts/auto-bootstrap.mjs" || warn "bootstrap — ignored if already created"
 
-# اجرای همزمان: convex dev (اگر لازم) + vite
-info "اجرای UI روی http://127.0.0.1:5173"
+# Run together: convex dev (if needed) + vite
+info "UI on http://127.0.0.1:5173"
 
-# اگر کاربر CONVEX_RUN_BACKEND=1 بخواهد، convex dev موازی
+# Parallel convex dev when the user sets CONVEX_RUN_BACKEND=1
 if [ "${CONVEX_RUN_BACKEND:-1}" = "1" ]; then
-  info "شروع convex dev در پس‌زمینه…"
+  info "starting convex dev in the background..."
   bunx convex dev --once 2>/dev/null || true
   # push functions
   (bunx convex dev >> "$ROOT/.guardasli-convex.log" 2>&1 &) || true

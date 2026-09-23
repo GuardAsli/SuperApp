@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# GuardAsli — تکمیل نصب بعد از login Convex / تنظیم دامنه
+# GuardAsli — finish installation after Convex login / domain setup
+# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -13,7 +14,7 @@ set -a
 source "$ROOT/.env.local" 2>/dev/null || true
 set +a
 
-info "Convex deploy + env sync…"
+info "Convex deploy + env sync..."
 if [ -n "${CONVEX_DEPLOY_KEY:-}" ] || [ -n "${VITE_CONVEX_URL:-}" ]; then
   bunx convex deploy --yes 2>/dev/null || bunx convex deploy || true
 else
@@ -21,9 +22,9 @@ else
 fi
 
 bun "$ROOT/scripts/sync-convex-env.mjs" || true
-info "Bootstrap…"
+info "Bootstrap..."
 bun "$ROOT/scripts/auto-bootstrap.mjs" || true
 
 bun run build
 systemctl restart guardasli 2>/dev/null || true
-ok "finish-vps کامل"
+ok "finish-vps complete"

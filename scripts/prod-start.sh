@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# GuardAsli is0.0.1 — مسیر اجرای مطمئن production با gate سخت env
+# GuardAsli is0.0.1 — reliable production start path with a strict env gate
+# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -26,7 +27,7 @@ need() {
   local name="$1" min="${2:-1}"
   local val="${!name:-}"
   if [ -z "$val" ] || [ "${#val}" -lt "$min" ]; then
-    echo "[guardasli] ERR: $name الزامی است (حداقل $min کاراکتر)"
+    echo "[guardasli] ERR: $name is required (min $min characters)"
     fail=1
   fi
 }
@@ -38,26 +39,26 @@ need GUARDASLI_CORS_ORIGINS 8
 need GUARDASLI_PUBLIC_URL 12
 
 if echo "${GUARDASLI_CORS_ORIGINS:-}" | grep -q '\*'; then
-  echo "[guardasli] ERR: CORS نباید * باشد"
+  echo "[guardasli] ERR: CORS must not contain *"
   fail=1
 fi
 
 if [[ "${GUARDASLI_PUBLIC_URL:-}" != https://* ]]; then
-  echo "[guardasli] ERR: GUARDASLI_PUBLIC_URL باید با https:// شروع شود"
+  echo "[guardasli] ERR: GUARDASLI_PUBLIC_URL must start with https://"
   fail=1
 fi
 
 if [ -n "${VITE_GUARDASLI_MASTER_SECRET:-}" ] || [ -n "${VITE_GUARDASLI_TOKEN_PEPPER:-}" ]; then
-  echo "[guardasli] ERR: secret در VITE_* ممنوع است"
+  echo "[guardasli] ERR: secrets in VITE_* are forbidden"
   fail=1
 fi
 
 if [ "$fail" -ne 0 ]; then
-  echo "[guardasli] production env نامعتبر — deploy متوقف شد"
+  echo "[guardasli] production env invalid — deploy aborted"
   exit 1
 fi
 
 echo "[guardasli] production env OK"
 echo "  deploy: bunx convex deploy"
-echo "  (secrets را در Convex Dashboard → Environment Variables هم ست کنید)"
+echo "  (also set the secrets in the Convex Dashboard > Environment Variables)"
 echo "[guardasli] OK is0.0.1"

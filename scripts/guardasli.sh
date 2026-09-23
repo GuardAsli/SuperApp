@@ -186,7 +186,7 @@ build_app() {
 svc_unit() {
   cat <<EOF
 [Unit]
-Description=${GUARDASLI_PRODUCT} control-plane by ${GUARDASLI_DEVELOPER}
+Description=${GUARDASLI_PRODUCT} control-plane · Powered By ${GUARDASLI_DEVELOPER}
 After=network-online.target
 Wants=network-online.target
 
@@ -369,7 +369,7 @@ do_restore() {
 # 10. Full install pipeline
 # ----------------------------------------------------------------------------
 do_install() {
-  printf "\n%s\n" "${C_BOLD}GuardAsli installer v${GUARDASLI_VERSION} — by ${GUARDASLI_DEVELOPER}${C_OFF}"
+  printf "\n%s\n" "${C_BOLD}GuardAsli installer v${GUARDASLI_VERSION} — Powered By ${GUARDASLI_DEVELOPER}${C_OFF}"
   doctor_checks
   install_deps
   mkdir -p "${GUARDASLI_ROOT}"
@@ -555,7 +555,7 @@ do_panel() {
     printf "\n"
     printf "${C_BOLD}╔══════════════════════════════════════════════╗${C_OFF}\n"
     printf "${C_BOLD}║  %s — Management Panel  v%s  ║${C_OFF}\n" "${GUARDASLI_PRODUCT}" "${GUARDASLI_VERSION}"
-    printf "${C_BOLD}║  by ${GUARDASLI_DEVELOPER}                                ║${C_OFF}\n"
+    printf "${C_BOLD}║  Powered By ${GUARDASLI_DEVELOPER}                       ║${C_OFF}\n"
     printf "${C_BOLD}╠══════════════════════════════════════════════╣${C_OFF}\n"
     printf "║  1) Install (full pipeline)                  ║\n"
     printf "║  2) Reconfigure (domain, repo, port)         ║\n"
@@ -635,7 +635,7 @@ case "${1:-}" in
   doctor)   doctor_checks ;;
   reconfigure) do_reconfigure ;;
   install-command) install_command ;;
-  version)  echo "GuardAsli ${GUARDASLI_VERSION} (isMAJOR.MINOR.PATCH) by ${GUARDASLI_DEVELOPER}" ;;
+  version)  echo "GuardAsli ${GUARDASLI_VERSION} (isMAJOR.MINOR.PATCH) · Powered By ${GUARDASLI_DEVELOPER}" ;;
   "")       do_panel ;;
   *)        err "Unknown command: $1"; echo "Commands: install panel admin ssl telegram start stop status logs update repair backup restore doctor reconfigure version install-command"; exit 1 ;;
 esac
