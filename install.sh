@@ -8,10 +8,11 @@
 #  Usage:
 #    sudo bash install.sh                  <- wizard: asks everything interactively
 #    sudo bash install.sh --domain panel.example.com --email admin@example.com
+#    sudo bash install.sh --deploy-key 'prod:name|eyJ...'   <- non-interactive backend
 #
 #  What it does:
-#    system packages -> bun -> source -> secrets -> install -> build
-#    -> Convex deploy (optional key) -> admin bootstrap -> Nginx -> SSL
+#    system packages -> bun -> source -> secrets -> install -> backend deploy
+#    -> build -> live health verify -> admin bootstrap -> Nginx -> SSL
 #    -> systemd service -> firewall -> 'guardasli' command -> management panel
 # =============================================================================
 set -uo pipefail
@@ -25,7 +26,10 @@ REPO_URL="${GUARDASLI_REPO:-https://github.com/GuardAsli/SuperApp.git}"
 BRANCH="${GUARDASLI_BRANCH:-main}"
 SKIP_SSL="${GUARDASLI_SKIP_SSL:-0}"
 SKIP_NGINX="${GUARDASLI_SKIP_NGINX:-0}"
+SKIP_CONVEX="${GUARDASLI_SKIP_CONVEX:-0}"
 PORT_UI="${GUARDASLI_PORT:-4173}"
+DEPLOY_KEY="${CONVEX_DEPLOY_KEY:-}"
+SERVER_IP=""
 
 wizard() {
   echo ""
@@ -33,7 +37,7 @@ wizard() {
   echo "  Press Enter to accept the default shown in [brackets]."
   echo ""
   if [ -z "${DOMAIN}" ]; then
-    printf "Domain for the panel, e.g. panel.example.com [skip SSL]: "
+    printf "Domain for the panel, e.g. panel.example.com [none — server IP will be used]: "
     read -r DOMAIN
   fi
   if [ -n "${DOMAIN}" ] && [ -z "${EMAIL}" ]; then
@@ -45,6 +49,7 @@ wizard() {
     read -r P
     PORT_UI="${P:-4173}"
   fi
+  ask_deploy_key
   echo ""
   info "Starting install${DOMAIN:+ for ${DOMAIN}}..."
   echo ""
@@ -59,6 +64,8 @@ while [ $# -gt 0 ]; do
     --repo)    REPO_URL="$2"; shift 2 ;;
     --skip-ssl)   SKIP_SSL=1; shift ;;
     --skip-nginx) SKIP_NGINX=1; shift ;;
+    --skip-convex) SKIP_CONVEX=1; shift ;;
+    --deploy-key) DEPLOY_KEY="$2"; shift 2 ;;
     --yes|-y)  shift ;;
     --help|-h) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)"; exit 1 ;;
@@ -90,6 +97,47 @@ detect_os() {
     echo "${ID:-unknown} ${VERSION_ID:-} ${PRETTY_NAME:-}"
   else
     echo "unknown"
+  fi
+}
+
+# Server public IPv4 — from the default-route interface, never a loopback address.
+detect_public_ip() {
+  local ip=""
+  ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')"
+  if [ -z "$ip" ] || [ "${ip%%.*}" = "127" ] || [ "${ip%%.*}" = "169" ]; then
+    ip="$(hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i !~ /^169\.254\./ && $i !~ /^127\./){print $i; exit}}')"
+  fi
+  if [ -n "$ip" ] && { [ "${ip%%.*}" = "127" ] || [ "${ip%%.*}" = "169" ]; }; then ip=""; fi
+  [ -n "$ip" ] && { echo "$ip"; return; }
+  # Last resort: external echo (no key material sent — plain IP discovery).
+  ip="$(curl -4 -fs --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+  echo "${ip:-}"
+}
+
+# Full Convex deploy key: required, must carry the deployment prefix and a
+# pipe separator (prod:name|token). Not the bare token — the CLI refuses it.
+valid_deploy_key() {
+  case "$1" in
+    dev:*|prod:*) [ "$1" != "${1%%|*}" ] ;;
+    *) return 1 ;;
+  esac
+}
+
+ask_deploy_key() {
+  [ "$SKIP_CONVEX" = "1" ] && { warn "backend deploy skipped (--skip-convex)"; return 0; }
+  while ! valid_deploy_key "${DEPLOY_KEY}"; do
+    if [ -n "${DEPLOY_KEY}" ]; then
+      warn "that key is incomplete — it must look like:  prod:your-deployment|eyJ2MiI6..."
+      warn "(the bare token alone is not accepted — copy the whole value from dashboard Settings > Deploy Keys)"
+    fi
+    printf "Convex deploy key (full value incl. 'prod:...|' prefix; blank = configure later): "
+    read -r DEPLOY_KEY
+    [ -z "${DEPLOY_KEY}" ] && break
+  done
+  if valid_deploy_key "${DEPLOY_KEY}"; then
+    ok "deploy key accepted (${DEPLOY_KEY%%|*})"
+  elif [ -n "${DEPLOY_KEY}" ]; then
+    warn "key format unexpected — will still try, but expect 'InvalidDeploymentName'"
   fi
 }
 
@@ -158,11 +206,32 @@ clone_or_update() {
 # -----------------------------------------------------------------------------
 write_env() {
   info "Writing configuration and secrets..."
-  local pub
-  if [ -n "$DOMAIN" ]; then pub="https://${DOMAIN}"; else pub="http://127.0.0.1:${PORT_UI}"; fi
+  SERVER_IP="$(detect_public_ip)"
+  [ -n "$SERVER_IP" ] && ok "server public IP: ${SERVER_IP}"
+  local pub backend_url
+  if [ -n "$DOMAIN" ]; then
+    pub="https://${DOMAIN}"
+  elif [ -n "$SERVER_IP" ]; then
+    pub="http://${SERVER_IP}:${PORT_UI}"
+  else
+    pub=""
+  fi
+
+  # With a full deploy key the backend endpoints are known without contacting
+  # the cloud: HTTP-actions on <deploy-name>.convex.site, websocket on .cloud.
+  backend_url=""
+  if valid_deploy_key "${DEPLOY_KEY}"; then
+    local dname="${DEPLOY_KEY%%|*}"; dname="${dname#*:}"
+    backend_url="https://${dname}.convex.site"
+  fi
 
   if [ -f "$ENV_FILE" ] && grep -q '^GUARDASLI_MASTER_SECRET=.' "$ENV_FILE" 2>/dev/null; then
     ok "existing secrets preserved"
+    # Re-run: refresh key/url if newly supplied.
+    if valid_deploy_key "${DEPLOY_KEY}"; then
+      sed -i "s|^CONVEX_DEPLOY_KEY=.*|CONVEX_DEPLOY_KEY=${DEPLOY_KEY}|" "$ENV_FILE"
+      sed -i "s|^VITE_CONVEX_URL=.*|VITE_CONVEX_URL=${backend_url}|" "$ENV_FILE"
+    fi
   else
     local master pepper salt admin_pass
     master="$(rand_hex)"; pepper="$(rand_hex)"; salt="$(rand_hex)"
@@ -172,9 +241,9 @@ write_env() {
       echo "# Product: GuardAsli · Developer: AsliCode"
       echo "GUARDASLI_ENV=production"
       echo "NODE_ENV=production"
-      echo "VITE_CONVEX_URL=${VITE_CONVEX_URL:-}"
-      echo "CONVEX_DEPLOYMENT=${CONVEX_DEPLOYMENT:-}"
-      echo "CONVEX_DEPLOY_KEY=${CONVEX_DEPLOY_KEY:-}"
+      echo "VITE_CONVEX_URL=${backend_url}"
+      echo "CONVEX_DEPLOYMENT=${DEPLOY_KEY%%|*}"
+      echo "CONVEX_DEPLOY_KEY=${DEPLOY_KEY}"
       echo "GUARDASLI_MASTER_SECRET=${master}"
       echo "GUARDASLI_TOKEN_PEPPER=${pepper}"
       echo "GUARDASLI_AEAD_SALT=${salt}"
@@ -182,6 +251,7 @@ write_env() {
       echo "GUARDASLI_PUBLIC_URL=${pub}"
       echo "GUARDASLI_CORS_ORIGINS=${pub}"
       echo "GUARDASLI_MAIN_DOMAIN=${DOMAIN}"
+      echo "GUARDASLI_SERVER_IP=${SERVER_IP}"
       echo "GUARDASLI_ADMIN_USER=${GUARDASLI_ADMIN_USER:-admin}"
       echo "GUARDASLI_ADMIN_PASS=${admin_pass}"
       echo "GUARDASLI_PRODUCT=GuardAsli"
@@ -195,12 +265,13 @@ write_env() {
     ok "secrets generated (ADMIN_PASS is printed at the end)"
   fi
 
-  # Keep public URL / CORS in sync when a domain is supplied on re-run.
-  if [ -n "$DOMAIN" ]; then
-    sed -i "s|^GUARDASLI_PUBLIC_URL=.*|GUARDASLI_PUBLIC_URL=https://${DOMAIN}|" "$ENV_FILE"
-    sed -i "s|^GUARDASLI_CORS_ORIGINS=.*|GUARDASLI_CORS_ORIGINS=https://${DOMAIN}|" "$ENV_FILE"
+  # Keep public URL / CORS in sync when a domain or IP is supplied on re-run.
+  if [ -n "$pub" ]; then
+    sed -i "s|^GUARDASLI_PUBLIC_URL=.*|GUARDASLI_PUBLIC_URL=${pub}|" "$ENV_FILE"
+    sed -i "s|^GUARDASLI_CORS_ORIGINS=.*|GUARDASLI_CORS_ORIGINS=${pub}|" "$ENV_FILE"
     grep -q '^GUARDASLI_MAIN_DOMAIN=' "$ENV_FILE" || echo "GUARDASLI_MAIN_DOMAIN=${DOMAIN}" >> "$ENV_FILE"
   fi
+  grep -q '^GUARDASLI_SERVER_IP=' "$ENV_FILE" || echo "GUARDASLI_SERVER_IP=${SERVER_IP}" >> "$ENV_FILE"
   ok "env file: ${ENV_FILE}"
 }
 
@@ -233,25 +304,49 @@ run_app_install() {
   bun run build || die "production build failed"
   ok "build (dist/)"
 
-  # Convex deploy: only meaningful with a deploy key or an existing deployment.
-  if [ -n "${CONVEX_DEPLOY_KEY:-}" ]; then
-    info "Deploying Convex backend (deploy key)..."
-    bunx convex deploy --yes 2>&1 | tail -3 || warn "convex deploy had errors — rerun later: cd ${INSTALL_DIR} && bunx convex deploy"
-    ok "Convex backend deployed"
+  # Backend deploy — the full deploy key is required for a real cloud backend.
+  if [ "$SKIP_CONVEX" = "1" ]; then
+    warn "backend deploy skipped (--skip-convex)"
+  elif valid_deploy_key "${CONVEX_DEPLOY_KEY:-}"; then
+    info "Deploying backend to the cloud deployment (${CONVEX_DEPLOY_KEY%%|*})..."
+    if bunx convex deploy --yes 2>&1 | tail -5; then
+      ok "backend deployed"
+      verify_backend_live "${VITE_CONVEX_URL:-}"
+    else
+      warn "convex deploy failed — check the key, then rerun: cd ${INSTALL_DIR} && bunx convex deploy --yes"
+    fi
   elif [ -n "${VITE_CONVEX_URL:-}" ]; then
-    info "Convex URL present — pushing functions..."
-    bunx convex deploy --yes 2>&1 | tail -3 || warn "convex push failed — rerun later"
-    ok "Convex functions pushed"
+    info "Convex URL present without key — trying function push..."
+    bunx convex deploy --yes 2>&1 | tail -3 || warn "push failed — a full deploy key is required"
   else
-    warn "No CONVEX_DEPLOY_KEY / VITE_CONVEX_URL — backend deploy pending"
-    warn "Fix with:  cd ${INSTALL_DIR} && bunx convex login && bun scripts/auto-bootstrap.mjs"
+    warn "No deploy key given — backend NOT deployed"
+    warn "Re-run the installer, or:  sudo guardasli convex   (asks for the key)"
   fi
 
   # Admin bootstrap (idempotent, safe to re-run).
-  if [ -n "${VITE_CONVEX_URL:-}" ] || [ -n "${CONVEX_DEPLOY_KEY:-}" ]; then
+  if [ -n "${VITE_CONVEX_URL:-}" ] && [ -n "${CONVEX_DEPLOY_KEY:-}" ]; then
     info "Bootstrapping super admin..."
     bun scripts/auto-bootstrap.mjs && ok "super admin ready" || warn "bootstrap deferred — rerun after backend is live"
   fi
+}
+
+# Live proof the cloud backend answers: /api/v1/health must say database ok.
+verify_backend_live() {
+  local base="${1:-}"
+  [ -n "$base" ] || { warn "no backend URL to verify"; return 1; }
+  info "Verifying live backend at ${base}..."
+  local body i
+  for i in 1 2 3 4 5; do
+    body="$(curl -fsS --max-time 20 "${base}/api/v1/health" 2>/dev/null || true)"
+    if printf '%s' "$body" | grep -q '"database":"ok"'; then
+      ok "backend live — database ok (${base}/api/v1/health)"
+      return 0
+    fi
+    [ "$i" -lt 5 ] && { info "retry ${i}/5 (fresh deployment can take a minute)..."; sleep 12; }
+  done
+  warn "health check did not confirm yet: ${body:-<no answer>}"
+  warn "test later: curl ${base}/api/v1/health   — expect \"database\":\"ok\""
+  return 1
 }
 
 # -----------------------------------------------------------------------------
@@ -371,8 +466,9 @@ print_summary_and_panel() {
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
   echo "  Path      : ${INSTALL_DIR}"
   echo "  Env file  : ${ENV_FILE}"
-  echo "  Domain    : ${DOMAIN:-<none — serving on :${PORT_UI}>}"
-  echo "  URL       : ${DOMAIN:+https://${DOMAIN}}${DOMAIN:-http://<server-ip>:${PORT_UI}}"
+  echo "  Domain    : ${DOMAIN:-<none>}${SERVER_IP:+  ·  IP: ${SERVER_IP}}"
+  echo "  URL       : ${DOMAIN:+https://${DOMAIN}}${DOMAIN:-http://${SERVER_IP:-<server-ip>}:${PORT_UI}}"
+  echo "  Backend   : ${VITE_CONVEX_URL:-<not deployed — no deploy key>}${CONVEX_DEPLOY_KEY:+ }"
   echo "  Admin     : ${GUARDASLI_ADMIN_USER:-admin}"
   echo "  Password  : ${GUARDASLI_ADMIN_PASS:-<see ${ENV_FILE}>}"
   echo ""
@@ -380,8 +476,8 @@ print_summary_and_panel() {
   echo "    guardasli panel      <- interactive management panel (opens next)"
   echo "    guardasli status | doctor | logs | ssl | backup | update"
   echo ""
-  if [ -z "${CONVEX_DEPLOY_KEY:-}" ] && [ -z "${VITE_CONVEX_URL:-}" ]; then
-    warn "Backend pending: cd ${INSTALL_DIR} && bunx convex login, then: guardasli repair"
+  if [ -z "${CONVEX_DEPLOY_KEY:-}" ]; then
+    warn "Backend pending: re-run installer with the deploy key, or: sudo guardasli convex"
   fi
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
   echo ""

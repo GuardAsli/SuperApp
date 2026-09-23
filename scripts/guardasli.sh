@@ -413,6 +413,21 @@ do_reconfigure() {
   printf "HTTP port [%s]: " "$(env_get GUARDASLI_PORT 3000)"
   read -r P
   [ -n "${P}" ] && env_upsert GUARDASLI_PORT "${P}"
+  # Server IP is re-detected automatically — never asked, never a loopback/link-local value.
+  local ip=""
+  ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')"
+  if [ -z "${ip}" ] || [ "${ip%%.*}" = "127" ] || [ "${ip%%.*}" = "169" ]; then
+    ip="$(hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i !~ /^169\.254\./ && $i !~ /^127\./){print $i; exit}}')"
+  fi
+  if [ -n "${ip}" ] && { [ "${ip%%.*}" = "127" ] || [ "${ip%%.*}" = "169" ]; }; then ip=""; fi
+  if [ -n "${ip}" ]; then
+    env_upsert GUARDASLI_SERVER_IP "${ip}"
+    if [ -z "${D}" ] && [ -z "$(env_get GUARDASLI_MAIN_DOMAIN)" ]; then
+      env_upsert GUARDASLI_PUBLIC_URL "http://${ip}:$(env_get GUARDASLI_PORT 3000)"
+      env_upsert GUARDASLI_CORS_ORIGINS "http://${ip}:$(env_get GUARDASLI_PORT 3000)"
+    fi
+    ok "Server IP detected: ${ip}"
+  fi
   ok "Configuration saved"
 }
 
@@ -478,25 +493,40 @@ convex_deploy() {
   (
     cd "${GUARDASLI_APP_DIR}" || exit 1
     set -a; . "${GUARDASLI_ENV}" 2>/dev/null; set +a
-    if [ -n "${CONVEX_DEPLOY_KEY:-}" ] || [ -n "${VITE_CONVEX_URL:-}" ]; then
-      bunx convex deploy --yes 2>&1 | tail -5 \
-        && ok "Convex backend deployed" \
-        || warn "deploy had errors — check CONVEX_DEPLOY_KEY"
-      bun scripts/auto-bootstrap.mjs 2>/dev/null && ok "super admin ensured" || true
+    if [ -n "${CONVEX_DEPLOY_KEY:-}" ]; then
+      info "Deploy key present — deploying"
     else
-      warn "No CONVEX_DEPLOY_KEY / VITE_CONVEX_URL in ${GUARDASLI_ENV}"
-      printf "Paste a Convex deploy key (blank to abort): "
+      warn "No CONVEX_DEPLOY_KEY in ${GUARDASLI_ENV}"
+      info "Copy the FULL key from dashboard.convex.dev > your project > Settings > Deploy Keys"
+      info "It includes the deployment prefix, like:  prod:your-deployment|eyJ2MiI6..."
+      printf "Paste the full deploy key (blank to abort): "
       read -r KEY
-      if [ -n "${KEY}" ]; then
-        env_upsert CONVEX_DEPLOY_KEY "${KEY}"
-        export CONVEX_DEPLOY_KEY="${KEY}"
-        bunx convex deploy --yes 2>&1 | tail -5 \
-          && ok "Convex backend deployed" \
-          || warn "deploy failed — verify the key"
-        bun scripts/auto-bootstrap.mjs 2>/dev/null && ok "super admin ensured" || true
-      else
-        info "Aborted — get a key at dashboard.convex.dev (Settings > Deploy Keys)"
+      [ -z "${KEY}" ] && { info "Aborted"; return; }
+      case "${KEY}" in
+        dev:*|prod:*) [ "${KEY}" = "${KEY%%|*}" ] && { err "incomplete key — the 'prod:name|token' part before '|' is missing"; return; } ;;
+        *) err "key must start with 'prod:' or 'dev:' — a bare token is not accepted"; return ;;
+      esac
+      env_upsert CONVEX_DEPLOY_KEY "${KEY}"
+      export CONVEX_DEPLOY_KEY="${KEY}"
+      local dname="${KEY%%|*}"; dname="${dname#*:}"
+      env_upsert VITE_CONVEX_URL "https://${dname}.convex.site"
+      export VITE_CONVEX_URL="https://${dname}.convex.site"
+    fi
+    if bunx convex deploy --yes 2>&1 | tail -5; then
+      ok "Convex backend deployed"
+      local base="${VITE_CONVEX_URL:-}"
+      if [ -n "${base}" ]; then
+        sleep 3
+        if curl -fsS --max-time 20 "${base}/api/v1/health" 2>/dev/null | grep -q '"database":"ok"'; then
+          ok "live check passed: ${base}/api/v1/health (database ok)"
+        else
+          warn "live check pending — test in a minute: curl ${base}/api/v1/health"
+        fi
       fi
+      bun scripts/auto-bootstrap.mjs 2>/dev/null && ok "super admin ensured" || true
+      ${SUDO:-} systemctl restart "${GUARDASLI_SERVICE}" 2>/dev/null || true
+    else
+      warn "deploy failed — verify the key with: bunx convex deploy --yes"
     fi
   )
   svc_start
@@ -513,7 +543,7 @@ show_admin_info() {
   else
     warn "No password stored — reset it with menu 5 (Create super admin)"
   fi
-  ok "URL: $(env_get GUARDASLI_PUBLIC_URL "http://127.0.0.1:$(env_get GUARDASLI_PORT 3000)")"
+  ok "URL: $(env_get GUARDASLI_PUBLIC_URL "http://$(env_get GUARDASLI_SERVER_IP '<server-ip>'):$(env_get GUARDASLI_PORT 3000)")"
   warn "Keep these credentials private — stored in ${GUARDASLI_ENV} (mode 600)"
 }
 
