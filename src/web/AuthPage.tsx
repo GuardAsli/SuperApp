@@ -1,10 +1,24 @@
-/** GuardAsli — صفحه احراز هویت متصل به بک‌اند واقعی. */
+/** GuardAsli — صفحه ورود/ثبت‌نام متصل به بک‌اند واقعی. */
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { GUARDASLI } from "../core/identity";
 
 type Mode = "login" | "register";
+
+const FRIENDLY_ERROR: Record<string, string> = {
+  UNAUTHENTICATED: "نام کاربری یا رمز درست نیست.",
+  RATE_LIMITED: "چند بار تلاش کردید؛ کمی صبر کنید و دوباره امتحان کنید.",
+  FORBIDDEN: "حساب شما فعلاً اجازه‌ی ورود ندارد.",
+  VALIDATION_ERROR: "اطلاعات وارد‌شده درست نیست.",
+  CONFLICT: "این نام کاربری قبلاً گرفته شده.",
+};
+
+function friendly(msg: string): string {
+  const code = msg.split(":")[0]?.trim() ?? "";
+  return FRIENDLY_ERROR[code] ?? "مشکلی پیش آمد؛ دوباره تلاش کنید.";
+}
 
 export default function AuthPage() {
   const [mode, setMode] = useState<Mode>("login");
@@ -12,6 +26,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [okNote, setOkNote] = useState<string | null>(null);
 
   const loginAction = useAction(api.authActions.loginAction);
   const registerAction = useAction(api.authActions.registerAction);
@@ -20,6 +35,7 @@ export default function AuthPage() {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setOkNote(null);
     try {
       if (mode === "login") {
         const res = await loginAction({ username, password });
@@ -30,10 +46,10 @@ export default function AuthPage() {
       } else {
         await registerAction({ username, password, role: "user" });
         setMode("login");
-        setError(null);
+        setOkNote("حساب ساخته شد؛ حالا وارد شوید.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "خطای ناشناخته");
+      setError(err instanceof Error ? friendly(err.message) : "مشکلی پیش آمد؛ دوباره تلاش کنید.");
     } finally {
       setBusy(false);
     }
@@ -41,22 +57,37 @@ export default function AuthPage() {
 
   return (
     <div className="mx-auto flex min-h-full max-w-md flex-col justify-center px-6 py-12">
-      <a href="#/" className="mb-8 text-center">
-        <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-core-primary text-xl font-black text-core-primaryFg">
+      <div className="aurora" aria-hidden="true" />
+
+      <motion.a
+        href="#/"
+        className="mb-8 text-center"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+      >
+        <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-core-primary text-xl font-black text-core-primaryFg shadow-sm">
           گ
         </div>
         <div className="mt-3 text-xl font-extrabold">{GUARDASLI.product}</div>
-        <div className="text-xs text-core-muted">توسعه‌ی {GUARDASLI.developer}</div>
-      </a>
+        <div className="text-xs text-core-muted">ساخته‌ی {GUARDASLI.developer}</div>
+      </motion.a>
 
-      <form
+      <motion.form
         onSubmit={submit}
-        className="rounded-2xl border bg-core-surface p-6 shadow-sm"
+        className="card p-6"
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
       >
         <h1 className="text-xl font-extrabold">
-          {mode === "login" ? "ورود" : "ثبت‌نام"}
+          {mode === "login" ? "خوش آمدید 👋" : "ساخت حساب جدید"}
         </h1>
-        <label className="mt-4 block text-sm font-semibold">
+        <p className="mt-1 text-sm text-core-muted">
+          {mode === "login" ? "وارد حساب خودتان شوید." : "چند ثانیه بیشتر طول نمی‌کشد."}
+        </p>
+
+        <label className="mt-5 block text-sm font-semibold">
           نام کاربری
           <input
             value={username}
@@ -65,7 +96,7 @@ export default function AuthPage() {
             minLength={3}
             maxLength={32}
             pattern="[a-zA-Z0-9_.\-]+"
-            className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2 outline-none focus:border-core-primary"
+            className="input mt-1 w-full px-3 py-2"
             dir="ltr"
           />
         </label>
@@ -77,33 +108,52 @@ export default function AuthPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
-            className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2 outline-none focus:border-core-primary"
+            className="input mt-1 w-full px-3 py-2"
             dir="ltr"
           />
         </label>
+
         {error && (
-          <p className="mt-3 rounded-lg bg-core-danger/10 px-3 py-2 text-sm text-core-danger">
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-3 rounded-lg bg-core-danger/10 px-3 py-2 text-sm text-core-danger"
+          >
             {error}
-          </p>
+          </motion.p>
         )}
+        {okNote && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-3 rounded-lg bg-core-ok/10 px-3 py-2 text-sm text-core-ok"
+          >
+            {okNote}
+          </motion.p>
+        )}
+
         <button
           type="submit"
           disabled={busy}
-          className="mt-5 w-full rounded-xl bg-core-primary py-3 font-bold text-core-primaryFg transition hover:opacity-90 disabled:opacity-50"
+          className="btn-primary mt-5 w-full py-3 font-bold disabled:opacity-50"
         >
-          {busy ? "در حال پردازش…" : mode === "login" ? "ورود" : "ایجاد حساب"}
+          {busy ? "یک لحظه…" : mode === "login" ? "ورود" : "ساخت حساب"}
         </button>
         <button
           type="button"
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
+          onClick={() => {
+            setMode(mode === "login" ? "register" : "login");
+            setError(null);
+            setOkNote(null);
+          }}
           className="mt-3 w-full text-center text-sm text-core-primary hover:underline"
         >
-          {mode === "login" ? "حساب ندارید؟ ثبت‌نام کنید" : "حساب دارید؟ وارد شوید"}
+          {mode === "login" ? "حساب ندارید؟ بسازید" : "حساب دارید؟ وارد شوید"}
         </button>
-      </form>
+      </motion.form>
 
       <a href="#/" className="mt-6 text-center text-sm text-core-muted hover:underline">
-        بازگشت به صفحه اصلی
+        بازگشت به صفحه‌ی اصلی
       </a>
     </div>
   );

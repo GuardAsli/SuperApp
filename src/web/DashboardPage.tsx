@@ -1,10 +1,28 @@
 /** GuardAsli — داشبورد با تب‌های مدیریت حرفه‌ای */
 import { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { GUARDASLI } from "../core/identity";
 import { saveBranding, type TenantBranding } from "./branding";
 import { getLocale, setLocale, t, type Locale } from "./i18n";
+
+const FRIENDLY: Record<string, { fa: string; en: string }> = {
+  UNAUTHENTICATED: { fa: "نشست منقضی شده؛ دوباره وارد شوید.", en: "Session expired; please sign in again." },
+  FORBIDDEN: { fa: "اجازه‌ی این کار را ندارید.", en: "You are not allowed to do this." },
+  VALIDATION_ERROR: { fa: "اطلاعات وارد‌شده درست نیست.", en: "Please check the entered values." },
+  RATE_LIMITED: { fa: "کمی صبر کنید و دوباره تلاش کنید.", en: "Slow down a little and retry." },
+  NOT_FOUND: { fa: "چیزی که می‌خواستید پیدا نشد.", en: "Not found." },
+  CONFLICT: { fa: "این مورد قبلاً ثبت شده.", en: "Already exists." },
+  QUOTA_EXCEEDED: { fa: "سهمیه‌ی شما پر است.", en: "Quota exceeded." },
+  PAYMENT_REQUIRED: { fa: "موجودی کافی نیست.", en: "Insufficient balance." },
+};
+
+function friendlyMsg(raw: string, locale: Locale): string {
+  const code = raw.split(":")[0]?.trim() ?? "";
+  const row = FRIENDLY[code];
+  return row ? row[locale] : raw;
+}
 
 interface Props {
   branding: TenantBranding;
@@ -149,20 +167,20 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
           receiptStorageId: storageId as never,
           idempotencyKey: key,
         });
-        setMsg(`card_to_card · pending_review · ${res.paymentId}`);
+        setMsg(locale === "fa" ? `رسید ثبت شد و در انتظار بررسی است ✅ (${res.paymentId})` : `Receipt submitted, pending review (${res.paymentId})`);
       } else if (chargeMethod === "cubepay") {
         if (!methodMap.cubepay) throw new Error("FORBIDDEN: CubePay disabled");
         const res = await createCube({ token, amountRials: n, idempotencyKey: key });
         if (res.paymentLink) window.open(res.paymentLink, "_blank");
-        setMsg(`CubePay · ${res.paymentId}`);
+        setMsg(locale === "fa" ? `به صفحه پرداخت CubePay منتقل شدید ✅` : `Redirected to CubePay ✅`);
       } else {
         if (!methodMap.tetraminator) throw new Error("FORBIDDEN: Tetraminator disabled");
         const res = await createTetra({ token, priceToman: n, idempotencyKey: key });
         if (res.paymentLink) window.open(res.paymentLink, "_blank");
-        setMsg(`Tetraminator · ${res.paymentId}`);
+        setMsg(locale === "fa" ? `به صفحه پرداخت Tetraminator منتقل شدید ✅` : `Redirected to Tetraminator ✅`);
       }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "error");
+      setMsg(e instanceof Error ? friendlyMsg(e.message, locale) : (locale === "fa" ? "مشکلی پیش آمد" : "Something went wrong"));
     } finally {
       setBusy(false);
     }
@@ -176,7 +194,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
       setProvKey("");
       setMsg(t("save", locale));
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "error");
+      setMsg(e instanceof Error ? friendlyMsg(e.message, locale) : (locale === "fa" ? "مشکلی پیش آمد" : "Something went wrong"));
     } finally {
       setBusy(false);
     }
@@ -194,9 +212,9 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
         reason: adminReason || "admin credit",
         idempotencyKey: `adm_${Date.now()}`,
       });
-      setMsg("OK");
+      setMsg(locale === "fa" ? "انجام شد ✅" : "Done ✅");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "error");
+      setMsg(e instanceof Error ? friendlyMsg(e.message, locale) : (locale === "fa" ? "مشکلی پیش آمد" : "Something went wrong"));
     } finally {
       setBusy(false);
     }
@@ -211,9 +229,9 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
         planId: planId as never,
         idempotencyKey: `buy_${planId}_${Date.now()}`,
       });
-      setMsg(`purchase · ${res.subscriptionId ?? "deduped"}`);
+      setMsg(locale === "fa" ? "پلن خریداری شد ✅" : "Plan purchased ✅");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "error");
+      setMsg(e instanceof Error ? friendlyMsg(e.message, locale) : (locale === "fa" ? "مشکلی پیش آمد" : "Something went wrong"));
     } finally {
       setBusy(false);
     }
@@ -221,6 +239,8 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8" dir={locale === "fa" ? "rtl" : "ltr"}>
+      <div className="aurora" aria-hidden="true" />
+
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold">
@@ -251,7 +271,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
         </div>
       </header>
 
-      <nav className="mt-6 flex flex-wrap gap-2 border-b border-white/10 pb-3">
+      <nav className="mt-6 flex flex-wrap gap-2 border-b pb-3">
         {tabs.map(([key, label]) => (
           <button
             key={key}
@@ -259,8 +279,8 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
             onClick={() => setTab(key)}
             className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
               tab === key
-                ? "bg-core-primary text-core-primaryFg shadow"
-                : "border border-transparent hover:border-white/20 hover:bg-core-surface"
+                ? "bg-core-primary text-core-primaryFg shadow-sm"
+                : "hover:bg-core-surface"
             }`}
           >
             {label}
@@ -268,11 +288,20 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
         ))}
       </nav>
 
-      {msg && (
-        <p className="mt-4 rounded-lg border bg-core-surface px-3 py-2 text-sm" dir="ltr">
-          {msg}
-        </p>
-      )}
+      <AnimatePresence mode="wait">
+        {msg && (
+          <motion.p
+            key={msg}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="card mt-4 px-3 py-2 text-sm"
+            dir="auto"
+          >
+            {msg}
+          </motion.p>
+        )}
+      </AnimatePresence>
 
       <main className="mt-6">
         {tab === "overview" && (
@@ -287,7 +316,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
         )}
 
         {tab === "wallet" && (
-          <div className="rounded-2xl border bg-core-surface p-6">
+          <div className="card p-6">
             <h2 className="text-lg font-extrabold">{t("wallet", locale)}</h2>
             <div className="mt-4 text-3xl font-black">
               {wallet ? wallet.balance.toLocaleString(locNum) : "…"}{" "}
@@ -327,7 +356,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
 
         {tab === "charge" && (
           <div className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border bg-core-surface p-6">
+            <div className="card p-6">
               <h2 className="text-lg font-extrabold">{t("charge", locale)}</h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 {(["tetraminator", "cubepay", "card"] as const).map((m) => (
@@ -352,7 +381,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
                 <input
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2"
+                  className="input mt-1 w-full px-3 py-2"
                   dir="ltr"
                   inputMode="numeric"
                 />
@@ -364,7 +393,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
                     <select
                       value={cardId}
                       onChange={(e) => setCardId(e.target.value)}
-                      className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2"
+                      className="input mt-1 w-full px-3 py-2"
                     >
                       <option value="">—</option>
                       {(cards ?? []).map(
@@ -391,12 +420,12 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
                 type="button"
                 disabled={busy}
                 onClick={doCharge}
-                className="mt-4 w-full rounded-xl bg-core-primary py-3 font-bold text-core-primaryFg disabled:opacity-50"
+                className="btn-primary mt-4 w-full py-3 font-bold disabled:opacity-50"
               >
                 {t("submit", locale)}
               </button>
             </div>
-            <div className="rounded-2xl border bg-core-surface p-6">
+            <div className="card p-6">
               <h2 className="text-lg font-extrabold">{t("providerConfig", locale)}</h2>
               <ul className="mt-3 space-y-1 text-sm">
                 {(providerCfgs ?? []).map(
@@ -412,8 +441,8 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
                 type="password"
                 value={provKey}
                 onChange={(e) => setProvKey(e.target.value)}
-                placeholder="API Key / Bearer"
-                className="mt-4 w-full rounded-lg border bg-core-bg px-3 py-2"
+                placeholder={locale === "fa" ? "کلید API" : "API Key"}
+                className="input mt-4 w-full px-3 py-2"
                 dir="ltr"
               />
               <div className="mt-3 flex gap-2">
@@ -439,7 +468,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
         )}
 
         {tab === "payments" && (
-          <div className="rounded-2xl border bg-core-surface p-6">
+          <div className="card p-6">
             <h2 className="text-lg font-extrabold">{t("history", locale)}</h2>
             <ul className="mt-4 divide-y">
               {(
@@ -482,7 +511,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {((plans ?? []) as Array<{ _id: string; name: string; kind: string; price: number }>).map(
               (p) => (
-                <div key={p._id} className="rounded-2xl border bg-core-surface p-5">
+                <div key={p._id} className="card p-5">
                   <h3 className="text-lg font-bold">{p.name}</h3>
                   <div className="mt-3 text-2xl font-black">{p.price.toLocaleString(locNum)}</div>
                   <button
@@ -505,7 +534,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
 
         {tab === "monitor" && isAdmin && (
           <div className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border bg-core-surface p-6">
+            <div className="card p-6">
               <h2 className="text-lg font-extrabold">{t("health", locale)}</h2>
               <ul className="mt-4 space-y-2 text-sm">
                 {(health ?? []).map((h: { target: string; state: string; checkedAt: number }) => (
@@ -517,7 +546,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
                 {(!health || health.length === 0) && <li className="text-core-muted">—</li>}
               </ul>
             </div>
-            <div className="rounded-2xl border bg-core-surface p-6">
+            <div className="card p-6">
               <h2 className="text-lg font-extrabold">{t("jobs", locale)}</h2>
               {jobStats ? (
                 <div className="mt-4 space-y-2 font-mono text-sm" dir="ltr">
@@ -539,7 +568,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
 
         {tab === "admin" && isAdmin && (
           <div className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border bg-core-surface p-6">
+            <div className="card p-6">
               <h2 className="text-lg font-extrabold">{t("pendingReview", locale)}</h2>
               <ul className="mt-4 space-y-3">
                 {(pending ?? []).map((p: { _id: string; amount: number; method: string }) => (
@@ -581,7 +610,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
                 {pending && pending.length === 0 && <li className="text-sm text-core-muted">—</li>}
               </ul>
             </div>
-            <div className="rounded-2xl border bg-core-surface p-6">
+            <div className="card p-6">
               <h2 className="text-lg font-extrabold">{t("adminCredit", locale)}</h2>
               <input
                 placeholder="target user id"
@@ -594,20 +623,20 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
                 placeholder={t("amount", locale)}
                 value={adminAmount}
                 onChange={(e) => setAdminAmount(e.target.value)}
-                className="mt-2 w-full rounded-lg border bg-core-bg px-3 py-2"
+                className="input mt-2 w-full px-3 py-2"
                 dir="ltr"
               />
               <input
                 placeholder={locale === "fa" ? "دلیل" : "Reason"}
                 value={adminReason}
                 onChange={(e) => setAdminReason(e.target.value)}
-                className="mt-2 w-full rounded-lg border bg-core-bg px-3 py-2"
+                className="input mt-2 w-full px-3 py-2"
               />
               <button
                 type="button"
                 disabled={busy}
                 onClick={doAdminCredit}
-                className="mt-3 rounded-xl bg-core-primary px-4 py-2 font-bold text-core-primaryFg"
+                className="btn-primary mt-3 px-4 py-2 font-bold"
               >
                 {t("submit", locale)}
               </button>
@@ -650,27 +679,94 @@ function BrandingPanel({
     saveBranding(next);
     onChange(next);
   }
+  const fa = getLocale() === "fa";
+  const colorRow = (key: "primaryColor" | "secondaryColor" | "accentColor" | "backgroundColor") => (
+    <label className="mt-4 block text-sm font-semibold">
+      {fa
+        ? key === "primaryColor"
+          ? "رنگ اصلی"
+          : key === "secondaryColor"
+            ? "رنگ دوم"
+            : key === "accentColor"
+              ? "رنگ تأکید"
+              : "رنگ پس‌زمینه"
+        : key.replace("Color", " color")}
+      <div className="mt-1 flex items-center gap-3">
+        <input
+          type="color"
+          value={branding[key]}
+          onChange={(e) => update(key, e.target.value)}
+          className="h-10 w-14 cursor-pointer rounded-lg border"
+        />
+        <input
+          value={branding[key]}
+          onChange={(e) => update(key, e.target.value)}
+          className="input w-32 px-3 py-2"
+          dir="ltr"
+        />
+      </div>
+    </label>
+  );
   return (
-    <div className="rounded-2xl border bg-core-surface p-6">
-      <h2 className="text-lg font-extrabold">Branding</h2>
+    <div className="card p-6">
+      <h2 className="text-lg font-extrabold">{fa ? "شخصی‌سازی ظاهر" : "Branding"}</h2>
       <p className="mt-1 text-sm text-core-muted">
-        Core ({GUARDASLI.product} / {GUARDASLI.developer}) is fixed.
+        {fa
+          ? "اسم و رنگ‌ها را به سلیقه‌ی خودتان عوض کنید."
+          : "Change the name and colors as you like."}{" "}
+        ({GUARDASLI.product} / {GUARDASLI.developer})
       </p>
       <label className="mt-4 block text-sm font-semibold">
-        Display name
+        {fa ? "اسم نمایشی" : "Display name"}
         <input
           value={branding.displayName}
           onChange={(e) => update("displayName", e.target.value)}
-          className="mt-1 w-full rounded-lg border bg-core-bg px-3 py-2"
+          className="input mt-1 w-full px-3 py-2"
         />
       </label>
+      {colorRow("primaryColor")}
+      {colorRow("secondaryColor")}
+      {colorRow("accentColor")}
+      {colorRow("backgroundColor")}
+      <div className="mt-4 block text-sm font-semibold">
+        {fa ? "حالت نمایش" : "Theme"}
+        <div className="mt-1 flex gap-2">
+          {(["light", "dark", "system"] as const).map((th) => (
+            <button
+              key={th}
+              type="button"
+              onClick={() => update("theme", th)}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                branding.theme === th ? "bg-core-primary text-core-primaryFg" : "btn-ghost"
+              }`}
+            >
+              {th === "light" ? (fa ? "روشن" : "Light") : th === "dark" ? (fa ? "تاریک" : "Dark") : fa ? "سیستمی" : "System"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          const def = { ...branding, theme: "light" as const };
+          update("displayName", GUARDASLI.product);
+          update("primaryColor", "#0ea5e9");
+          update("secondaryColor", "#38bdf8");
+          update("accentColor", "#f59e0b");
+          update("backgroundColor", "#f7fbff");
+          update("theme", def.theme);
+        }}
+        className="btn-ghost mt-5 px-4 py-2 text-sm font-semibold"
+      >
+        {fa ? "بازگشت به تم پیش‌فرض" : "Reset to default"}
+      </button>
     </div>
   );
 }
 
 function StatCard({ title, value }: { title: string; value: string }) {
   return (
-    <div className="rounded-2xl border bg-core-surface p-5">
+    <div className="card p-5">
       <div className="text-sm font-semibold text-core-muted">{title}</div>
       <div className="mt-2 text-2xl font-black">{value}</div>
     </div>

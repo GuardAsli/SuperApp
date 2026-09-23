@@ -2,18 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* تم پیش‌فرض: سفید مرواریدی + آبی آسمانی روشن — مینیمال و مدرن */
 :root {
-  --ga-bg: #f6f7f9;
+  --ga-bg: #f7fbff;
   --ga-surface: #ffffff;
-  --ga-border: #e2e5ea;
-  --ga-text: #101828;
-  --ga-muted: #5b6474;
-  --ga-primary: #0f766e;
+  --ga-border: #e3edf6;
+  --ga-text: #0f2437;
+  --ga-muted: #5c7288;
+  --ga-primary: #0ea5e9;
   --ga-primary-fg: #ffffff;
-  --ga-accent: #b45309;
-  --ga-danger: #dc2626;
-  --ga-ok: #15803d;
-  --ga-warn: #d97706;
+  --ga-accent: #f59e0b;
+  --ga-danger: #e5484d;
+  --ga-ok: #30a46c;
+  --ga-warn: #f5a623;
+  --ga-glow: rgba(14, 165, 233, 0.16);
+  --ga-shadow: 0 1px 2px rgba(15, 36, 55, 0.05), 0 8px 24px rgba(14, 165, 233, 0.07);
+  --ga-radius: 16px;
 }
 
 .dark {
@@ -22,12 +26,14 @@
   --ga-border: #22304a;
   --ga-text: #e6eaf2;
   --ga-muted: #8b95a9;
-  --ga-primary: #2dd4bf;
+  --ga-primary: #38bdf8;
   --ga-primary-fg: #062018;
   --ga-accent: #f59e0b;
   --ga-danger: #f87171;
   --ga-ok: #4ade80;
   --ga-warn: #fbbf24;
+  --ga-glow: rgba(56, 189, 248, 0.14);
+  --ga-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
 html,
@@ -46,8 +52,102 @@ body {
     -apple-system,
     sans-serif;
   margin: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
   border-color: var(--ga-border);
+}
+
+/* ابزارهای ظاهری مشترک */
+.card {
+  background: var(--ga-surface);
+  border: 1px solid var(--ga-border);
+  border-radius: var(--ga-radius);
+  box-shadow: var(--ga-shadow);
+}
+
+.btn-primary {
+  background: var(--ga-primary);
+  color: var(--ga-primary-fg);
+  border-radius: 12px;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.btn-primary:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 20px var(--ga-glow);
+  transform: translateY(-1px);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-ghost {
+  border: 1px solid var(--ga-border);
+  background: transparent;
+  border-radius: 12px;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.btn-ghost:hover {
+  background: var(--ga-surface);
+  transform: translateY(-1px);
+}
+
+.input {
+  background: var(--ga-bg);
+  border: 1px solid var(--ga-border);
+  border-radius: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--ga-primary);
+  box-shadow: 0 0 0 3px var(--ga-glow);
+}
+
+/* حرکت پس‌زمینه‌ی ملایم — دو هاله‌ی آسمانی */
+.aurora {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+}
+.aurora::before,
+.aurora::after {
+  content: "";
+  position: absolute;
+  width: 44rem;
+  height: 44rem;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.5;
+}
+.aurora::before {
+  background: radial-gradient(circle, var(--ga-glow), transparent 65%);
+  top: -12rem;
+  inset-inline-start: -10rem;
+  animation: drift 22s ease-in-out infinite alternate;
+}
+.aurora::after {
+  background: radial-gradient(circle, var(--ga-glow), transparent 65%);
+  bottom: -14rem;
+  inset-inline-end: -12rem;
+  animation: drift 26s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4rem, 3rem, 0) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora::before,
+  .aurora::after {
+    animation: none;
+  }
 }

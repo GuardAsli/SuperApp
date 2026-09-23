@@ -9,14 +9,15 @@ export interface TenantBranding {
   theme: "light" | "dark" | "system";
 }
 
-/** برندینگ پیش‌فرض = هویت Core؛ tenant می‌تواند آن را override کند اما Core ثابت می‌ماند. */
+/** تم پیش‌فرض: سفید مرواریدی + آبی آسمانی روشن — مینیمال و مدرن.
+ *  هر tenant می‌تواند همه‌ی رنگ‌ها و تم را از پنل عوض کند؛ هویت Core ثابت می‌ماند. */
 export const CORE_BRANDING: TenantBranding = {
   displayName: "GuardAsli",
-  primaryColor: "#0f766e",
-  secondaryColor: "#0ea5e9",
-  accentColor: "#b45309",
-  backgroundColor: "#0b1220",
-  theme: "dark",
+  primaryColor: "#0ea5e9",
+  secondaryColor: "#38bdf8",
+  accentColor: "#f59e0b",
+  backgroundColor: "#f7fbff",
+  theme: "light",
 };
 
 const STORAGE_KEY = "guardasli.branding";
