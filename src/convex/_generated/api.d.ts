@@ -20,6 +20,7 @@ import type * as clientApi from "../clientApi.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as httpApi from "../httpApi.js";
+import type * as httpAuth from "../httpAuth.js";
 import type * as infra from "../infra.js";
 import type * as jobs from "../jobs.js";
 import type * as paymentActions from "../paymentActions.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   http: typeof http;
   httpApi: typeof httpApi;
+  httpAuth: typeof httpAuth;
   infra: typeof infra;
   jobs: typeof jobs;
   paymentActions: typeof paymentActions;

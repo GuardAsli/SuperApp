@@ -3,6 +3,7 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { newRequestId, safeInternalMessage } from "../core/errors";
 import { GUARDASLI, INITIAL_VERSIONS } from "../core/identity";
+import { healthHandler, registerHandler, loginHandler, refreshHandler } from "./httpAuth";
 
 /**
  * CORS با allowlist از systemSettings (کلید cors_origins) — بدون wildcard.
@@ -75,6 +76,26 @@ interface RouteDef {
 }
 
 const routes: RouteDef[] = [
+  {
+    path: "/api/v1/health",
+    method: "GET",
+    handler: (ctx, _req, requestId, headers) => healthHandler(ctx, requestId, headers),
+  },
+  {
+    path: "/api/v1/auth/register",
+    method: "POST",
+    handler: (ctx, req, requestId, headers) => registerHandler(ctx, req, requestId, headers),
+  },
+  {
+    path: "/api/v1/auth/login",
+    method: "POST",
+    handler: (ctx, req, requestId, headers) => loginHandler(ctx, req, requestId, headers),
+  },
+  {
+    path: "/api/v1/auth/refresh",
+    method: "POST",
+    handler: (ctx, req, requestId, headers) => refreshHandler(ctx, req, requestId, headers),
+  },
   {
     path: "/api/v1/ping",
     method: "GET",
@@ -205,6 +226,42 @@ function buildOpenApiSpec(): Record<string, unknown> {
       },
     },
     paths: {
+      "/api/v1/health": {
+        get: {
+          summary: "بررسی سلامت API و اتصال واقعی دیتابیس",
+          responses: { "200": { description: "OK" }, "503": { description: "دیتابیس در دسترس نیست" } },
+        },
+      },
+      "/api/v1/auth/register": {
+        post: {
+          summary: "ثبت‌نام کاربر (rate-limit + scrypt)",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["username", "password"], properties: { username: { type: "string" }, password: { type: "string" }, parentUsername: { type: "string" } } } } },
+          },
+          responses: { "201": { description: "ساخته شد" }, "400": { description: "خطا" }, "409": { description: "تکراری" }, "429": { description: "محدود" } },
+        },
+      },
+      "/api/v1/auth/login": {
+        post: {
+          summary: "ورود و ساخت نشست ۷ روزه",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["username", "password"], properties: { username: { type: "string" }, password: { type: "string" } } } } },
+          },
+          responses: { "200": { description: "OK" }, "400": { description: "خطا" }, "401": { description: "نامعتبر" }, "429": { description: "محدود" } },
+        },
+      },
+      "/api/v1/auth/refresh": {
+        post: {
+          summary: "چرخش نشست با refresh token",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["refreshToken"], properties: { refreshToken: { type: "string" } } } } },
+          },
+          responses: { "200": { description: "OK" }, "400": { description: "خطا" }, "401": { description: "نامعتبر" } },
+        },
+      },
       "/api/v1/ping": { get: { summary: "سلام", responses: { "200": { description: "OK" } } } },
       "/api/v1/version": {
         get: {
