@@ -34,11 +34,11 @@ DEK ──wrap──► KEK (local MASTER | GUARDASLI_KMS_KEK | HTTP→Cloud KMS
 | `env_kek` | KEK جدا `GUARDASLI_KMS_KEK` (≥32) |
 | `http` | `POST GUARDASLI_KMS_WRAP_URL` با `{op,dek_b64,aad}` |
 
-### اتصال AWS KMS / GCP / Azure
+### اتصال KMS ابری (هر فروشنده)
 
 Convex مستقیماً SDK ابری ندارد؛ الگوی توصیه‌شده:
 
-1. یک **Cloud Function / Lambda** با نقش IAM محدود به `kms:Encrypt` / `kms:Decrypt`
+1. یک **Function/Proxy کوچک** با دسترسی محدود به عملیات wrap/unwrap کلید سرویس KMS
 2. `GUARDASLI_KMS_MODE=http`
 3. `GUARDASLI_KMS_WRAP_URL=https://kms-proxy.example.com/wrap`
 4. `GUARDASLI_KMS_WRAP_TOKEN` برای احراز هویت proxy
@@ -51,6 +51,6 @@ API: `envelopeEncrypt` / `envelopeDecrypt` در `src/core/kms.ts`.
 ### مزیت KMS ابری
 
 - کلید اصلی خارج از Convex env
-- audit در CloudTrail / Cloud Audit Logs
-- rotation متمرکز و policy IAM
+- audit در لاگ‌های سرویس KMS
+- rotation متمرکز و policy دسترسی
 - جداسازی blast radius از dump DB alone (بدون دسترسی KMS، DEK باز نمی‌شود)

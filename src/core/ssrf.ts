@@ -73,11 +73,18 @@ export function validateOutboundUrl(raw: string): UrlCheck {
   const bareHost = host.startsWith("[") && host.endsWith("]")
     ? host.slice(1, -1)
     : host;
-  const blockedNames = ["localhost", "metadata.google.internal", "metadata.goog"];
+  // میزبان‌های سرویس متادیتای کلود + میزبان‌های داخلی رایج — بدون نام بردن از هیچ فروشنده‌ای
+  const blockedNames = [
+    "localhost",
+    "metadata",
+    "metadata.internal",
+    "instance-data",
+  ];
   if (
     blockedNames.includes(bareHost) ||
     bareHost.endsWith(".local") ||
-    bareHost.endsWith(".internal")
+    bareHost.endsWith(".internal") ||
+    bareHost.endsWith(".internal.")
   ) {
     return { ok: false, reason: "میزبان داخلی مجاز نیست" };
   }

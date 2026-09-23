@@ -96,7 +96,7 @@ These are **explicitly out of is0.0.1 code scope** or **environment responsibili
 2. Live E2E against real CubePay/Tetraminator accounts (needs live keys).
 3. Full ACME DNS-01 automation for wildcard SSL (job queued; external DNS worker).
 4. HttpOnly cookie session model (token-in-client is documented model).
-5. True AWS/GCP KMS without HTTP proxy (interface ready; proxy is operator-owned).
+5. Direct cloud-vendor KMS SDK integration without HTTP proxy (interface ready; proxy is operator-owned).
 6. Master key rotation re-encrypt tooling (documented procedure).
 
 None of the above leave **bypassable auth, double wallet credit, or plaintext secrets in API responses** in the shipped code paths.
@@ -106,7 +106,7 @@ None of the above leave **bypassable auth, double wallet credit, or plaintext se
 ## 6. How to verify locally
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git && cd SuperApp
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
 bun run wizard          # secrets + install + typecheck + test + build
 bunx convex dev         # set VITE_CONVEX_URL
 # set same secrets in Convex Dashboard Environment Variables

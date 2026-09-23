@@ -54,7 +54,7 @@ bun scripts/prod-env-check.mjs
 ## چک‌لیست عملیاتی
 
 1. [ ] Secrets فقط در سرور / Convex env
-2. [ ] MFA روی حساب Convex و GitHub
+2. [ ] MFA روی حساب Convex و حساب گیت هاست مخزن
 3. [ ] دامنه + HTTPS واقعی
 4. [ ] CORS فقط originهای خودتان
 5. [ ] Bootstrap admin با رمز قوی، سپس تغییر رمز
