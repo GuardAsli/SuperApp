@@ -50,14 +50,43 @@ is architecturally separate and cannot be renamed or hidden by any tenant role.
 
 ### Requirements
 
-- [Bun](https://bun.sh) ≥ 1.2
+- Ubuntu 22.04/24.04, Debian 11/12 or RHEL-family, 1 GB RAM minimum
+- A domain pointed to the server (for production + SSL)
 - A Convex account (free tier is enough to start)
 
-### Quick install
+### One-line install (VPS, recommended)
+
+Single command installs **everything**: bun, system packages, source, secrets,
+Convex deploy, admin bootstrap, Nginx, SSL and the systemd service:
 
 ```bash
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)" -- --domain panel.example.com --email admin@example.com
+```
+
+Optional: pass a Convex deploy key for a fully non-interactive install:
+
+```bash
+export CONVEX_DEPLOY_KEY=...
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)" -- --domain panel.example.com --email admin@example.com
+```
+
+The installer prints the generated admin password at the end (also stored in
+`/opt/guardasli/app/.env.local`). Manage the server afterwards with:
+
+```bash
+sudo guardasli panel      # interactive management panel (15 options)
+sudo guardasli status     # version is0.0.1 + install path
+sudo guardasli doctor     # system health checks
+```
+
+### Manual install (if you prefer step by step)
+
+```bash
+# 0 — install bun (skip if already installed)
+curl -fsSL https://bun.sh/install | bash && source ~/.bashrc
+
 # 1 — clone and install dependencies
-git clone <repository-url> guardasli && cd guardasli
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
 bun install
 
 # 2 — link Convex and push the database schema (one-time)
@@ -67,7 +96,7 @@ bun convex dev --once
 bun dev
 
 # 4 — verify the installation
-bun test        # 36 unit + integration tests
+bun test        # 82 unit + integration tests
 bun typecheck   # TypeScript, zero errors
 bun run build   # production bundle in dist/
 ```
@@ -157,14 +186,43 @@ Proprietary software of **AsliCode**. All rights reserved.
 
 ### پیش‌نیازها
 
-- [Bun](https://bun.sh) نسخه ۱.۲ یا بالاتر
+- Ubuntu ۲۲.۰۴/۲۴.۰۴، Debian ۱۱/۱۲ یا خانواده RHEL — حداقل ۱ گیگ رم
+- دامنه‌ای که به سرور اشاره می‌کند (برای production و SSL)
 - یک حساب Convex (پلن رایگان برای شروع کافی است)
 
-### نصب سریع
+### نصب یک‌خطی (VPS — پیشنهادی)
+
+یک دستور **همه‌چیز** را نصب می‌کند: bun، بسته‌های سیستم، سورس، secrets،
+deploy موندن Convex، ساخت ادمین، Nginx، SSL و سرویس systemd:
 
 ```bash
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)" -- --domain panel.example.com --email admin@example.com
+```
+
+اختیاری: برای نصب کاملاً بدون تعامل، کلید deploy را پاس دهید:
+
+```bash
+export CONVEX_DEPLOY_KEY=...
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)" -- --domain panel.example.com --email admin@example.com
+```
+
+نصب‌کننده در پایان رمز ادمین تولیدشده را چاپ می‌کند (در
+`/opt/guardasli/app/.env.local` هم ذخیره می‌شود). مدیریت سرور بعد از نصب:
+
+```bash
+sudo guardasli panel      # پنل مدیریت تعاملی (۱۵ گزینه)
+sudo guardasli status     # نسخه is0.0.1 + مسیر نصب
+sudo guardasli doctor     # بررسی سلامت سیستم
+```
+
+### نصب دستی (گام‌به‌گام)
+
+```bash
+# ۰ — نصب bun (اگر نصب نیست)
+curl -fsSL https://bun.sh/install | bash && source ~/.bashrc
+
 # ۱ — کلون و نصب وابستگی‌ها
-git clone <repository-url> guardasli && cd guardasli
+git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
 bun install
 
 # ۲ — اتصال Convex و اعمال اسکیمای پایگاه داده (یک‌بار)
@@ -174,14 +232,10 @@ bun convex dev --once
 bun dev
 
 # ۴ — راستی‌آزمایی نصب
-bun test        # ۳۶ تست واحد و یکپارچه
+bun test        # ۸۲ تست واحد و یکپارچه
 bun typecheck   # تایپ‌اسکریپت، بدون خطا
 bun run build   # خروجی production در dist/
 ```
-
-اولین اجرای `bun convex dev --once` وارد حساب Convex می‌شود و پروژه را می‌سازد.
-همه جداول، ایندکس‌ها و کارهای پس‌زمینه از `src/convex/schema.ts` به‌طور خودکار
-ایجاد می‌شوند.
 
 ### ادمین اول
 
