@@ -1,55 +1,54 @@
-/** GuardAsli — HTTP API با CORS محدود و rate-limit webhook. */
+/** GuardAsli — HTTP API /api/v1 (بند ۳۹): فرمت خطای استاندارد، webhook ها، OpenAPI. */
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { newRequestId, safeInternalMessage } from "../core/errors";
-import { getVersionSnapshot, GUARDASLI } from "../core/identity";
+import { GUARDASLI, INITIAL_VERSIONS } from "../core/identity";
 
-function allowedOrigins(): string[] {
-  try {
-    const raw =
-      typeof process !== "undefined"
-        ? (process as { env?: Record<string, string> }).env?.GUARDASLI_CORS_ORIGINS
-        : undefined;
-    if (raw && raw.trim()) {
-      return raw.split(",").map((s) => s.trim()).filter(Boolean);
-    }
-  } catch {
-    /* */
-  }
-  // پیش‌فرض امن: فقط localhost توسعه؛ production باید env ست کند
-  return ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173"];
-}
-
-function corsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") ?? "";
-  const allow = allowedOrigins();
-  const matched = allow.includes("*") ? "*" : allow.includes(origin) ? origin : allow[0] ?? "";
-  const base: Record<string, string> = {
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Request-Id, X-Webhook-Secret",
-    "Access-Control-Max-Age": "86400",
+/**
+ * CORS با allowlist از systemSettings (کلید cors_origins) — بدون wildcard.
+ * پیش‌فرض: هیچ مبدایی مجاز نیست؛ origins باید صریحاً تنظیم شوند.
+ * کلید cors_origins فقط توسط Super Admin قابل تنظیم است (tenants.systemSettingsSet).
+ */
+async function buildCorsHeaders(ctx: any, req: Request): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy": "default-src 'none'",
-    "X-Frame-Options": "DENY",
-    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
   };
-  if (matched) base["Access-Control-Allow-Origin"] = matched;
-  return base;
+  const origin = req.headers.get("origin");
+  if (origin) {
+    const settings = await ctx.db
+      .query("systemSettings")
+      .withIndex("by_key", (q: any) => q.eq("key", "cors_origins"))
+      .unique();
+    const allowed = Array.isArray(settings?.value) ? (settings.value as string[]) : [];
+    if (allowed.includes(origin)) {
+      headers["Access-Control-Allow-Origin"] = origin;
+      headers["Vary"] = "Origin";
+      headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
+      headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Request-Id";
+    }
+  }
+  return headers;
 }
 
-function jsonResponse(req: Request, requestId: string, status: number, body: unknown): Response {
+function jsonResponse(requestId: string, status: number, body: unknown, headers: Record<string, string>): Response {
   return new Response(JSON.stringify({ ...(body as object), requestId }), {
     status,
-    headers: { ...corsHeaders(req), "Content-Type": "application/json" },
+    headers: { ...headers, "Content-Type": "application/json" },
   });
 }
 
-function errorResponse(req: Request, requestId: string, status: number, code: string, message: string): Response {
-  return jsonResponse(req, requestId, status, { code, message, requestId });
+function errorResponse(requestId: string, status: number, code: string, message: string, headers: Record<string, string>, details?: unknown): Response {
+  return jsonResponse(requestId, status, {
+    code,
+    message,
+    ...(details !== undefined ? { details } : {}),
+    requestId,
+  }, headers);
 }
 
-function mapError(req: Request, requestId: string, err: unknown): Response {
+function mapError(requestId: string, err: unknown, headers: Record<string, string>): Response {
   const msg = err instanceof Error ? err.message : String(err);
   for (const code of [
     "UNAUTHENTICATED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "VALIDATION_ERROR",
@@ -60,147 +59,49 @@ function mapError(req: Request, requestId: string, err: unknown): Response {
         UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, CONFLICT: 409,
         VALIDATION_ERROR: 400, QUOTA_EXCEEDED: 402, RATE_LIMITED: 429,
       };
-      return errorResponse(req, requestId, status[code], code, msg.replace(`${code}: `, ""));
+      return errorResponse(requestId, status[code], code, msg.replace(`${code}: `, ""), headers);
     }
   }
-  return errorResponse(req, requestId, 500, "INTERNAL_ERROR", safeInternalMessage(requestId));
+  return errorResponse(requestId, 500, "INTERNAL_ERROR", safeInternalMessage(requestId), headers);
 }
 
-type RouteHandler = (ctx: any, req: Request, requestId: string) => Promise<Response>;
-interface RouteDef { prefix?: string; path?: string; method: string; handler: RouteHandler }
+type RouteHandler = (ctx: any, req: Request, requestId: string, headers: Record<string, string>) => Promise<Response>;
 
-async function rateWebhook(ctx: any, key: string): Promise<boolean> {
-  const rl = await ctx.runMutation(internal.infra.rateLimitCheck, {
-    bucketKey: key,
-    windowMs: 60_000,
-    maxPerWindow: 60,
-  });
-  return rl.allowed;
-}
-
-async function enqueueTetra(ctx: any, req: Request, requestId: string): Promise<Response> {
-  if (!(await rateWebhook(ctx, "webhook:tetraminator"))) {
-    return errorResponse(req, requestId, 429, "RATE_LIMITED", "webhook rate limit");
-  }
-  const url = new URL(req.url);
-  const paymentId = url.searchParams.get("order_id") ?? "";
-  let payId = url.searchParams.get("pay_id") ?? "";
-  if (req.method === "POST") {
-    const body = (await req.json().catch(() => ({}))) as { pay_id?: string };
-    if (body.pay_id) payId = body.pay_id;
-  }
-  if (!paymentId) {
-    return errorResponse(req, requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
-  }
-  const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
-    paymentId: paymentId as never,
-  });
-  const providerPaymentId = payId || payment?.providerPaymentId || "";
-  if (!providerPaymentId) {
-    return errorResponse(req, requestId, 400, "VALIDATION_ERROR", "pay_id لازم است");
-  }
-  await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
-    paymentId: paymentId as never,
-    provider: "tetraminator",
-    providerPaymentId,
-  });
-  return jsonResponse(req, requestId, 200, { ok: true });
-}
-
-async function enqueueCube(ctx: any, req: Request, requestId: string): Promise<Response> {
-  if (!(await rateWebhook(ctx, "webhook:cubepay"))) {
-    return errorResponse(req, requestId, 429, "RATE_LIMITED", "webhook rate limit");
-  }
-  const url = new URL(req.url);
-  const paymentId = url.searchParams.get("order_id") ?? "";
-  let authority = url.searchParams.get("authority") ?? "";
-  if (req.method === "POST") {
-    const body = (await req.json().catch(() => ({}))) as { authority?: string };
-    if (body.authority) authority = body.authority;
-  }
-  if (!paymentId) {
-    return errorResponse(req, requestId, 400, "VALIDATION_ERROR", "order_id لازم است");
-  }
-  const payment = await ctx.runQuery(internal.payments.getPaymentInternal, {
-    paymentId: paymentId as never,
-  });
-  const providerPaymentId = authority || payment?.providerPaymentId || "";
-  if (!providerPaymentId) {
-    return errorResponse(req, requestId, 400, "VALIDATION_ERROR", "authority لازم است");
-  }
-  await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
-    paymentId: paymentId as never,
-    provider: "cubepay",
-    providerPaymentId,
-  });
-  return jsonResponse(req, requestId, 200, { ok: true });
-}
-
-function openApiDoc() {
-  const snap = getVersionSnapshot();
-  return {
-    openapi: "3.1.0",
-    info: {
-      title: GUARDASLI.product,
-      description: `Control-plane API by ${GUARDASLI.developer}`,
-      version: snap.components.api,
-    },
-    paths: {
-      "/api/v1/ping": { get: { summary: "Health", responses: { "200": { description: "OK" } } } },
-      "/api/v1/version": { get: { summary: "Versions", responses: { "200": { description: "OK" } } } },
-      "/api/v1/openapi.json": { get: { summary: "OpenAPI", responses: { "200": { description: "OK" } } } },
-      "/api/v1/telegram/webhook/{botConfigId}": {
-        post: { summary: "Telegram webhook", responses: { "200": { description: "OK" }, "401": { description: "Bad secret" } } },
-      },
-      "/api/v1/payments/tetraminator/webhook": {
-        get: { summary: "Tetra webhook", responses: { "200": { description: "Queued" } } },
-        post: { summary: "Tetra webhook POST", responses: { "200": { description: "Queued" } } },
-      },
-      "/api/v1/payments/cubepay/callback": {
-        get: { summary: "CubePay callback", responses: { "200": { description: "Queued" } } },
-        post: { summary: "CubePay callback POST", responses: { "200": { description: "Queued" } } },
-      },
-    },
-  };
+interface RouteDef {
+  prefix?: string;
+  path?: string;
+  method: string;
+  handler: RouteHandler;
 }
 
 const routes: RouteDef[] = [
   {
     path: "/api/v1/ping",
     method: "GET",
-    handler: async (_ctx, req, requestId) =>
-      jsonResponse(req, requestId, 200, {
-        code: "OK",
-        message: `${GUARDASLI.product} API`,
-        version: getVersionSnapshot().components.api,
-      }),
+    handler: async (_ctx, _req, requestId, headers) =>
+      jsonResponse(requestId, 200, { code: "OK", message: GUARDASLI.product }, headers),
   },
   {
     path: "/api/v1/version",
     method: "GET",
-    handler: async (_ctx, req, requestId) => {
-      const snap = getVersionSnapshot();
-      return jsonResponse(req, requestId, 200, {
-        product: snap.product,
-        developer: snap.developer,
-        version: snap.components.core,
-        format: snap.format,
-        components: snap.components,
-      });
-    },
+    handler: async (_ctx, _req, requestId, headers) =>
+      jsonResponse(requestId, 200, {
+        product: GUARDASLI.product,
+        developer: GUARDASLI.developer,
+        version: GUARDASLI.initialVersion,
+        format: GUARDASLI.versionFormat,
+        components: INITIAL_VERSIONS,
+      }, headers),
   },
   {
     path: "/api/v1/openapi.json",
     method: "GET",
-    handler: async (_ctx, req, requestId) => jsonResponse(req, requestId, 200, openApiDoc()),
+    handler: async (_ctx, _req, requestId, headers) => jsonResponse(requestId, 200, buildOpenApiSpec(), headers),
   },
   {
     prefix: "/api/v1/telegram/webhook/",
     method: "POST",
-    handler: async (ctx, req, requestId) => {
-      if (!(await rateWebhook(ctx, "webhook:telegram"))) {
-        return errorResponse(req, requestId, 429, "RATE_LIMITED", "webhook rate limit");
-      }
+    handler: async (ctx, req, requestId, headers) => {
       const url = new URL(req.url);
       const botConfigId = url.pathname.split("/").pop() ?? "";
       const secret = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
@@ -213,41 +114,123 @@ const routes: RouteDef[] = [
         secret,
       });
       if (!verification.ok) {
-        return errorResponse(req, requestId, 401, "UNAUTHENTICATED", "امضای webhook نامعتبر است");
+        return errorResponse(requestId, 401, "UNAUTHENTICATED", "امضای webhook نامعتبر است", headers);
       }
       const text = body.message?.text ?? "";
       const chatId = String(body.message?.chat?.id ?? body.callback_query?.from?.id ?? "");
       await ctx.runMutation(internal.jobs.dispatchBotCommand, { botConfigId, chatId, text });
-      return jsonResponse(req, requestId, 200, { ok: true });
+      return jsonResponse(requestId, 200, { ok: true }, headers);
     },
   },
-  { prefix: "/api/v1/payments/tetraminator/webhook", method: "GET", handler: enqueueTetra },
-  { prefix: "/api/v1/payments/tetraminator/webhook", method: "POST", handler: enqueueTetra },
-  { prefix: "/api/v1/payments/cubepay/callback", method: "GET", handler: enqueueCube },
-  { prefix: "/api/v1/payments/cubepay/callback", method: "POST", handler: enqueueCube },
+  {
+    prefix: "/api/v1/payments/tetraminator/webhook",
+    method: "POST",
+    handler: async (ctx, req, requestId, headers) => {
+      const url = new URL(req.url);
+      const paymentId = url.searchParams.get("order_id") ?? "";
+      const body = (await req.json().catch(() => ({}))) as { pay_id?: string };
+      if (!paymentId || !body.pay_id) {
+        return errorResponse(requestId, 400, "VALIDATION_ERROR", "پارامترهای webhook ناقص است", headers);
+      }
+      await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
+        paymentId: paymentId as never,
+        provider: "tetraminator",
+        providerPaymentId: body.pay_id,
+      });
+      return jsonResponse(requestId, 200, { ok: true }, headers);
+    },
+  },
+  {
+    prefix: "/api/v1/payments/cubepay/callback",
+    method: "POST",
+    handler: async (ctx, req, requestId, headers) => {
+      const url = new URL(req.url);
+      const paymentId = url.searchParams.get("order_id") ?? "";
+      const body = (await req.json().catch(() => ({}))) as { authority?: string };
+      if (!paymentId || !body.authority) {
+        return errorResponse(requestId, 400, "VALIDATION_ERROR", "پارامترهای callback ناقص است", headers);
+      }
+      await ctx.runMutation(internal.jobs.enqueuePaymentVerify, {
+        paymentId: paymentId as never,
+        provider: "cubepay",
+        providerPaymentId: body.authority,
+      });
+      return jsonResponse(requestId, 200, { ok: true }, headers);
+    },
+  },
 ];
 
+/** روتینگ دستی — فایل http.ts فقط این را به Convex معرفی می‌کند. */
 export const http = httpAction(async (ctx, req) => {
   const requestId = newRequestId();
+  const headers = await buildCorsHeaders(ctx, req);
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders(req) });
+    return new Response(null, { status: 204, headers });
   }
   const path = new URL(req.url).pathname;
   for (const r of routes) {
-    if (r.path === path && r.method === req.method) {
+    if ((r.path === path || (r.prefix && path.startsWith(r.prefix))) && r.method === req.method) {
       try {
-        return await r.handler(ctx, req, requestId);
+        return await r.handler(ctx, req, requestId, headers);
       } catch (err) {
-        return mapError(req, requestId, err);
-      }
-    }
-    if (r.prefix && path.startsWith(r.prefix) && r.method === req.method) {
-      try {
-        return await r.handler(ctx, req, requestId);
-      } catch (err) {
-        return mapError(req, requestId, err);
+        return mapError(requestId, err, headers);
       }
     }
   }
-  return errorResponse(req, requestId, 404, "NOT_FOUND", "مسیر یافت نشد");
+  return errorResponse(requestId, 404, "NOT_FOUND", "مسیر یافت نشد", headers);
 });
+
+function buildOpenApiSpec(): Record<string, unknown> {
+  return {
+    openapi: "3.1.0",
+    info: {
+      title: `${GUARDASLI.product} API`,
+      version: GUARDASLI.initialVersion,
+      description: `API پلتفرم ${GUARDASLI.product} توسط ${GUARDASLI.developer}`,
+      contact: { name: GUARDASLI.developer },
+    },
+    servers: [{ url: "/api/v1" }],
+    components: {
+      schemas: {
+        Error: {
+          type: "object",
+          required: ["code", "message", "requestId"],
+          properties: {
+            code: { type: "string" },
+            message: { type: "string" },
+            details: {},
+            requestId: { type: "string" },
+          },
+        },
+      },
+    },
+    paths: {
+      "/api/v1/ping": { get: { summary: "سلام", responses: { "200": { description: "OK" } } } },
+      "/api/v1/version": {
+        get: {
+          summary: `نسخه اجزا با فرمت ${GUARDASLI.versionFormat}`,
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/api/v1/payments/tetraminator/webhook": {
+        post: {
+          summary: "Webhook Tetraminator — صف verify بدون credit مستقیم",
+          responses: { "200": { description: "OK" }, "400": { description: "خطا" } },
+        },
+      },
+      "/api/v1/payments/cubepay/callback": {
+        post: {
+          summary: "Callback CubePay — صف verify بدون credit مستقیم",
+          responses: { "200": { description: "OK" }, "400": { description: "خطا" } },
+        },
+      },
+      "/api/v1/telegram/webhook/{botConfigId}": {
+        post: {
+          summary: "Webhook bot هر tenant با secret token",
+          parameters: [{ name: "botConfigId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "OK" }, "401": { description: "امضای نامعتبر" } },
+        },
+      },
+    },
+  };
+}

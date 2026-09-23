@@ -1,51 +1,28 @@
-/** GuardAsli — احراز هویت؛ pepper اجباری در production. */
+/** GuardAsli — احراز هویت: مرزهای مجوز، نشست‌ها و ماندگاری کاربر (بدون Node API). */
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { generateSecureCredentialRuntime, sha256Hex } from "./runtime";
-import { DEFAULT_ROLE_PERMISSIONS } from "../core/rbac";
+import { generateSecureCredentialRuntime } from "./runtime";
+import { DEFAULT_ROLE_PERMISSIONS, isRole } from "../core/rbac";
+import { tenantScopeWalk } from "../core/tenantScope";
 import type { Id } from "./_generated/dataModel";
 
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 روز
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 1000 * 60 * 15;
 
-function isProd(): boolean {
-  try {
-    const n =
-      typeof process !== "undefined"
-        ? (process as { env?: Record<string, string> }).env?.NODE_ENV
-        : undefined;
-    const g =
-      typeof process !== "undefined"
-        ? (process as { env?: Record<string, string> }).env?.GUARDASLI_ENV
-        : undefined;
-    return n === "production" || g === "production";
-  } catch {
-    return false;
+/** هش پایدار و سریع برای جستجوی توکن نشست — بدون node:crypto (محدودیت runtime Convex). */
+export function stableTokenHash(input: string): string {
+  let h1 = 0xdeadbeef ^ input.length;
+  let h2 = 0x41c6ce57 ^ input.length;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
   }
-}
-
-function tokenPepper(): string {
-  try {
-    const env =
-      typeof process !== "undefined"
-        ? (process as { env?: Record<string, string> }).env?.GUARDASLI_TOKEN_PEPPER
-        : undefined;
-    if (env && env.length >= 16) return env;
-  } catch {
-    /* */
-  }
-  if (isProd()) {
-    throw new Error("INTERNAL_ERROR: GUARDASLI_TOKEN_PEPPER در production الزامی است");
-  }
-  return "GuardAsli.session.v2";
-}
-
-export async function stableTokenHash(input: string): Promise<string> {
-  if (!input || input.length < 16) {
-    throw new Error("VALIDATION_ERROR: توکن نامعتبر است");
-  }
-  return sha256Hex(`${tokenPepper()}:${input}`);
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const out = (h2 >>> 0) * 4294967296 + (h1 >>> 0);
+  return out.toString(36) + "." + input.length.toString(36);
 }
 
 export interface ActorContext {
@@ -56,12 +33,13 @@ export interface ActorContext {
   sessionId: Id<"sessions">;
 }
 
+/** حل هویت بازیگر از توکن نشست — پایه تمام مجوزدهی‌ها. */
 export async function requireActor(
   ctx: { db: any },
   token: string | undefined | null,
 ): Promise<ActorContext> {
   if (!token) throw new Error("UNAUTHENTICATED: نشست ارائه نشده است");
-  const th = await stableTokenHash(token);
+  const th = stableTokenHash(token);
   const session = await ctx.db
     .query("sessions")
     .withIndex("by_token", (q: any) => q.eq("tokenHash", th))
@@ -86,6 +64,7 @@ export async function requireActor(
   };
 }
 
+/** اعمال مجوز granular در سمت سرور (بند ۵). */
 export function requirePermission(
   actor: ActorContext,
   permission: string,
@@ -98,30 +77,43 @@ export function requirePermission(
   }
 }
 
-export function requireSuperAdmin(actor: ActorContext): void {
-  if (actor.role !== "super_admin") {
-    throw new Error("FORBIDDEN: فقط Super Admin");
-  }
-}
+/** بررسی scope مستأجر برای اکشن‌های node — بدون دسترسی مستقیم db. */
+export const checkTenantScope = internalQuery({
+  args: { actorTenantId: v.id("tenants"), resourceTenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const actor: ActorContext = {
+      userId: ("" as never) as Id<"users">, // در این query فقط tenantId استفاده می‌شود
+      tenantId: args.actorTenantId,
+      role: "user",
+      status: "active",
+      sessionId: ("" as never) as Id<"sessions">,
+    };
+    try {
+      await requireTenantScope(ctx, actor, args.resourceTenantId);
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  },
+});
 
+/** اعمال مرز مستأجر — منطق در src/core/tenantScope.ts (قابل تست مستقیم). */
 export async function requireTenantScope(
   ctx: { db: any },
   actor: ActorContext,
   resourceTenantId: Id<"tenants">,
 ): Promise<void> {
-  if (actor.tenantId === resourceTenantId) return;
-  const actorTenant = await ctx.db.get(actor.tenantId);
-  if (actorTenant?.config?.core === true) return;
-  let cur = await ctx.db.get(resourceTenantId);
-  let depth = 0;
-  while (cur && depth < 32) {
-    if (cur._id === actor.tenantId) return;
-    if (!cur.parentTenantId) break;
-    cur = await ctx.db.get(cur.parentTenantId);
-    depth++;
+  const result = tenantScopeWalk(
+    actor.tenantId,
+    resourceTenantId,
+    (id) => ctx.db.get(id),
+  );
+  if (!result.ok) {
+    throw new Error(result.reason ?? "FORBIDDEN: دسترسی بین‌مستأجری مجاز نیست");
   }
-  throw new Error("FORBIDDEN: دسترسی بین‌مستأجری مجاز نیست");
 }
+
+// ————— Queries —————
 
 export const whoami = query({
   args: { token: v.string() },
@@ -139,6 +131,8 @@ export const whoami = query({
   },
 });
 
+// ————— Session mutations —————
+
 export const createSession = internalMutation({
   args: {
     userId: v.id("users"),
@@ -148,12 +142,10 @@ export const createSession = internalMutation({
     ip: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const tokenHash = await stableTokenHash(args.accessToken);
-    const refreshTokenHash = await stableTokenHash(args.refreshToken);
     return await ctx.db.insert("sessions", {
       userId: args.userId,
-      tokenHash,
-      refreshTokenHash,
+      tokenHash: stableTokenHash(args.accessToken),
+      refreshTokenHash: stableTokenHash(args.refreshToken),
       status: "active",
       ...(args.userAgent !== undefined ? { userAgent: args.userAgent } : {}),
       ...(args.ip !== undefined ? { ip: args.ip } : {}),
@@ -187,7 +179,7 @@ export const clearFailedLogins = internalMutation({
 export const rotateSession = internalMutation({
   args: { refreshToken: v.string() },
   handler: async (ctx, args) => {
-    const rh = await stableTokenHash(args.refreshToken);
+    const rh = stableTokenHash(args.refreshToken);
     const session = await ctx.db
       .query("sessions")
       .withIndex("by_refresh", (q: any) => q.eq("refreshTokenHash", rh))
@@ -199,8 +191,8 @@ export const rotateSession = internalMutation({
     const refreshToken = generateSecureCredentialRuntime(40);
     const expiresAt = Date.now() + SESSION_TTL_MS;
     await ctx.db.patch(session._id, {
-      tokenHash: await stableTokenHash(accessToken),
-      refreshTokenHash: await stableTokenHash(refreshToken),
+      tokenHash: stableTokenHash(accessToken),
+      refreshTokenHash: stableTokenHash(refreshToken),
       expiresAt,
     });
     return { accessToken, refreshToken, userId: session.userId, expiresAt };
@@ -231,6 +223,26 @@ export const revokeAllSessions = mutation({
   },
 });
 
+/** اعتبارسنجی بازیگر برای اکشن‌های node — تنها راه ورود به زنجیره‌های حساس. */
+export const assertActor = internalQuery({
+  args: { token: v.string(), permission: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx, args.token);
+    if (args.permission) requirePermission(actor, args.permission);
+    return actor;
+  },
+});
+
+/** بازیابی پاکت رمز عبور کاربر برای verify سمت node — هرگز به کلاینت نمی‌رود. */
+export const getUserCredentialsById = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const u = await ctx.db.get(args.userId);
+    if (!u) return null;
+    return { passwordHash: u.passwordHash, tenantId: u.tenantId, status: u.status };
+  },
+});
+
 export const getUserByUsername = internalQuery({
   args: { username: v.string() },
   handler: async (ctx, args) => {
@@ -249,9 +261,12 @@ export const persistUser = internalMutation({
     parentUsername: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const allowedPublic = new Set(["user", "reseller", "sub_reseller"]);
-    if (!allowedPublic.has(args.role)) {
-      throw new Error("FORBIDDEN: نقش در ثبت‌نام عمومی مجاز نیست");
+    if (!isRole(args.role)) {
+      throw new Error("VALIDATION_ERROR: نقش نامعتبر است");
+    }
+    if (args.role === "super_admin") {
+      // Super Admin تنها از مسیر bootstrapSystem ایجاد می‌شود — نه ثبت‌نام عمومی.
+      throw new Error("FORBIDDEN: ایجاد Super Admin تنها از مسیر bootstrap مجاز است");
     }
     const existing = await ctx.db
       .query("users")
@@ -280,7 +295,7 @@ export const persistUser = internalMutation({
     const userId = await ctx.db.insert("users", {
       username: args.username,
       passwordHash: args.passwordEnvelope,
-      passwordSalt: "",
+      passwordSalt: "", // salt داخل پاکت scrypt است
       role: args.role,
       tenantId,
       ...(parentUserId !== undefined ? { parentUserId } : {}),

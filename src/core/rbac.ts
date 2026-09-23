@@ -98,4 +98,18 @@ export function requirePositiveInt(value: unknown, name: string): number {
   return n;
 }
 
+/** اعتبارسنجی نقش — نقش باید یکی از نقش‌های معتبر سیستم باشد. */
+export function isRole(value: unknown): value is Role {
+  return typeof value === "string" && (ROLES as readonly string[]).includes(value);
+}
+
+/**
+ * اعتبارسنجی مجوزها — از تزریق مجوزهای ساختگی در ثبت‌نام جلوگیری می‌کند.
+ * هر مجوز باید یکی از مجوزهای معتبر سیستم باشد.
+ */
+export function areValidPermissions(value: unknown): value is readonly Permission[] {
+  if (!Array.isArray(value)) return false;
+  return value.every((p) => (PERMISSIONS as readonly string[]).includes(p));
+}
+
 

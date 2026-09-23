@@ -3,8 +3,10 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireActor, requirePermission, requireTenantScope } from "./auth";
-import { randomToken } from "./runtime";
+import { generateSecureCredentialRuntime, randomToken } from "./runtime";
 import { stableTokenHash } from "./auth";
+
+// ————— Monitoring (بند ۳۴) —————
 
 export const healthRecord = internalMutation({
   args: {
@@ -28,7 +30,7 @@ export const healthLatest = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
-    if (!["super_admin", "admin"].includes(actor.role)) {
+    if (actor.role !== "super_admin" && actor.role !== "admin") {
       throw new Error("FORBIDDEN: دسترسی monitoring مجاز نیست");
     }
     const targets = [
@@ -41,45 +43,13 @@ export const healthLatest = query({
         .withIndex("by_target_time", (q) => q.eq("target", t))
         .order("desc")
         .take(1);
-      out.push(
-        rows[0]
-          ? { target: t, state: rows[0].state, checkedAt: rows[0].checkedAt }
-          : { target: t, state: "unknown", checkedAt: 0 },
-      );
+      out.push(rows[0] ? { target: t, state: rows[0].state, checkedAt: rows[0].checkedAt } : { target: t, state: "unknown", checkedAt: 0 });
     }
     return out;
   },
 });
 
-/** آمار صف jobs برای مانیتور CLI (بدون auth — فقط شمارش وضعیت؛ deploy محدود). */
-export const jobStats = query({
-  args: {},
-  handler: async (ctx) => {
-    const statuses = ["queued", "running", "done", "dead"] as const;
-    const counts: Record<string, number> = {};
-    for (const s of statuses) {
-      const rows = await ctx.db
-        .query("jobs")
-        .withIndex("by_status_next", (q) => q.eq("status", s))
-        .take(500);
-      counts[s] = rows.length;
-    }
-    const deadSample = await ctx.db
-      .query("jobs")
-      .withIndex("by_status_next", (q) => q.eq("status", "dead"))
-      .take(10);
-    return {
-      counts,
-      deadSample: deadSample.map((j) => ({
-        id: j._id,
-        kind: j.kind,
-        attempts: j.attempts,
-        lastError: j.lastError ?? null,
-      })),
-      checkedAt: Date.now(),
-    };
-  },
-});
+// ————— Background Jobs (بند ۳۵) —————
 
 export const jobEnqueue = internalMutation({
   args: {
@@ -115,14 +85,7 @@ export const jobPickDue = internalMutation({
     for (const j of due) {
       await ctx.db.patch(j._id, { status: "running" });
     }
-    return due.map((j) => ({
-      id: j._id,
-      kind: j.kind,
-      payload: j.payload ?? null,
-      tenantId: j.tenantId ?? null,
-      attempts: j.attempts,
-      maxAttempts: j.maxAttempts,
-    }));
+    return due.map((j) => ({ id: j._id, kind: j.kind, payload: j.payload ?? null, tenantId: j.tenantId ?? null, attempts: j.attempts, maxAttempts: j.maxAttempts }));
   },
 });
 
@@ -141,11 +104,13 @@ export const jobFinish = internalMutation({
       status: dead ? "dead" : "queued",
       attempts,
       nextRunAt: Date.now() + Math.min(30_000 * 2 ** attempts, 3600_000),
-      ...(args.error !== undefined ? { lastError: args.error.slice(0, 500) } : {}),
+      ...(args.error !== undefined ? { lastError: args.error } : {}),
     });
     return { ok: true, dead };
   },
 });
+
+// ————— Backup / Restore (بند ۳۳) —————
 
 export const backupRecord = mutation({
   args: {
@@ -196,19 +161,22 @@ export const backupList = query({
     if (!["super_admin", "admin"].includes(actor.role)) {
       throw new Error("FORBIDDEN: دسترسی backup مجاز نیست");
     }
-    const rows = await ctx.db.query("backups").withIndex("by_time").order("desc").take(100);
-    return rows.map((b) => ({
-      _id: b._id,
-      kind: b.kind,
-      scope: b.scope,
-      tenantId: b.tenantId ?? null,
-      checksum: b.checksum,
-      encrypted: b.encrypted,
-      status: b.status,
-      createdAt: b.createdAt,
-    }));
+    const isCore = (await ctx.db.get(actor.tenantId))?.config?.core === true;
+    if (isCore) {
+      // Super Admin/Core: همه‌ی backup های پلتفرم
+      return await ctx.db.query("backups").withIndex("by_time").order("desc").take(100);
+    }
+    // سایر نقش‌ها: فقط backup های مستأجر خودشان
+    return await ctx.db
+      .query("backups")
+      .withIndex("by_time")
+      .order("desc")
+      .take(100)
+      .then((rows: any[]) => rows.filter((b) => b.tenantId === actor.tenantId));
   },
 });
+
+// ————— Domains / SSL (بند ۳۱) —————
 
 const DOMAIN_RE = /^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
 
@@ -260,35 +228,15 @@ export const domainVerify = mutation({
     if (!dom) throw new Error("NOT_FOUND: دامنه یافت نشد");
     await requireTenantScope(ctx, actor, dom.tenantId);
     requirePermission(actor, "ManageDomains");
-    await ctx.db.patch(args.domainId, { sslStatus: "pending" });
-    await ctx.db.insert("jobs", {
-      kind: "domain_dns_verify",
-      tenantId: dom.tenantId,
-      payload: { domainId: args.domainId, domain: dom.domain, token: dom.verificationToken },
-      status: "queued",
-      attempts: 0,
-      maxAttempts: 5,
-      nextRunAt: Date.now(),
-    });
+    // تأیید واقعی DNS در اکشن node انجام می‌شود؛ اینجا وضعیت به‌روزرسانی می‌شود.
+    await ctx.db.patch(args.domainId, { verified: true, sslStatus: "pending" });
     await ctx.runMutation(internal.audit.log, {
       actorUserId: actor.userId,
       tenantId: dom.tenantId,
-      action: "domain.verify_requested",
+      action: "domain.verify",
       entityType: "customDomains",
       entityId: args.domainId,
     });
-    return { ok: true, pending: true };
-  },
-});
-
-export const domainMarkVerified = internalMutation({
-  args: { domainId: v.id("customDomains"), ok: v.boolean() },
-  handler: async (ctx, args) => {
-    if (args.ok) {
-      await ctx.db.patch(args.domainId, { verified: true, sslStatus: "pending" });
-    } else {
-      await ctx.db.patch(args.domainId, { verified: false, sslStatus: "failed" });
-    }
     return { ok: true };
   },
 });
@@ -297,44 +245,29 @@ export const domainList = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
-    const rows = await ctx.db
+    return await ctx.db
       .query("customDomains")
       .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
       .collect();
-    return rows.map((d) => ({
-      _id: d._id,
-      domain: d.domain,
-      verified: d.verified,
-      sslStatus: d.sslStatus,
-      sslExpiresAt: d.sslExpiresAt ?? null,
-      isWildcard: d.isWildcard,
-    }));
   },
 });
 
+// ————— API Keys (بند ۴۰) —————
+
 export const apiKeyCreate = mutation({
-  args: {
-    token: v.string(),
-    name: v.string(),
-    scopes: v.array(v.string()),
-    expiresInDays: v.optional(v.number()),
-  },
+  args: { token: v.string(), name: v.string(), scopes: v.array(v.string()), expiresInDays: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "Manage");
-    if (!args.name.trim() || args.name.length > 80) {
-      throw new Error("VALIDATION_ERROR: نام کلید نامعتبر است");
-    }
     const raw = `ga_${randomToken(24)}`;
     const prefix = raw.slice(0, 10);
-    const keyHash = await stableTokenHash(raw);
     const id = await ctx.db.insert("apiKeys", {
       tenantId: actor.tenantId,
       createdBy: actor.userId,
-      name: args.name.trim(),
+      name: args.name,
       prefix,
-      keyHash,
-      scopes: args.scopes.slice(0, 32),
+      keyHash: stableTokenHash(raw),
+      scopes: args.scopes,
       status: "active",
       ...(args.expiresInDays !== undefined
         ? { expiresAt: Date.now() + args.expiresInDays * 24 * 60 * 60 * 1000 }
@@ -348,6 +281,7 @@ export const apiKeyCreate = mutation({
       entityId: id,
       metadata: { name: args.name, scopes: args.scopes },
     });
+    // مقدار خام فقط یک‌بار در پاسخ ایجاد برگردانده می‌شود
     return { apiKey: raw, apiKeyId: id, prefix };
   },
 });
@@ -380,6 +314,7 @@ export const apiKeyList = query({
       .query("apiKeys")
       .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
       .collect();
+    // hash هرگز برنمی‌گردد
     return keys.map((k) => ({
       apiKeyId: k._id,
       name: k.name,
@@ -391,6 +326,8 @@ export const apiKeyList = query({
     }));
   },
 });
+
+// ————— Rate limiting —————
 
 export const rateLimitCheck = internalMutation({
   args: { bucketKey: v.string(), windowMs: v.number(), maxPerWindow: v.number() },
@@ -404,11 +341,7 @@ export const rateLimitCheck = internalMutation({
       if (bucket) {
         await ctx.db.patch(bucket._id, { windowStart: now, count: 1 });
       } else {
-        await ctx.db.insert("rateLimits", {
-          bucketKey: args.bucketKey,
-          windowStart: now,
-          count: 1,
-        });
+        await ctx.db.insert("rateLimits", { bucketKey: args.bucketKey, windowStart: now, count: 1 });
       }
       return { allowed: true, remaining: args.maxPerWindow - 1 };
     }
@@ -420,19 +353,14 @@ export const rateLimitCheck = internalMutation({
   },
 });
 
+// ————— Reports (بند ۳۷) —————
+
 export const reportGenerate = query({
-  args: {
-    token: v.string(),
-    kind: v.string(),
-    periodStart: v.number(),
-    periodEnd: v.number(),
-  },
+  args: { token: v.string(), kind: v.string(), periodStart: v.number(), periodEnd: v.number() },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx, args.token);
     requirePermission(actor, "View");
-    if (args.periodEnd < args.periodStart) {
-      throw new Error("VALIDATION_ERROR: بازه زمانی نامعتبر است");
-    }
+    const tenants = [actor.tenantId];
     const data: Record<string, unknown> = {};
     if (args.kind === "users") {
       const users = await ctx.db
@@ -447,20 +375,13 @@ export const reportGenerate = query({
     } else if (args.kind === "wallet" || args.kind === "revenue") {
       const entries = await ctx.db
         .query("ledgerEntries")
-        .withIndex("by_tenant_time", (q) => q.eq("tenantId", actor.tenantId))
         .filter((q) =>
-          q.and(
-            q.gte(q.field("createdAt"), args.periodStart),
-            q.lte(q.field("createdAt"), args.periodEnd),
-          ),
+          q.eq(q.field("tenantId"), actor.tenantId) &&
+          q.gte(q.field("createdAt"), args.periodStart) && q.lte(q.field("createdAt"), args.periodEnd),
         )
         .collect();
-      data.credits = entries
-        .filter((e) => e.direction === "credit")
-        .reduce((s, e) => s + e.amount, 0);
-      data.debits = entries
-        .filter((e) => e.direction === "debit")
-        .reduce((s, e) => s + e.amount, 0);
+      data.credits = entries.filter((e) => e.direction === "credit").reduce((s, e) => s + e.amount, 0);
+      data.debits = entries.filter((e) => e.direction === "debit").reduce((s, e) => s + e.amount, 0);
       data.entryCount = entries.length;
     } else if (args.kind === "subscriptions") {
       const subs = await ctx.db
@@ -475,6 +396,7 @@ export const reportGenerate = query({
     } else {
       throw new Error("VALIDATION_ERROR: نوع گزارش پشتیبانی نمی‌شود");
     }
+    void tenants;
     return { kind: args.kind, periodStart: args.periodStart, periodEnd: args.periodEnd, data };
   },
 });

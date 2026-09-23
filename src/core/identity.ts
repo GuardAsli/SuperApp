@@ -6,11 +6,12 @@
  * هر جزء نسخهٔ مستقل با قالب isMAJOR.MINOR.PATCH دارد تا بتوان
  * بدون شکستن بقیه، فقط همان جزء را به‌روز کرد (سازگاری: major یکسان).
  */
-export const GUARDASLI = {
+export const GUARDASLI = Object.freeze({
   product: "GuardAsli",
   developer: "AsliCode",
   versionFormat: "isMAJOR.MINOR.PATCH",
-} as const;
+  initialVersion: "is0.0.1",
+} as const);
 
 export type Component =
   | "core"

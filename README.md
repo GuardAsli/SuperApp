@@ -1,143 +1,234 @@
-# GuardAsli
+<p align="center">
+  <img src="public/logo.svg" alt="GuardAsli — AsliCode" width="520" />
+</p>
+
+<h1 align="center">GuardAsli</h1>
 
 <p align="center">
-  <img src="public/logo.svg" alt="GuardAsli — AsliCode" width="480" />
+  <b>نسخه:</b> <code>is0.0.1</code> ·
+  <b>توسعه‌دهنده:</b> AsliCode ·
+  <b>قالب نسخه:</b> <code>isMAJOR.MINOR.PATCH</code>
 </p>
 
 <p align="center">
-  <b>Product:</b> GuardAsli ·
-  <b>Developer:</b> AsliCode ·
-  <b>Release:</b> <code>is0.0.1</code> <b>FINAL</b> ·
-  <b>Format:</b> <code>isMAJOR.MINOR.PATCH</code>
-</p>
-
-<p align="center">
-  <a href="README.fa.md">فارسی</a> ·
-  <a href="FINAL_AUDIT.md">Final audit</a> ·
-  <a href="Docs.md">Docs</a> ·
-  <a href="docs/SECURITY.md">Security</a> ·
-  <a href="docs/PRODUCTION.md">Production</a> ·
-  <a href="docs/RUNBOOK.md">Runbook</a>
+  <a href="#english">English</a> ·
+  <a href="#فارسی">فارسی</a> ·
+  <a href="docs/ARCHITECTURE.md">معماری / Architecture</a> ·
+  <a href="docs/API.md">API</a> ·
+  <a href="docs/BRANDING.md">برندینگ / Branding</a> ·
+  <a href="docs/AUDIT.md">حسابرسی / Audit</a>
 </p>
 
 ---
 
-**GuardAsli** is the AsliCode control-plane for selling and operating proxy/VPN services: multi-tenant, server-side RBAC, wallet + immutable ledger, four payment methods, provider adapters, Telegram bot & mini app, web dashboard, independent component versioning.
+## English
 
-Core identity is fixed: **GuardAsli** / **AsliCode**.
+**GuardAsli** is a control-plane for selling and operating proxy/VPN services, built by
+**AsliCode**. A single backend (Convex) powers a web dashboard, a Telegram bot, a Telegram
+Mini App and tenant-branded apps — with reseller hierarchies, an append-only wallet
+ledger, four payment channels and four upstream server providers.
 
-**Status:** code audit complete — see [FINAL_AUDIT.md](FINAL_AUDIT.md). Production readiness depends on your Convex deploy key, domain DNS, and provider credentials.
+### What GuardAsli does
 
----
+| Area | Detail |
+|---|---|
+| Identity | Fixed core identity: product **GuardAsli**, developer **AsliCode**, version format `isMAJOR.MINOR.PATCH` |
+| Roles | 5 roles — `super_admin`, `admin`, `reseller`, `sub_reseller`, `user` — enforced server-side only |
+| Features | 18 feature keys, each gated by a 6-check chain: global → plan → role → tenant → ownership → quota |
+| Pricing | All quotes computed server-side; client-sent prices are never trusted |
+| Wallet | Append-only ledger: every balance change is a numbered, idempotent entry |
+| Payments | Admin manual credit · card-to-card (max 10 cards, approve / reject / fraud) · CubePay · Tetraminator (verify + anti-replay) |
+| Webhooks | Payment callbacks never credit a wallet directly — they enqueue a verification job |
+| Providers | 3X-UI, Sanaei, PasarGuard and Rebecca adapters with real capability detection |
+| Channels | Telegram bot webhook (secret-token protected) and Mini App with HMAC-verified `initData` |
+| API | `/api/v1` with an OpenAPI 3.1 spec and one error shape: `code` / `message` / `details` / `requestId` |
+| Ops | Installer and CLI named `guardasli`, background jobs with backoff, audit log, health checks, backups, full management panel |
 
-## One-line install (VPS + domain)
+Every tenant, reseller and sub-reseller gets full white-label branding — logo, colors,
+domain, Telegram bot, apps and UI texts. The core identity (`GuardAsli` / `AsliCode`)
+is architecturally separate and cannot be renamed or hidden by any tenant role.
+
+### Requirements
+
+- [Bun](https://bun.sh) ≥ 1.2
+- A Convex account (free tier is enough to start)
+
+### Quick install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
+# 1 — clone and install dependencies
+git clone <repository-url> guardasli && cd guardasli
+bun install
+
+# 2 — link Convex and push the database schema (one-time)
+bun convex dev --once
+
+# 3 — run the dev server (binds 0.0.0.0:$PORT)
+bun dev
+
+# 4 — verify the installation
+bun test        # 36 unit + integration tests
+bun typecheck   # TypeScript, zero errors
+bun run build   # production bundle in dist/
 ```
 
-Optional non-interactive Convex:
+The first run of `bun convex dev --once` asks you to log in to Convex and creates the
+project. All database tables, indexes and background jobs are created from
+`src/convex/schema.ts` automatically.
+
+### First admin
+
+Create the first `super_admin` once, from the project root:
 
 ```bash
-export CONVEX_DEPLOY_KEY=... ; curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh | sudo bash -s -- --domain panel.example.com --email admin@example.com
+bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password":"<strong-password>"}'
 ```
 
-Installs to `/opt/guardasli`, generates secrets, builds UI, deploys Convex (if key present), bootstraps admin, configures **Nginx + SSL**, enables **systemd `guardasli`**.
+Then open the dashboard, sign in, and create tenants, resellers, plans and payment
+methods from the admin UI.
 
----
-
-## Requirements
-
-### Supported OS
-
-| OS | Versions |
-|---|---|
-| Ubuntu | **22.04 / 24.04 LTS** (recommended) |
-| Debian | 11, 12 |
-| Rocky / Alma / RHEL | 9.x |
-| Fedora | 39+ |
-
-**Arch:** x86_64, aarch64. **Not** Windows/macOS as VPS targets (use lab install below).
-
-### Resources
-
-| | Minimum | Recommended |
-|---|---|---|
-| CPU | 1 vCPU | 2 vCPU |
-| RAM | 1 GB | 2–4 GB |
-| Disk | 10 GB SSD | 20 GB+ |
-| Network | Public IPv4 + outbound HTTPS | + IPv6 |
-
-Backend data plane: **Convex Cloud**. VPS serves static UI + reverse proxy + TLS.
-
----
-
-## Lab / local
+### Production
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git && cd SuperApp && bun run wizard && bun run up
+bun run build     # static frontend in dist/
+bun convex deploy # backend + HTTP API
 ```
 
----
+Serve `dist/` behind any static host or reverse proxy; the backend endpoints
+(`/api/v1/*`) come from the deployed Convex functions. Required environment
+variables: `GUARDASLI_MASTER_SECRET` (AES-256-GCM key material), plus each
+payment provider's credentials, set through the admin panel.
 
-## Commands
+### The `guardasli` CLI
 
-| Command | Purpose |
+```bash
+bash scripts/guardasli.sh install   # full install: doctor + deps + source + build + service
+bash scripts/guardasli.sh panel     # interactive management panel
+bash scripts/guardasli.sh status    # version is0.0.1 + install path
+bash scripts/guardasli.sh doctor    # OS, RAM, disk, ports, network checks
+bash scripts/guardasli.sh ssl       # TLS certificate (ACME or self-signed bootstrap)
+bash scripts/guardasli.sh backup    # env + ssl + database export
+```
+
+All CLI output is English-only and safe to run over SSH.
+### Documentation
+
+| Document | Contents |
 |---|---|
-| `install.sh --domain … --email …` | Full VPS install |
-| `bun run wizard` | Lab install (no prompts) |
-| `bun run up` | Start UI (+ Convex sync/bootstrap) |
-| `bun run monitor` | Health + logs summary |
-| `bun run monitor:follow` | Tail app/nginx/convex logs |
-| `bun run monitor:jobs` | Job queue stats |
-| `bun run ci` | typecheck + test + build |
-| `bun run prod-start` | Production env gate |
+| [Architecture](docs/ARCHITECTURE.md) | Core vs. customization layers, purchase flow, security model |
+| [API](docs/API.md) | Endpoints, error codes, webhook security, OpenAPI spec |
+| [Branding](docs/BRANDING.md) | Every customizable tenant field — and the fixed core boundary |
+| [Audit](docs/AUDIT.md) | Repository audit history |
+
+### License
+
+Proprietary software of **AsliCode**. All rights reserved.
 
 ---
 
-## Dashboard (management tabs)
+## فارسی
 
-After login the web UI exposes role-aware tabs:
+<div dir="rtl">
 
-| Tab | Who | Content |
-|---|---|---|
-| Overview | all | Balance, plans count, role |
-| Wallet | all | Balance + ledger history |
-| Charge | all | Tetra / CubePay / card-to-card + provider keys |
-| Payments | all | Payment history + links |
-| Plans | all | Purchase plans |
-| Branding | admin+ | White-label colors/name |
-| Admin | admin+ | Pending card reviews, manual credit, method toggles (super) |
-| Monitor | admin+ | Health targets + job queue snapshot |
+**GuardAsli** یک کنترل‌پلن برای فروش و بهره‌برداری از سرویس‌های پروکسی/VPN است،
+ساخته‌ی **AsliCode**. یک بک‌اند واحد (Convex) چهار رابط را تغذیه می‌کند: داشبورد وب،
+بات تلگرام، مینی‌اپ تلگرام و اپ‌های برند هر مشتری — به‌همراه سلسله‌مراتب ریسلرها،
+دفتر کل تغییرناپذیر کیف پول، چهار کانال پرداخت و چهار نوع سرور بالادستی.
 
-Default UI language: **Persian** (toggle EN/FA).
+### قابلیت‌ها
 
----
-
-## Security highlights
-
-- AES-256-GCM + HKDF purpose keys + AAD  
-- scrypt passwords, session pepper, side-channel hardened login  
-- Verify-before-credit payments; ledger idempotency  
-- CORS allowlist, upload limits, CSP, production env hard-fail  
-
-Details: [docs/SECURITY.md](docs/SECURITY.md) · [docs/PRODUCTION.md](docs/PRODUCTION.md)
-
----
-
-## Documentation map
-
-| File | |
+| حوزه | توضیح |
 |---|---|
-| [FINAL_AUDIT.md](FINAL_AUDIT.md) | Completion sign-off |
-| [Docs.md](Docs.md) / [Docs.fa.md](Docs.fa.md) | Technical reference |
-| [Learn.md](Learn.md) / [Learn.fa.md](Learn.fa.md) | Tutorials |
-| [docs/RUNBOOK.md](docs/RUNBOOK.md) | Ops |
-| [docs/PAYMENTS.md](docs/PAYMENTS.md) | Payments |
-| [docs/KMS_AND_SIDECHANNEL.md](docs/KMS_AND_SIDECHANNEL.md) | KMS / timing |
+| هویت | هویت مرکزی ثابت: محصول **GuardAsli**، توسعه‌دهنده **AsliCode**، قالب نسخه `isMAJOR.MINOR.PATCH` |
+| نقش‌ها | ۵ نقش — `super_admin`، `admin`، `reseller`، `sub_reseller`، `user` — اعمال فقط سمت سرور |
+| قابلیت‌ها | ۱۸ کلید قابلیت با زنجیره‌ی ۶مرحله‌ای: سراسری → پلن → نقش → مشتری → مالکیت → سهمیه |
+| قیمت‌گذاری | محاسبه قیمت فقط سمت سرور؛ قیمتی که کلاینت می‌فرستد هرگز پذیرفته نمی‌شود |
+| کیف پول | دفتر کل فقط‌الحاقی: هر تغییر موجودی یک ردیف شماره‌دار و تکرارناپذیر |
+| پرداخت | شارژ دستی ادمین · کارت‌به‌کارت (حداکثر ۱۰ کارت، تأیید/رد/تشخیص تقلب) · CubePay · Tetraminator با تأیید و ضد-replay |
+| وب‌هوک‌ها | پیام پرداخت هرگز مستقیم کیف را شارژ نمی‌کند — فقط در صف تأیید قرار می‌گیرد |
+| سرورها | آداپتور 3X-UI، Sanaei، PasarGuard و Rebecca با تشخیص واقعی قابلیت‌ها |
+| کانال‌ها | بات تلگرام با توکن محافظت‌شده + مینی‌اپ با تأیید HMAC روی `initData` |
+| API | مسیر `/api/v1` با مشخصات OpenAPI 3.1 و قالب خطای یکسان `code` / `message` / `details` / `requestId` |
+| بهره‌برداری | نصب‌کننده و CLI با نام `guardasli`، کارهای پس‌زمینه با تلاش مجدد، لاگ حسابرسی، بررسی سلامت، پشتیبان‌گیری و پنل مدیریت کامل |
 
----
+هر مشتری، ریسلر و زیرریسلر برند کامل خودش را دارد — لوگو، رنگ‌ها، دامنه، بات تلگرام،
+اپ‌ها و متن‌های رابط. هویت مرکزی (`GuardAsli` / `AsliCode`) به‌صورت معماری جداست و
+هیچ نقشی نمی‌تواند آن را تغییر نام دهد یا پنهان کند.
 
-## License
+### پیش‌نیازها
 
-Proprietary **AsliCode**. All rights reserved.
+- [Bun](https://bun.sh) نسخه ۱.۲ یا بالاتر
+- یک حساب Convex (پلن رایگان برای شروع کافی است)
+
+### نصب سریع
+
+```bash
+# ۱ — کلون و نصب وابستگی‌ها
+git clone <repository-url> guardasli && cd guardasli
+bun install
+
+# ۲ — اتصال Convex و اعمال اسکیمای پایگاه داده (یک‌بار)
+bun convex dev --once
+
+# ۳ — اجرای سرور توسعه (روی 0.0.0.0:$PORT)
+bun dev
+
+# ۴ — راستی‌آزمایی نصب
+bun test        # ۳۶ تست واحد و یکپارچه
+bun typecheck   # تایپ‌اسکریپت، بدون خطا
+bun run build   # خروجی production در dist/
+```
+
+اولین اجرای `bun convex dev --once` وارد حساب Convex می‌شود و پروژه را می‌سازد.
+همه جداول، ایندکس‌ها و کارهای پس‌زمینه از `src/convex/schema.ts` به‌طور خودکار
+ایجاد می‌شوند.
+
+### ادمین اول
+
+اولین `super_admin` را یک‌بار از ریشه پروژه بسازید:
+
+```bash
+bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password":"<رمز-قوی>"}'
+```
+
+سپس داشبورد را باز کنید، وارد شوید و از پنل ادمین مشتریان، ریسلرها، پلن‌ها و
+روش‌های پرداخت را بسازید.
+
+### محیط production
+
+```bash
+bun run build     # فرانت‌اند استاتیک در dist/
+bun convex deploy # بک‌اند + HTTP API
+```
+
+پوشه `dist/` را پشت هر هاست استاتیک یا ریورس‌پروکسی سرو کنید؛ مسیرهای
+`/api/v1/*` از توابع Convex منتشرشده می‌آیند. متغیرهای محیطی لازم:
+`GUARDASLI_MASTER_SECRET` (ماده کلید AES-256-GCM) به‌همراه اطلاعات پرداخت
+هر سرویس — همه از پنل ادمین تنظیم می‌شوند.
+
+### خط فرمان `guardasli`
+
+```bash
+bash scripts/guardasli.sh install   # نصب کامل: بررسی سیستم + وابستگی‌ها + سورس + بیلد + سرویس
+bash scripts/guardasli.sh panel     # پنل مدیریت تعاملی
+bash scripts/guardasli.sh status    # نسخه is0.0.1 و مسیر نصب
+bash scripts/guardasli.sh doctor    # بررسی OS، رم، دیسک، پورت‌ها، شبکه
+bash scripts/guardasli.sh ssl       # گواهی TLS (ACME یا self-signed)
+bash scripts/guardasli.sh backup    # env + ssl + خروجی پایگاه داده
+```
+
+خروجی CLI فقط انگلیسی است و برای اجرا از طریق SSH مناسب است.
+### مستندات
+
+| سند | محتوا |
+|---|---|
+| [معماری](docs/ARCHITECTURE.md) | لایه Core در برابر لایه سفارشی‌سازی، جریان خرید، مدل امنیتی |
+| [API](docs/API.md) | مسیرها، کدهای خطا، امنیت وب‌هوک، مشخصات OpenAPI |
+| [برندینگ](docs/BRANDING.md) | هر فیلد قابل شخصی‌سازی مشتری — و مرز ثابت Core |
+| [حسابرسی](docs/AUDIT.md) | تاریخچه بررسی مخزن |
+
+### مجوز
+
+نرم‌افزار مالکیتی **AsliCode**. تمام حقوق محفوظ است.
+
+</div>
