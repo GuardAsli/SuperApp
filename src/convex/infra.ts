@@ -399,8 +399,13 @@ export const reportGenerate = query({
       const entries = await ctx.db
         .query("ledgerEntries")
         .filter((q) =>
-          q.eq(q.field("tenantId"), actor.tenantId) &&
-          q.gte(q.field("createdAt"), args.periodStart) && q.lte(q.field("createdAt"), args.periodEnd),
+          // q.and است — با && بین Expression ها فقط آخرین عملوند زنده می‌ماند
+          // و قید tenantId نادیده گرفته می‌شد (نشت بین‌مستأجری گزارش درآمد).
+          q.and(
+            q.eq(q.field("tenantId"), actor.tenantId),
+            q.gte(q.field("createdAt"), args.periodStart),
+            q.lte(q.field("createdAt"), args.periodEnd),
+          ),
         )
         .collect();
       data.credits = entries.filter((e) => e.direction === "credit").reduce((s, e) => s + e.amount, 0);

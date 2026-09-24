@@ -36,6 +36,30 @@ export function tenantScopeWalk(
   return { ok: false, reason: "FORBIDDEN: دسترسی بین‌مستأجری مجاز نیست" };
 }
 
+/**
+ * نسخه async همان پیمایش — برای استفاده مستقیم با db.get واقعی Convex که
+ * Promise برمی‌گرداند. قواعد دقیقاً یکسان با tenantScopeWalk.
+ */
+export async function tenantScopeWalkAsync(
+  actorTenantId: string,
+  resourceTenantId: string,
+  getTenant: (id: string) => TenantRef | null | undefined | Promise<TenantRef | null | undefined>,
+): Promise<{ ok: boolean; reason?: string }> {
+  if (actorTenantId === resourceTenantId) return { ok: true };
+  const actorTenant = await getTenant(actorTenantId);
+  if (actorTenant?.config?.core === true) return { ok: true };
+
+  let cur = await getTenant(resourceTenantId);
+  let depth = 0;
+  while (cur && depth < 32) {
+    if (cur._id === actorTenantId) return { ok: true };
+    if (!cur.parentTenantId) break;
+    cur = await getTenant(cur.parentTenantId);
+    depth++;
+  }
+  return { ok: false, reason: "FORBIDDEN: دسترسی بین‌مستأجری مجاز نیست" };
+}
+
 /** مجموعه‌ی شناسه‌های درخت مستأجر (خود + نسل‌های پایین‌دست، BFS). */
 export function tenantTreeIds(
   rootTenantId: string,

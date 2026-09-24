@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { generateSecureCredentialRuntime } from "./runtime";
 import { DEFAULT_ROLE_PERMISSIONS, isRole } from "../core/rbac";
-import { tenantScopeWalk } from "../core/tenantScope";
+import { tenantScopeWalkAsync } from "../core/tenantScope";
 import { stableTokenHash } from "../core/sessionToken";
 import type { Id } from "./_generated/dataModel";
 
@@ -92,7 +92,9 @@ export async function requireTenantScope(
   actor: ActorContext,
   resourceTenantId: Id<"tenants">,
 ): Promise<void> {
-  const result = tenantScopeWalk(
+  // db.get async است — باید منتظر doc بمانیم وگرنه walk با Promise مقایسه می‌کند
+  // tenantScopeWalkAsync خودش db.get (Promise) را await می‌کند — walk همیشه doc واقعی می‌بیند
+  const result = await tenantScopeWalkAsync(
     actor.tenantId,
     resourceTenantId,
     (id) => ctx.db.get(id),
