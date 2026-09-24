@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import { verifyTelegramInitData } from "../core/telegram";
-import { encryptSecret, decryptSecret } from "../core/aead";
+import { decryptBotToken, encryptSecret, decryptSecret } from "../core/aead";
 import { scryptHashSync, scryptVerifySync } from "../core/password";
 import { randomToken } from "./runtime";
 import { validateOutboundUrl } from "../core/ssrf";
@@ -75,7 +75,7 @@ export const miniAppAuthAction = action({
     }
     let botToken: string;
     try {
-      botToken = decryptSecret(cfg.tokenEncrypted, masterSecret());
+      botToken = decryptBotToken(cfg.tokenEncrypted, masterSecret());
     } catch {
       throw new Error("INTERNAL_ERROR: رمزگشایی token ناموفق بود");
     }
@@ -211,6 +211,13 @@ export const sendTelegramMessage = action({
   },
 });
 
+/** مبنا Bot API — پیش‌فرض رسمی؛ در تست محلی با TELEGRAM_API_BASE قابل ریدایرکت است. */
+export function botApiBase(): string {
+  const raw = process.env.TELEGRAM_API_BASE ?? "";
+  if (!raw) return "https://api.telegram.org";
+  return raw.replace(/\/+$/, "");
+}
+
 /** ارسال پاسخ bot از worker — فقط internal، بدون apiBase از کلاینت. */
 export const sendBotReply = internalAction({
   args: {
@@ -219,7 +226,7 @@ export const sendBotReply = internalAction({
     text: v.string(),
   },
   handler: async (_ctx, args) => {
-    const res = await fetch(`https://api.telegram.org/bot${args.botToken}/sendMessage`, {
+    const res = await fetch(`${botApiBase()}/bot${args.botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: args.chatId, text: args.text.slice(0, 4000) }),
@@ -240,7 +247,7 @@ export const setBotWebhookInternal = internalAction({
   handler: async (_ctx, args) => {
     const cb = validateOutboundUrl(args.webhookUrl);
     if (!cb.ok) throw new Error(`PROVIDER_ERROR: ${cb.reason}`);
-    const res = await fetch(`https://api.telegram.org/bot${args.botToken}/setWebhook`, {
+    const res = await fetch(`${botApiBase()}/bot${args.botToken}/setWebhook`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -263,7 +270,7 @@ export const setBotMenuButtonInternal = internalAction({
     text: v.string(),
   },
   handler: async (_ctx, args) => {
-    const res = await fetch(`https://api.telegram.org/bot${args.botToken}/setChatMenuButton`, {
+    const res = await fetch(`${botApiBase()}/bot${args.botToken}/setChatMenuButton`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

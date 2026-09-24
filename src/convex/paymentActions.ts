@@ -28,8 +28,6 @@ function aadFor(userId: string, provider: string): string {
   return `user:${userId}|provider:${provider}|purpose:payment_credentials`;
 }
 
-const PAY_OPTS = { purpose: "payment_credentials" as const };
-
 export const saveUserProviderConfigAction = action({
   args: {
     token: v.string(),

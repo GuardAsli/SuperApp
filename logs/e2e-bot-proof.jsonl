@@ -1,0 +1,67 @@
+{"step":"admin_login","ok":true,"role":"super_admin"}
+{"step":"bot_config_saved","ok":true,"tenantId":"p57d70bd1v313qd5p9mj14hr7s8ezadf","botConfigId":"js73bpkehybw1fdtreppdvgn018f1nrr"}
+{"step":"admin_cleared_for_claim"}
+{"step":"webhook_post","ok":true,"cmd":"/start","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/help","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/id","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/me","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/nosuchcmd","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/admin","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/admin","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/botinfo","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/stats","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/bot off","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/id","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/bot on","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/miniapp https://e2e.example.com/app","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/webhook http://127.0.0.1:3211","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/webhook https://127.0.0.1:3211","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/webhook https://e2e.example.com","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/token newtoken1234567890123456789012345:aaaaaaaaaaaaaaaaaaaaaaaaa","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/broadcast پیام تست نگهبان اصل","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/setadmin","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/miniapp notaurl","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/bot bogus","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/botinfo","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/stats","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/bot off","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/broadcast hidden","status":200}
+{"step":"worker_drain_a","processed":25}
+{"step":"webhook_post","ok":true,"cmd":"/setadmin 999888","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/botinfo","status":200}
+{"step":"webhook_post","ok":true,"cmd":"/botinfo","status":200}
+{"step":"worker_drain_b","processed":3}
+{"step":"admin_restored_via_web_panel","adminTelegramUserId":777000}
+{"step":"webhook_post","ok":true,"cmd":"/id","status":200}
+{"step":"worker_drain_c","processed":1}
+{"step":"telegram_calls","sendMessage":31,"setWebhook":1,"setChatMenuButton":1,"replies":[{"chat_id":"555111","text":"🛡 GuardAsli Bot — Powered By AsliCode\n\nدستورهای عمومی:\n/help — همین راهنما\n/id — شناسه عددی تلگرام شما\n/me — حساب و موجودی متصل به این چت\n\nبرای مدیریت ربات: /a"},{"chat_id":"555111","text":"🛡 GuardAsli Bot — Powered By AsliCode\n\nدستورهای عمومی:\n/help — همین راهنما\n/id — شناسه عددی تلگرام شما\n/me — حساب و موجودی متصل به این چت\n\nبرای مدیریت ربات: /a"},{"chat_id":"555111","text":"شناسه عددی تلگرام شما:\n555111\n\nاین عدد را به ادمین بدهید تا شما را متصل کند."},{"chat_id":"555111","text":"حسابی به این چت متصل نیست.\n\nاتصال: در پنل وب بخش ربات، «شناسه عددی» شما با نام کاربری‌تان پیوند می‌خورد (شناسه: /id)."},{"chat_id":"555111","text":"دستور ناشناخته است — /help را بفرستید."},{"chat_id":"777000","text":"✅ شما ادمین این ربات شدید.\nشناسه ثبت‌شده: 777000\n\n🛡 GuardAsli Bot — Powered By AsliCode\n\nدستورهای عمومی:\n/help — همین راهنما\n/id — شناسه عددی تلگرام شما\n/me — "},{"chat_id":"777000","text":"🛡 پنل ادمین GuardAsli\n\n🛡 GuardAsli Bot — Powered By AsliCode\n\nدستورهای عمومی:\n/help — همین راهنما\n/id — شناسه عددی تلگرام شما\n/me — حساب و موجودی متصل به این "},{"chat_id":"777000","text":"ربات: E2E Bot (@guardasli_e2e_bot)\nوضعیت: روشن\nادمین: 777000\nمینی‌اپ: https://e2e.example.com/app\nwebhook secret: تنظیم شده\n\nPowered By AsliCode"},{"chat_id":"777000","text":"📊 آمار ربات:\nکاربران ربات: 1\nاتصال‌یافته به حساب: 1\nکاربران tenant: 11\nبا تلگرام متصل: 0"},{"chat_id":"777000","text":"⏸ ربات خاموش شد."},{"chat_id":"555111","text":"⏸ ربات خاموش است — از /botinfo برای وضعیت استفاده کنید."},{"chat_id":"777000","text":"✅ ربات روشن شد."},{"chat_id":"777000","text":"✅ مینی‌اپ ثبت شد: https://e2e.example.com/app\nدکمه منوی ربات هم تنظیم شد."},{"chat_id":"777000","text":"استفاده: /webhook https://panel.example.com"},{"chat_id":"777000","text":"❌ تنظیم webhook ناموفق بود: Uncaught Error: PROVIDER_ERROR: آدرس خصوصی مجاز نیست\n    at handler (../src/convex/telegramActions.ts:249:22)\n"},{"chat_id":"777000","text":"✅ webhook تنظیم شد:\nhttps://e2e.example.com/api/v1/telegram/webhook/…"},{"chat_id":"777000","text":"✅ توکن ربات جایگزین شد (رمزنگاری‌شده)."},{"chat_id":"111222333","text":"📣 پیام تست نگهبان اصل"},{"chat_id":"777000","text":"📣 پیام تست نگهبان اصل"},{"chat_id":"777000","text":"✅ پیام به 2 کاربر ارسال شد."},{"chat_id":"777000","text":"استفاده: /setadmin 123456789\n\nشناسه عددی را با /id از کاربر بگیرید."},{"chat_id":"777000","text":"استفاده: /miniapp https://app.example.com"},{"chat_id":"777000","text":"استفاده: /bot on  یا  /bot off"},{"chat_id":"555111","text":"این دستور فقط برای ادمین ربات است."},{"chat_id":"555111","text":"این دستور فقط برای ادمین ربات است."},{"chat_id":"555111","text":"این دستور فقط برای ادمین ربات است."},{"chat_id":"555111","text":"این دستور فقط برای ادمین ربات است."},{"chat_id":"777000","text":"✅ ادمین ربات به شناسه 999888 تغییر کرد."},{"chat_id":"777000","text":"این دستور فقط برای ادمین ربات است."},{"chat_id":"999888","text":"ربات: E2E Bot (@guardasli_e2e_bot)\nوضعیت: روشن\nادمین: 999888\nمینی‌اپ: https://e2e.example.com/app\nwebhook secret: تنظیم شده\n\nPowered By AsliCode"},{"chat_id":"555111","text":"شناسه عددی تلگرام شما:\n555111\n\nاین عدد را به ادمین بدهید تا شما را متصل کند."}]}
+{"step":"assert","name":"user /start answered with help text","ok":true}
+{"step":"assert","name":"/id returns numeric telegram id","ok":true}
+{"step":"assert","name":"/me without linked account shows connection hint","ok":true}
+{"step":"assert","name":"unknown command gets guidance","ok":true}
+{"step":"assert","name":"first /admin claimed admin by numeric telegram id","ok":true}
+{"step":"assert","name":"second /admin shows admin panel","ok":true}
+{"step":"assert","name":"/botinfo shows bot config state","ok":true}
+{"step":"assert","name":"/stats shows bot user stats","ok":true}
+{"step":"assert","name":"/bot off toggled the bot off","ok":true}
+{"step":"assert","name":"off-gate pauses regular user commands (/id)","ok":true}
+{"step":"assert","name":"/bot on re-enabled the bot from Telegram (recovery path)","ok":true}
+{"step":"assert","name":"/miniapp registered the mini app URL","ok":true}
+{"step":"assert","name":"menu button was set for the mini app","ok":true}
+{"step":"assert","name":"/webhook non-https URL shows usage text","ok":true}
+{"step":"assert","name":"/webhook with private https IP rejected by SSRF guard","ok":true}
+{"step":"assert","name":"/webhook with valid https URL registered (setWebhook called)","ok":true}
+{"step":"assert","name":"/token rotated the bot token (stored encrypted)","ok":true}
+{"step":"assert","name":"/broadcast delivered to linked chats","ok":true}
+{"step":"assert","name":"/setadmin bad usage shows usage text","ok":true}
+{"step":"assert","name":"/miniapp bad usage shows usage text","ok":true}
+{"step":"assert","name":"/bot bad usage shows usage text","ok":true}
+{"step":"assert","name":"non-admin /botinfo rejected","ok":true}
+{"step":"assert","name":"non-admin /stats rejected","ok":true}
+{"step":"assert","name":"non-admin /bot rejected","ok":true}
+{"step":"assert","name":"non-admin /broadcast rejected","ok":true}
+{"step":"assert","name":"/setadmin transfers adminship: old id rejected, new id 999888 accepted","ok":true}
+{"step":"webhook_bad_secret","status":401}
+{"step":"assert","name":"webhook rejects wrong secret","ok":true}
+{"step":"assert","name":"bot still replies after token rotation (new token decrypts)","ok":true}
+{"step":"summary","ok":true,"product":"GuardAsli","developer":"AsliCode"}

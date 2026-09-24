@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal, api } from "./_generated/api";
-import { encryptSecret, decryptSecret } from "../core/aead";
+import { encryptSecret, decryptBotToken } from "../core/aead";
 
 function master(): string {
   const s = process.env.GUARDASLI_MASTER_SECRET;
@@ -133,7 +133,7 @@ export const setBotMiniAppAction = action({
           botConfigId: cfg.botConfigId as never,
         });
         if (!ctxCfg) throw new Error("NOT_FOUND");
-        const botToken = decryptSecret(ctxCfg.tokenEncrypted, master());
+        const botToken = decryptBotToken(ctxCfg.tokenEncrypted, master());
         await ctx.runAction(internal.telegramActions.setBotMenuButtonInternal, {
           botToken,
           miniAppUrl: args.miniAppUrl,
@@ -163,7 +163,7 @@ export const setBotWebhookAction = action({
       botConfigId: cfg.botConfigId as never,
     });
     if (!ctxCfg) throw new Error("NOT_FOUND: پیکربندی bot یافت نشد");
-    const botToken = decryptSecret(ctxCfg.tokenEncrypted, master());
+    const botToken = decryptBotToken(ctxCfg.tokenEncrypted, master());
     const webhookUrl = `${base}/api/v1/telegram/webhook/${cfg.botConfigId}`;
     await ctx.runAction(internal.telegramActions.setBotWebhookInternal, {
       botToken,

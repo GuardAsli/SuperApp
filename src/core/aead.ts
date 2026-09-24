@@ -217,6 +217,20 @@ export function decryptSecret(
   throw new Error("INVALID_ENVELOPE: unknown version");
 }
 
+/**
+ * Decrypt a Telegram bot token envelope.
+ * New envelopes are purpose-tagged "telegram_bot_token"; envelopes written by
+ * the legacy save path used the generic purpose. AAD is recovered from the
+ * envelope itself, so both generations decrypt under the same server master.
+ */
+export function decryptBotToken(envelope: string, masterSecret: string): string {
+  try {
+    return decryptSecret(envelope, masterSecret, { purpose: "telegram_bot_token" });
+  } catch {
+    return decryptSecret(envelope, masterSecret, { purpose: "generic" });
+  }
+}
+
 export function hmacToken(token: string, secret: string): string {
   return createHmac("sha256", secret).update(token, "utf8").digest("hex");
 }
