@@ -1,4 +1,4 @@
-/** GuardAsli — مدیریت Provider سرور (3X-UI / Sanaei / PasarGuard / Rebecca). */
+/** GuardAsli — مدیریت Provider سرور (چهار خانواده API پنل‌های بالادستی). */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";

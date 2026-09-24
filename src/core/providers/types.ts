@@ -1,9 +1,14 @@
 /** GuardAsli — قرارداد آداپتور Provider (بند ۱۱). کد provider فقط داخل آداپتور خودش. */
 import { validateOutboundUrl } from "../ssrf";
 
-export type ProviderKind = "xui" | "sanaei" | "pasarguard" | "rebecca";
+export type ProviderKind = "inbound-panel" | "rest-panel" | "rest-panel-plus" | "rest-open";
 
-export const PROVIDER_KINDS: readonly ProviderKind[] = ["xui", "sanaei", "pasarguard", "rebecca"];
+export const PROVIDER_KINDS: readonly ProviderKind[] = [
+  "inbound-panel",
+  "rest-panel",
+  "rest-panel-plus",
+  "rest-open",
+];
 
 export type ProviderCapability =
   | "connect"

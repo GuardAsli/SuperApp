@@ -127,8 +127,9 @@ Recommended first setup, in order:
 2. **Brand it** — logo, colors, domain (fully white-label; only the GuardAsli
    core identity is fixed)
 3. **Plans + features** — what you will sell
-4. **Add an upstream provider** — Servers section (3X-UI / Sanaei /
-   PasarGuard / Rebecca), capability is auto-detected from the panel health
+4. **Add an upstream provider** — Servers section (four API families:
+   inbound-panel / rest-panel / rest-panel-plus / rest-open), capability is
+   auto-detected from the panel health
 5. **Enable a payment method** — Payments section (manual, card-to-card,
    CubePay, Tetraminator)
 6. **Telegram bot** — token is stored encrypted (AES-256-GCM)

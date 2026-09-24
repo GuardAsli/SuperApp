@@ -4,7 +4,7 @@
  * نکته صادقانه:
  * - پنل کنترل‌پلن سرورها، اشتراک، دستگاه‌ها و پروفایل اتصال را مدیریت می‌کند.
  * - تونل واقعی (WireGuard / OpenVPN / VLESS و …) روی دستگاه کاربر و از طریق
- *   Provider بالادستی (3X-UI و مشابه) برقرار می‌شود؛ نه داخل Convex.
+ *   Provider بالادستی (پنل‌های API-محور) برقرار می‌شود؛ نه داخل Convex.
  * - اپ سفیدبرچسب (Main/Dedicated) باید این API را مصرف کند و UI شبیه
  *   Connect / Disconnect / Server list / Kill switch / Multi-device بسازد.
  */

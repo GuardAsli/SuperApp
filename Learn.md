@@ -94,7 +94,7 @@ Set the main platform domain (core identity domain). Tenant custom domains are m
 | Create a tenant | Admin dashboard |
 | Attach branding (logo, colors) | Tenant branding panel |
 | Create plans & feature flags | Plans / features UI |
-| Add an upstream provider (3X-UI, Sanaei, …) | Providers section |
+| Add an upstream provider (API-based panel) | Providers section |
 | Enable a payment method | Payments section |
 | Create a reseller under the tenant | Reseller tree |
 | Bootstrap a Telegram bot for the tenant | Bot config (token stored encrypted) |

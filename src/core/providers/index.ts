@@ -1,4 +1,4 @@
-/** GuardAsli — آداپتورهای واقعی Provider: 3X-UI، Sanaei، PasarGuard، Rebecca. */
+/** GuardAsli — آداپتورهای واقعی Provider: چهار خانواده API پنل‌های بالادستی. */
 import {
   assertOutboundUrl,
   providerFetch,
@@ -85,9 +85,9 @@ function parseRemoteUser(raw: Record<string, unknown>, fallbackName: string): Re
   };
 }
 
-// ————— 3X-UI —————
+// ————— خانواده inbound-panel (REST با مسیرهای /panel/api) —————
 const xuiAdapter: ProviderAdapter = {
-  kind: "xui",
+  kind: "inbound-panel",
   capabilities: [
     "connect", "health_check", "get_users", "get_user", "create_user",
     "update_user", "delete_user", "get_traffic", "get_subscription", "sync",
@@ -187,7 +187,7 @@ const xuiAdapter: ProviderAdapter = {
   },
 };
 
-// ————— Sanaei (panel-style REST API) —————
+// ————— خانواده‌های rest-panel و rest-open (REST عمومی با مسیرهای /api) —————
 function makePanelLikeAdapter(kind: ProviderKind, basePath: string, extraCaps: ProviderCapability[]): ProviderAdapter {
   return {
     kind,
@@ -299,15 +299,15 @@ function makePanelLikeAdapter(kind: ProviderKind, basePath: string, extraCaps: P
   };
 }
 
-const sanaeiAdapter = makePanelLikeAdapter("sanaei", "/api", ["get_servers"]);
-const pasarguardAdapter = makePanelLikeAdapter("pasarguard", "/api", ["get_servers"]);
-const rebeccaAdapter = makePanelLikeAdapter("rebecca", "/api/v1", []);
+const restPanelAdapter = makePanelLikeAdapter("rest-panel", "/api", ["get_servers"]);
+const restPanelPlusAdapter = makePanelLikeAdapter("rest-panel-plus", "/api", ["get_servers"]);
+const restOpenAdapter = makePanelLikeAdapter("rest-open", "/api/v1", []);
 
 export const PROVIDER_ADAPTERS: Record<ProviderKind, ProviderAdapter> = {
-  xui: xuiAdapter,
-  sanaei: sanaeiAdapter,
-  pasarguard: pasarguardAdapter,
-  rebecca: rebeccaAdapter,
+  "inbound-panel": xuiAdapter,
+  "rest-panel": restPanelAdapter,
+  "rest-panel-plus": restPanelPlusAdapter,
+  "rest-open": restOpenAdapter,
 };
 
 export function getAdapter(kind: ProviderKind): ProviderAdapter {
@@ -323,9 +323,13 @@ export async function detectProviderCapabilities(
 ): Promise<ProviderCapability[]> {
   const declared = getAdapter(kind).capabilities;
   const probe: Record<string, string> = {};
-  const base = kind === "xui" ? "/" : kind === "rebecca" ? "/api/v1/system" : "/api/system";
+  const base =
+    kind === "inbound-panel" ? "/" : kind === "rest-open" ? "/api/v1/system" : "/api/system";
   probe["connect"] = base;
-  probe["get_users"] = kind === "xui" ? "/panel/api/inbounds/list" : `${kind === "rebecca" ? "/api/v1" : "/api"}/users`;
+  probe["get_users"] =
+    kind === "inbound-panel"
+      ? "/panel/api/inbounds/list"
+      : `${kind === "rest-open" ? "/api/v1" : "/api"}/users`;
   probe["health_check"] = base;
   const detected = await detectCapabilities(cfg, probe);
   return declared.filter((c) => detected.includes(c) || c !== "get_servers");

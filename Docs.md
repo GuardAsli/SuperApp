@@ -131,12 +131,12 @@ Adapters: `src/core/payments/cubepay.ts`, `src/core/payments/tetraminator.ts`.
 
 ## 7. Providers
 
-Upstream server adapters with real capability detection:
+Upstream server adapters with real capability detection — four API families:
 
-- 3X-UI  
-- Sanaei  
-- PasarGuard  
-- Rebecca  
+- `inbound-panel` (REST with `/panel/api` inbounds)  
+- `rest-panel` (general REST under `/api`)  
+- `rest-panel-plus` (REST with node listing)  
+- `rest-open` (open REST under `/api/v1`)  
 
 Contracts and detection live under `src/core/providers/`.
 

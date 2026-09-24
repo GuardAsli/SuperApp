@@ -177,7 +177,7 @@ export const connectProfile = query({
     }
     if (!server) return null;
 
-    // remoteRef معمولاً لینک ساب یا شناسه کاربر روی پنل 3X-UI است
+    // remoteRef معمولاً لینک ساب یا شناسه کاربر روی پنل بالادستی است
     const payload =
       active.remoteUserId && server.remoteRef
         ? `${server.remoteRef}#${active.remoteUserId}`

@@ -29,7 +29,7 @@
 - Wallet + immutable ledger
 - Payments: Admin manual, Card-to-card, CubePay, Tetraminator
 - Billing, plans, features, custom purchase, referrals
-- Provider adapters (3X-UI family and related)
+- Provider adapters (four upstream API families)
 - Telegram bot webhook + Mini App auth
 - App builder queue, jobs, crons (jobs + session purge)
 - Domains, API keys, backups (encrypted flag enforced), monitoring hooks
