@@ -4,16 +4,18 @@ import LandingPage from "./web/LandingPage";
 import AuthPage from "./web/AuthPage";
 import DashboardPage from "./web/DashboardPage";
 import MiniAppPage from "./web/MiniAppPage";
+import ApiDocsPage from "./web/ApiDocsPage";
 import { ConvexProvider, useBackendLive } from "./web/convexClient";
 import { readBranding, applyBranding, type TenantBranding } from "./web/branding";
 
-type Route = { name: "landing" } | { name: "auth" } | { name: "dashboard" } | { name: "miniapp" };
+type Route = { name: "landing" } | { name: "auth" } | { name: "dashboard" } | { name: "miniapp" } | { name: "apidocs" };
 
 function parseHash(): Route {
   const h = window.location.hash.replace(/^#\/?/, "");
   if (h === "auth") return { name: "auth" };
   if (h === "dashboard") return { name: "dashboard" };
   if (h === "miniapp") return { name: "miniapp" };
+  if (h === "api") return { name: "apidocs" };
   return { name: "landing" };
 }
 
@@ -40,6 +42,8 @@ export default function App() {
         return <DashboardPage branding={branding} onBrandingChange={setBranding} />;
       case "miniapp":
         return <MiniAppPage />;
+      case "apidocs":
+        return <ApiDocsPage />;
       default:
         return <LandingPage />;
     }

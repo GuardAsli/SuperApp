@@ -74,9 +74,14 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <a href="#/auth" className="btn-ghost px-4 py-2 text-sm font-bold">
-            ورود / ثبت‌نام
-          </a>
+          <div className="flex items-center gap-2">
+            <a href="#/api" className="hidden px-4 py-2 text-sm font-bold text-core-muted transition hover:text-emerald-200 sm:block">
+              API و اتصال ربات
+            </a>
+            <a href="#/auth" className="btn-ghost px-4 py-2 text-sm font-bold">
+              ورود / ثبت‌نام
+            </a>
+          </div>
         </motion.header>
 
         {/* ── هیرو ─────────────────────────────────────────────────────────── */}
@@ -122,6 +127,17 @@ export default function LandingPage() {
               ورود به پنل
             </a>
           </motion.div>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="mt-5 text-sm text-core-muted"
+          >
+            توسعه‌دهنده هستید؟{" "}
+            <a href="#/api" className="font-bold text-emerald-300 underline decoration-emerald-300/40 underline-offset-4 transition hover:text-emerald-200">
+              مستندات API و اتصال ربات
+            </a>
+          </motion.p>
         </section>
 
         {/* ── قابلیت‌ها ────────────────────────────────────────────────────── */}
@@ -173,6 +189,11 @@ export default function LandingPage() {
         </section>
 
         <footer className="mt-14 border-t border-core-border pt-6 text-center text-xs text-core-muted">
+          <div className="mb-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+            <a href="#/" className="transition hover:text-emerald-200">خانه</a>
+            <a href="#/api" className="transition hover:text-emerald-200">API و اتصال ربات</a>
+            <a href="#/auth" className="transition hover:text-emerald-200">ورود / ثبت‌نام</a>
+          </div>
           Coded by {GUARDASLI.developer} · {GUARDASLI.product} {GUARDASLI.initialVersion}
         </footer>
       </div>
