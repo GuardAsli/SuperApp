@@ -29,6 +29,12 @@ export GUARDASLI_PUBLIC_URL="https://app.example.com"
 ```
 
 همین مقادیر را در **Convex Dashboard → Settings → Environment Variables** هم بگذارید (actions فقط آنجا `process.env` می‌بینند).
+نصب‌کننده و `sudo guardasli convex` این کار را **خودکار** انجام می‌دهند
+(`bun run sync-env` بعد از هر deploy). بررسی وضعیت:
+
+```bash
+sudo guardasli env      # فقط نام متغیرها را نشان می‌دهد
+```
 
 ## ممنوع
 

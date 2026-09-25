@@ -25,4 +25,11 @@ crons.daily(
   internal.backupAuto.enqueueNightlyBackup,
 );
 
+/** ترمیم روزانه webhook همه‌ی ربات‌های روشن — اگر پاک شده باشد خودش برمی‌گردد. */
+crons.daily(
+  "ensure telegram webhooks",
+  { hourUTC: 4, minuteUTC: 30 },
+  internal.telegramActions.ensureBotWebhooksInternal,
+);
+
 export default crons;

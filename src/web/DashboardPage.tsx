@@ -882,7 +882,7 @@ function BotPanel({ token }: { token: string }) {
             type="button"
             disabled={busy}
             onClick={() => run(async () => {
-              await saveConfig({
+              const res = await saveConfig({
                 token,
                 botToken: botToken || "0".repeat(24),
                 displayName: displayName || "GuardAsli Bot",
@@ -890,7 +890,13 @@ function BotPanel({ token }: { token: string }) {
                 ...(adminId ? { adminTelegramUserId: Number(adminId) } : {}),
                 ...(miniAppUrl ? { miniAppUrl } : {}),
               });
-              return fa ? "پیکربندی ذخیره شد" : "Configuration saved";
+              return res.webhookUrl
+                ? fa
+                  ? `پیکربندی ذخیره و webhook خودکار تنظیم شد: ${res.webhookUrl}`
+                  : `Configuration saved and webhook auto-set: ${res.webhookUrl}`
+                : fa
+                  ? "پیکربندی ذخیره شد"
+                  : "Configuration saved";
             })}
             className="btn-primary px-4 py-2 font-bold"
           >
@@ -923,22 +929,24 @@ function BotPanel({ token }: { token: string }) {
         <h3 className="mt-6 font-bold">{fa ? "تنظیم خودکار webhook" : "Automatic webhook"}</h3>
         <p className="mt-1 text-xs text-core-muted">
           {fa
-            ? "همان دامنه‌ی عمومی https پنل را بدهید (مثل https://panel.example.com). آدرس IP یا دامنه‌ی خصوصی پذیرفته نمی‌شود و اگر قبلاً پیکربندی را ذخیره کرده‌اید، یک‌بار اینجا را هم بزنید."
-            : "Use the panel's public https domain (e.g. https://panel.example.com). IPs and private domains are rejected; if you just saved the configuration, press this once too."}
+            ? "اگر فیلد را خالی بگذارید، دامنه‌ی عمومی از تنظیمات سرور خوانده می‌شود. در غیر این صورت همان دامنه‌ی https پنل را بدهید (مثل https://panel.example.com). آدرس IP یا دامنه‌ی خصوصی پذیرفته نمی‌شود."
+            : "Leave the field blank to use the server-configured public domain, or enter the panel's https domain (e.g. https://panel.example.com). IPs and private domains are rejected."}
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           <input
             value={publicBase}
             onChange={(e) => setPublicBase(e.target.value)}
-            placeholder="https://panel.example.com"
+            placeholder={fa ? "خالی = دامنه‌ی خودکار سرور" : "blank = automatic server domain"}
             className="input flex-1 px-3 py-2"
             dir="ltr"
           />
           <button
             type="button"
-            disabled={busy || !/^https:\/\//.test(publicBase)}
+            disabled={busy}
             onClick={() => run(async () => {
-              const res = await setWebhook({ token, publicBaseUrl: publicBase });
+              const res = await setWebhook(
+                publicBase.trim() ? { token, publicBaseUrl: publicBase.trim() } : { token },
+              );
               return `${fa ? "webhook تنظیم شد" : "webhook set"}: ${res.webhookUrl}`;
             })}
             className="rounded-lg bg-core-primary px-4 py-2 text-sm font-bold text-core-primaryFg"

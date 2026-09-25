@@ -14,7 +14,7 @@ GUARDASLI_VERSION="is0.0.1"
 GUARDASLI_PRODUCT="GuardAsli"
 GUARDASLI_DEVELOPER="AsliCode"
 GUARDASLI_ROOT="${GUARDASLI_ROOT:-/opt/guardasli}"
-GUARDASLI_ENV="${GUARDASLI_ROOT}/.env"
+GUARDASLI_ENV_FILE="${GUARDASLI_ROOT}/.env"
 GUARDASLI_LOG_DIR="${GUARDASLI_ROOT}/logs"
 GUARDASLI_BACKUP_DIR="${GUARDASLI_ROOT}/backups"
 GUARDASLI_APP_DIR="${GUARDASLI_ROOT}/app"
@@ -32,26 +32,26 @@ title() { printf "\n${C_BOLD}── %s ──\n" "$*"; }
 # Environment file helpers
 # ----------------------------------------------------------------------------
 load_env() {
-  [ -f "${GUARDASLI_ENV}" ] || return 0
+  [ -f "${GUARDASLI_ENV_FILE}" ] || return 0
   # shellcheck disable=SC1090
-  set -a; . "${GUARDASLI_ENV}"; set +a
+  set -a; . "${GUARDASLI_ENV_FILE}"; set +a
 }
 
 env_upsert() {
   local key="$1" val="$2"
-  touch "${GUARDASLI_ENV}"
-  if grep -qE "^${key}=" "${GUARDASLI_ENV}" 2>/dev/null; then
-    sed -i.bak "s|^${key}=.*|${key}=${val}|" "${GUARDASLI_ENV}" && rm -f "${GUARDASLI_ENV}.bak"
+  touch "${GUARDASLI_ENV_FILE}"
+  if grep -qE "^${key}=" "${GUARDASLI_ENV_FILE}" 2>/dev/null; then
+    sed -i.bak "s|^${key}=.*|${key}=${val}|" "${GUARDASLI_ENV_FILE}" && rm -f "${GUARDASLI_ENV_FILE}.bak"
   else
-    printf '%s=%s\n' "${key}" "${val}" >> "${GUARDASLI_ENV}"
+    printf '%s=%s\n' "${key}" "${val}" >> "${GUARDASLI_ENV_FILE}"
   fi
 }
 
 env_get() {
   local key="$1" dflt="${2:-}"
-  [ -f "${GUARDASLI_ENV}" ] || { printf '%s' "${dflt}"; return; }
+  [ -f "${GUARDASLI_ENV_FILE}" ] || { printf '%s' "${dflt}"; return; }
   local v
-  v="$(grep -E "^${key}=" "${GUARDASLI_ENV}" | head -1 | cut -d= -f2-)"
+  v="$(grep -E "^${key}=" "${GUARDASLI_ENV_FILE}" | head -1 | cut -d= -f2-)"
   printf '%s' "${v:-${dflt}}"
 }
 
@@ -76,6 +76,13 @@ doctor_checks() {
   [ "${DISK_MB:-0}" -lt 2048 ] && warn "Less than 2 GB free disk space"
   command -v curl >/dev/null 2>&1 && ok "curl: available" || warn "curl missing (required)"
   command -v openssl >/dev/null 2>&1 && ok "openssl: available" || warn "openssl missing (recommended for secrets)"
+  if [ -n "$(env_get CONVEX_DEPLOY_KEY)" ]; then
+    local m; m="$(env_get GUARDASLI_MASTER_SECRET)"
+    if [ "${#m}" -ge 32 ]; then ok "GUARDASLI_MASTER_SECRET: present (${#m} chars)"
+    else warn "GUARDASLI_MASTER_SECRET missing or too short — run: sudo guardasli convex"; fi
+  else
+    warn "No CONVEX_DEPLOY_KEY yet — backend not linked (menu 16)"
+  fi
   if command -v ss >/dev/null 2>&1; then
     for p in 80 443; do
       if ss -ltn 2>/dev/null | grep -q ":${p} "; then warn "Port ${p} in use"; else ok "Port ${p} free"; fi
@@ -193,7 +200,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${GUARDASLI_APP_DIR}
-EnvironmentFile=${GUARDASLI_ENV}
+EnvironmentFile=${GUARDASLI_ENV_FILE}
 ExecStart=$(command -v bun) run dev
 Restart=always
 RestartSec=5
@@ -221,7 +228,7 @@ svc_install() {
 svc_start_nohup() {
   (
     cd "${GUARDASLI_APP_DIR}" || exit 1
-    set -a; . "${GUARDASLI_ENV}"; set +a
+    set -a; . "${GUARDASLI_ENV_FILE}"; set +a
     nohup bun run dev >> "${GUARDASLI_LOG_DIR}/app.log" 2>&1 &
   )
   ok "Started via nohup (log: ${GUARDASLI_LOG_DIR}/app.log)"
@@ -348,7 +355,7 @@ do_backup() {
   stamp="$(date +%Y%m%d%H%M%S)"
   f="${GUARDASLI_BACKUP_DIR}/guardasli-${stamp}.tar.gz"
   tar -czf "${f}" \
-    -C "$(dirname "${GUARDASLI_ENV}")" "$(basename "${GUARDASLI_ENV}")" \
+    -C "$(dirname "${GUARDASLI_ENV_FILE}")" "$(basename "${GUARDASLI_ENV_FILE}")" \
     -C "${GUARDASLI_ROOT}" ssl 2>/dev/null
   if command -v bun >/dev/null 2>&1 && [ -d "${GUARDASLI_APP_DIR}" ]; then
     (cd "${GUARDASLI_APP_DIR}" && bunx convex export --path "${GUARDASLI_BACKUP_DIR}/db-${stamp}.zip" >/dev/null 2>&1) \
@@ -383,8 +390,8 @@ do_install() {
   doctor_checks
   install_deps
   mkdir -p "${GUARDASLI_ROOT}"
-  if [ ! -f "${GUARDASLI_ENV}" ]; then
-    cat > "${GUARDASLI_ENV}" <<EOF
+  if [ ! -f "${GUARDASLI_ENV_FILE}" ]; then
+    cat > "${GUARDASLI_ENV_FILE}" <<EOF
 GUARDASLI_PRODUCT=${GUARDASLI_PRODUCT}
 GUARDASLI_DEVELOPER=${GUARDASLI_DEVELOPER}
 GUARDASLI_VERSION=${GUARDASLI_VERSION}
@@ -392,8 +399,8 @@ GUARDASLI_MAIN_DOMAIN=
 GUARDASLI_REPO_URL=
 GUARDASLI_MASTER_SECRET=
 EOF
-    chmod 600 "${GUARDASLI_ENV}"
-    ok "Environment file created: ${GUARDASLI_ENV}"
+    chmod 600 "${GUARDASLI_ENV_FILE}"
+    ok "Environment file created: ${GUARDASLI_ENV_FILE}"
   fi
   ensure_master_secret
   deploy_source
@@ -516,11 +523,11 @@ convex_deploy() {
   title "Convex backend deploy"
   (
     cd "${GUARDASLI_APP_DIR}" || exit 1
-    set -a; . "${GUARDASLI_ENV}" 2>/dev/null; set +a
+    set -a; . "${GUARDASLI_ENV_FILE}" 2>/dev/null; set +a
     if [ -n "${CONVEX_DEPLOY_KEY:-}" ]; then
       info "Deploy key present — deploying"
     else
-      warn "No CONVEX_DEPLOY_KEY in ${GUARDASLI_ENV}"
+      warn "No CONVEX_DEPLOY_KEY in ${GUARDASLI_ENV_FILE}"
       info "Copy the FULL key from dashboard.convex.dev > your project > Settings > Deploy Keys"
       info "It includes the deployment prefix, like:  prod:your-deployment|eyJ2MiI6..."
       printf "Paste the full deploy key (blank to abort): "
@@ -540,22 +547,14 @@ convex_deploy() {
     if bunx convex deploy --yes 2>&1 | tail -5; then
       ok "Convex backend deployed"
       # The deployment needs its own env — without GUARDASLI_MASTER_SECRET the
-      # bot token can't be decrypted and setWebhook always fails. Idempotent.
-      local env_failed=0
-      while IFS='=' read -r name value; do
-        case "$name" in
-          GUARDASLI_MASTER_SECRET|GUARDASLI_TOKEN_PEPPER|GUARDASLI_AEAD_SALT|GUARDASLI_AEAD_KID|GUARDASLI_ENV|GUARDASLI_PUBLIC_URL)
-            if [ -n "$value" ]; then
-              if ! bunx convex env set "$name" "$value" >/dev/null 2>&1; then
-                warn "convex env set $name failed"
-                env_failed=1
-              fi
-            fi
-            ;;
-        esac
-      done < <(grep -E '^(GUARDASLI_MASTER_SECRET|GUARDASLI_TOKEN_PEPPER|GUARDASLI_AEAD_SALT|GUARDASLI_AEAD_KID|GUARDASLI_ENV|GUARDASLI_PUBLIC_URL)=' "${GUARDASLI_ENV}" 2>/dev/null)
-      [ "$env_failed" = "0" ] && ok "deployment env ready (GUARDASLI_MASTER_SECRET etc.)" \
-        || warn "some env vars failed — re-run this deploy or set them in the Convex Dashboard"
+      # bot token can't be decrypted and setWebhook always fails.
+      # One source of truth: scripts/sync-convex-env.mjs (bun run sync-env).
+      if bun run sync-env >/dev/null 2>&1; then
+        ok "deployment env synced (bot/webhook secrets ready)"
+      else
+        warn "deployment env sync incomplete — bot/webhook needs GUARDASLI_MASTER_SECRET on the deployment"
+        warn "retry with:  cd ${GUARDASLI_APP_DIR} && bun run sync-env"
+      fi
       local base="${VITE_CONVEX_URL:-}"
       if [ -n "${base}" ]; then
         sleep 3
@@ -586,7 +585,7 @@ show_admin_info() {
     warn "No password stored — reset it with menu 5 (Create super admin)"
   fi
   ok "URL: $(env_get GUARDASLI_PUBLIC_URL "http://$(env_get GUARDASLI_SERVER_IP '<server-ip>'):$(env_get GUARDASLI_PORT 3000)")"
-  warn "Keep these credentials private — stored in ${GUARDASLI_ENV} (mode 600)"
+  warn "Keep these credentials private — stored in ${GUARDASLI_ENV_FILE} (mode 600)"
 }
 
 # ----------------------------------------------------------------------------
@@ -660,11 +659,38 @@ install_command() {
   fi
 }
 
+check_deployment_env() {
+  title "Deployment environment (Convex)"
+  local key; key="$(env_get CONVEX_DEPLOY_KEY)"
+  if [ -z "${key}" ]; then
+    warn "No CONVEX_DEPLOY_KEY in ${GUARDASLI_ENV_FILE} — run: sudo guardasli convex"
+    return 1
+  fi
+  ( cd "${GUARDASLI_APP_DIR}" 2>/dev/null || exit 1
+    export CONVEX_DEPLOY_KEY="${key}"
+    local out; out="$(bunx convex env list 2>/dev/null || true)"
+    local n
+    for n in GUARDASLI_MASTER_SECRET GUARDASLI_AEAD_SALT GUARDASLI_PUBLIC_URL; do
+      if printf '%s' "${out}" | grep -q "^${n}="; then
+        ok "deployment env: ${n} set"
+      else
+        warn "deployment env: ${n} MISSING — fix with: bun run sync-env"
+      fi
+    done
+  )
+}
+
 case "${1:-}" in
   install)  do_install ;;
   panel)    do_panel ;;
   admin)    bootstrap_admin ;;
   ssl)      ssl_issue ;;
+  env)      check_deployment_env ;;
+  webhook)
+    info "Webhook is automatic: it re-registers daily via the built-in cron."
+    info "Force it now from the admin panel → Bot tab → Set webhook (leave the field blank)."
+    check_deployment_env
+    ;;
   telegram) telegram_setup ;;
   start)    svc_start ;;
   stop)     svc_stop ;;

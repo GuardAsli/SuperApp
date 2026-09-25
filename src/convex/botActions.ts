@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import { encryptSecret, decryptBotToken } from "../core/aead";
+import { publicBaseUrl } from "./telegramActions";
 
 function master(): string {
   const s = process.env.GUARDASLI_MASTER_SECRET;
@@ -50,7 +51,10 @@ export const saveBotConfigAction = action({
     miniAppUrl: v.optional(v.string()),
     apiBase: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<{ botConfigId: string; webhookSecret: string }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ botConfigId: string; webhookSecret: string; webhookUrl?: string }> => {
     const incoming = args.botToken.trim();
     // پنل وقتی فیلد توکن خالی است مقدار sentinel صفر می‌فرستد — یعنی توکن فعلی بماند.
     // قبلاً همین مقدار صفر رمزنگاری و ذخیره می‌شد و توکن واقعی نابود می‌شد!
@@ -107,6 +111,24 @@ export const saveBotConfigAction = action({
         proof: master(),
       },
     );
+    // خودکارسازی: اگر دامنه‌ی عمومی روی دپلویمنت هست، همان لحظه webhook ست می‌شود.
+    const autoBase = publicBaseUrl();
+    if (/^https:\/\/.+/.test(autoBase)) {
+      try {
+        const botToken = decryptBotToken(
+          keepExisting ? existing?.tokenEncrypted ?? "" : envelope,
+          master(),
+        );
+        await ctx.runAction(internal.telegramActions.setBotWebhookInternal, {
+          botToken,
+          webhookUrl: `${autoBase}/api/v1/telegram/webhook/${res.botConfigId}`,
+          webhookSecret: res.webhookSecret,
+        });
+        return { ...res, webhookUrl: `${autoBase}/api/v1/telegram/webhook/${res.botConfigId}` };
+      } catch {
+        // خودکار ناموفق نباشد ذخیره را خراب کند؛ ادمین از دکمه‌ی پنل استفاده می‌کند
+      }
+    }
     return res;
   },
 });
@@ -167,11 +189,14 @@ export const setBotMiniAppAction = action({
 
 /** تنظیم خودکار webhook تلگرام از پنل وب: base URL عمومی + secret ذخیره‌شده. */
 export const setBotWebhookAction = action({
-  args: { token: v.string(), publicBaseUrl: v.string() },
+  args: { token: v.string(), publicBaseUrl: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ ok: boolean; webhookUrl: string }> => {
-    const base = args.publicBaseUrl.trim().replace(/\/+$/, "");
+    // اگر آدرسی داده نشد، دامنه‌ی عمومی خودکار از env دپلویمنت خوانده می‌شود.
+    const base = (args.publicBaseUrl ?? "").trim().replace(/\/+$/, "") || publicBaseUrl();
     if (!/^https:\/\/.+/.test(base)) {
-      throw new Error("VALIDATION_ERROR: آدرس باید https:// کامل باشد");
+      throw new Error(
+        "VALIDATION_ERROR: آدرس عمومی دامنه ثبت نشده — در پنل آدرس https://… را وارد کنید یا GUARDASLI_PUBLIC_URL را روی دپلویمنت تنظیم کنید",
+      );
     }
     await requireBotManager(ctx, args.token);
     const cfg = await ctx.runQuery(api.telegram.botConfigGet, { token: args.token });

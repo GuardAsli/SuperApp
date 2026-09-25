@@ -132,7 +132,7 @@ Telegram Mini App and tenant-branded apps.
 | Wallet | Every balance change is recorded; no double credit |
 | Payments | Manual credit, card-to-card, CubePay, Tetraminator |
 | Servers | Connects to 4 panel types with capability detection |
-| Bot | Telegram bot + Mini App with secure auth |
+| Bot | Telegram bot + Mini App, with a self-healing webhook |
 | Branding | Each tenant gets its own name, colors and domain |
 | API | `/api/v1` with an OpenAPI spec |
 
@@ -152,7 +152,8 @@ handles everything itself:
 - installs bun and required packages
 - **auto-detects the server public IP** (never a loopback address)
 - creates secrets and configuration
-- with a deploy key: **deploys the backend to your cloud deployment** and
+- with a deploy key: **deploys the backend to your cloud deployment**,
+  pushes the secrets into the deployment env (`bun run sync-env`), and
   proves it is live with a real health check (`database: "ok"`)
 - builds and starts the app
 - sets up Nginx and SSL
@@ -178,8 +179,16 @@ status and the admin password.
 sudo guardasli panel     # management panel — everything from here
 sudo guardasli status    # install status
 sudo guardasli doctor    # server health checks
+sudo guardasli env       # deployment env check (names only)
 sudo guardasli backup    # backup
 ```
+
+### The bot webhook is automatic
+
+Saving the bot configuration registers the Telegram webhook, and a daily cron
+re-registers it for every enabled bot — if the webhook is ever removed in
+@BotFather it comes back on its own. The **Set webhook** button works with an
+empty field, and `/webhook` in the bot needs no argument.
 
 The panel has 18 options: full install, domain, SSL, Telegram bot, admin creation,
 start/stop service, update, repair, backup & restore, logs, backend deploy,
@@ -202,7 +211,7 @@ bun convex dev --once
 ### Health check
 
 ```bash
-bun test        # 82 tests
+bun test        # 142 tests
 bun typecheck   # zero errors
 bun run build   # production bundle in dist/
 ```

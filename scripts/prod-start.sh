@@ -60,5 +60,5 @@ fi
 
 echo "[guardasli] production env OK"
 echo "  deploy: bunx convex deploy"
-echo "  (also set the secrets in the Convex Dashboard > Environment Variables)"
+echo "  then:   bun run sync-env   (pushes the same secrets into the Convex deployment)"
 echo "[guardasli] OK is0.0.1"

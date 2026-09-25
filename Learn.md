@@ -87,6 +87,18 @@ Set the main platform domain (core identity domain). Tenant custom domains are m
 | Bootstrap a Telegram bot for the tenant | Bot config (token stored encrypted) |
 | Claim the bot admin | First `/admin` in the bot — or set the numeric ID in the web Bot tab |
 | Set the Mini App URL | Web Bot tab or `/miniapp <https-url>` in the bot |
+| Register the webhook | Automatic — saving the config does it, and a daily cron repairs it |
+
+### The webhook is automatic
+
+You do not normally set a webhook by hand. Once the bot configuration is saved,
+GuardAsli registers the webhook using `GUARDASLI_PUBLIC_URL` from the
+deployment environment, and a daily cron re-registers it for every enabled bot
+— so a webhook deleted in @BotFather comes back on its own.
+
+- Web Bot tab → **Set webhook** with an empty field uses the same domain.
+- `/webhook` in the bot with no argument does the same.
+- The secret stays stable across config saves, so saving never breaks a live webhook.
 
 Every sensitive action is written to the audit log.
 
@@ -141,7 +153,7 @@ bun typecheck
 bun run build
 ```
 
-Expect 82 tests passing and a clean TypeScript build.
+Expect 142 tests passing and a clean TypeScript build.
 
 ---
 

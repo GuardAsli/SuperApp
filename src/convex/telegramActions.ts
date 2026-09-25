@@ -4,9 +4,8 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import { verifyTelegramInitData } from "../core/telegram";
-import { decryptBotToken, encryptSecret, decryptSecret } from "../core/aead";
+import { decryptBotToken, decryptSecret } from "../core/aead";
 import { scryptHashSync, scryptVerifySync } from "../core/password";
-import { randomToken } from "./runtime";
 import { validateOutboundUrl } from "../core/ssrf";
 
 function masterSecret(): string {
@@ -16,43 +15,6 @@ function masterSecret(): string {
   }
   return s;
 }
-
-/**
- * ثبت پیکربندی bot: رمزنگاری token با master secret سرور، تولید
- * webhookSecret سمت سرور، سپس فراخوانی botConfigSave با اثبات.
- * کلاینت هرگز token خام یا webhookSecret دلخواه را ارسال نمی‌کند.
- */
-export const botConfigSaveAction = action({
-  args: {
-    token: v.string(),
-    botToken: v.string(),
-    displayName: v.string(),
-    username: v.optional(v.string()),
-    description: v.optional(v.string()),
-    enabled: v.boolean(),
-  },
-  handler: async (ctx, args) => {
-    if (args.botToken.length < 20) {
-      throw new Error("VALIDATION_ERROR: token تلگرام نامعتبر است");
-    }
-    const enc = encryptSecret(args.botToken, masterSecret());
-    const webhookSecret = randomToken(32);
-    const res: { botConfigId: string; webhookSecret: string } = await ctx.runMutation(
-      api.telegram.botConfigSave,
-      {
-      token: args.token,
-      botTokenEncrypted: enc,
-      displayName: args.displayName,
-      ...(args.username !== undefined ? { username: args.username } : {}),
-      ...(args.description !== undefined ? { description: args.description } : {}),
-      enabled: args.enabled,
-      webhookSecret,
-      proof: masterSecret(),
-      },
-    );
-    return { botConfigId: res.botConfigId, webhookSecret };
-  },
-});
 
 /**
  * احراز هویت Mini App: initData با bot token واقعی (باز شده از پاکت)
@@ -218,6 +180,85 @@ export function botApiBase(): string {
   return raw.replace(/\/+$/, "");
 }
 
+/** آدرس عمومی پنل — از env همان دپلویمنت؛ پایه‌ی همه‌ی تنظیم‌های خودکار webhook. */
+export function publicBaseUrl(): string {
+  const raw = (process.env.GUARDASLI_PUBLIC_URL ?? process.env.CONVEX_SITE_URL ?? "").trim();
+  return raw.replace(/\/+$/, "");
+}
+
+/** نرمال‌سازی مبنای عمومی ورودی؛ اگر خالی باشد از env دپلویمنت می‌خواند. */
+export function resolvePublicBase(input?: string | null): string {
+  const raw = (input ?? "").trim() || publicBaseUrl();
+  return raw.replace(/\/+$/, "");
+}
+
+/** تماس مستقیم با setWebhook تلگرام — استفاده‌ی مشترک اکشن و ترمیم روزانه. */
+async function pushWebhook(
+  botToken: string,
+  webhookUrl: string,
+  webhookSecret: string,
+): Promise<void> {
+  const cb = validateOutboundUrl(webhookUrl);
+  if (!cb.ok) throw new Error(`PROVIDER_ERROR: ${cb.reason}`);
+  const res = await fetch(`${botApiBase()}/bot${botToken}/setWebhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url: webhookUrl,
+      secret_token: webhookSecret,
+      allowed_updates: ["message", "callback_query"],
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `PROVIDER_ERROR: setWebhook HTTP ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ""}`,
+    );
+  }
+}
+
+export interface WebhookRepairResult {
+  ok: boolean;
+  checked: number;
+  set: number;
+  failed: string[];
+  reason?: string;
+}
+
+/**
+ * ترمیم خودکار webhook همه‌ی ربات‌های روشن (cron روزانه).
+ * اگر webhook در تلگرام پاک شده یا دامنه عوض شده باشد، خودش دوباره ثبت می‌شود.
+ */
+export const ensureBotWebhooksInternal = internalAction({
+  args: {},
+  handler: async (ctx): Promise<WebhookRepairResult> => {
+    const base = publicBaseUrl();
+    if (!/^https:\/\/.+/.test(base)) {
+      return {
+        ok: false,
+        checked: 0,
+        set: 0,
+        failed: [],
+        reason: "GUARDASLI_PUBLIC_URL روی دپلویمنت تنظیم نشده است",
+      };
+    }
+    const cfgs = await ctx.runQuery(internal.telegram.listEnabledBotConfigsInternal, {});
+    const failed: string[] = [];
+    let set = 0;
+    for (const c of cfgs) {
+      try {
+        const botToken = decryptBotToken(c.tokenEncrypted, masterSecret());
+        await pushWebhook(botToken, `${base}/api/v1/telegram/webhook/${c._id}`, c.webhookSecret);
+        set++;
+      } catch (e) {
+        failed.push(`${c.displayName}: ${e instanceof Error ? e.message : "خطا"}`);
+      }
+    }
+    return { ok: failed.length === 0, checked: cfgs.length, set, failed };
+  },
+});
+
 /** ارسال پاسخ bot از worker — فقط internal، بدون apiBase از کلاینت. */
 export const sendBotReply = internalAction({
   args: {
@@ -245,19 +286,7 @@ export const setBotWebhookInternal = internalAction({
     webhookSecret: v.string(),
   },
   handler: async (_ctx, args) => {
-    const cb = validateOutboundUrl(args.webhookUrl);
-    if (!cb.ok) throw new Error(`PROVIDER_ERROR: ${cb.reason}`);
-    const res = await fetch(`${botApiBase()}/bot${args.botToken}/setWebhook`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: args.webhookUrl,
-        secret_token: args.webhookSecret,
-        allowed_updates: ["message", "callback_query"],
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) throw new Error(`PROVIDER_ERROR: setWebhook HTTP ${res.status}`);
+    await pushWebhook(args.botToken, args.webhookUrl, args.webhookSecret);
     return { ok: true };
   },
 });
@@ -306,7 +335,12 @@ export const setTelegramWebhook = action({
       }),
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) throw new Error(`PROVIDER_ERROR: setWebhook HTTP ${res.status}`);
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(
+        `PROVIDER_ERROR: setWebhook HTTP ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ""}`,
+      );
+    }
     return { ok: true };
   },
 });

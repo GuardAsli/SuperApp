@@ -90,6 +90,22 @@ export const verifyMasterSecretProof = internalQuery({
   },
 });
 
+/** همه‌ی ربات‌های روشن (هر tenant) — فقط internal، برای ترمیم خودکار webhook. */
+export const listEnabledBotConfigsInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("botConfigs").collect();
+    return rows
+      .filter((r) => r.enabled)
+      .map((r) => ({
+        _id: r._id,
+        displayName: r.displayName,
+        tokenEncrypted: r.tokenEncrypted,
+        webhookSecret: r.webhookSecret,
+      }));
+  },
+});
+
 // ————— Bot Config —————
 
 /**

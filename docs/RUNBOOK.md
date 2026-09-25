@@ -44,7 +44,9 @@ bunx convex run authActions:bootstrapAdminAction \
 - **Do not** leave `convex dev` running long-term on production VPS.
 - Use `convex deploy` + cloud backend.
 - UI process only: `bun run preview` behind nginx (systemd).
-- Set all `GUARDASLI_*` secrets in Convex Dashboard env (installer sync tries this).
+- Set all `GUARDASLI_*` secrets in Convex Dashboard env — the installer does this
+  automatically after every deploy (`bun run sync-env`). Verify with:
+  `sudo guardasli env`.
 - Indexes in schema are required for tenant-scoped queries — already defined.
 
 ## Domain & SSL
@@ -53,6 +55,25 @@ bunx convex run authActions:bootstrapAdminAction \
 2. `install.sh --domain … --email …`
 3. `GUARDASLI_PUBLIC_URL` and CORS become `https://domain`
 4. Payment webhooks use that public URL
+5. The deployment env is re-synced, so the bot webhook repairs itself
+
+## Telegram bot webhook
+
+The webhook is fully automatic — you rarely need to touch it.
+
+- Saving the bot configuration registers the webhook immediately when
+  `GUARDASLI_PUBLIC_URL` is set on the deployment (which the installer does).
+- A daily cron re-registers the webhook for every enabled bot, so a webhook
+  deleted in @BotFather comes back on its own within 24 hours.
+- `/webhook` in the bot with **no argument** uses the server-configured domain.
+- The admin panel button works with an empty field for the same reason.
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `GUARDASLI_MASTER_SECRET … پیکربندی نشده` | deployment env not synced | `sudo guardasli convex` (or re-run installer) |
+| `آدرس خصوصی مجاز نیست` | private/loopback IP or `.local` domain | use the public https domain |
+| Bot silent, webhook shows old date | secret rotated by an old save | save once, then press Set webhook |
+| Menu button missing | BotFather needs the Mini App URL | `/miniapp https://…`, then set it in BotFather |
 
 ## Health
 

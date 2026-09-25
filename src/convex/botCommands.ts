@@ -41,7 +41,7 @@ function helpText(isAdmin: boolean): string {
       "/setadmin <شناسه عددی> — تغییر ادمین ربات",
       "/token <توکن جدید> — جایگزینی توکن ربات (رمزنگاری‌شده ذخیره می‌شود)",
       "/miniapp <https://...> — تنظیم مینی‌اپ + دکمه منو",
-      "/webhook <https://دامنه> — تنظیم خودکار webhook",
+      "/webhook [https://دامنه] — تنظیم خودکار webhook (بدون آرگومان = دامنه‌ی خودکار)",
       "/stats — آمار کاربران ربات",
       "/broadcast <متن> — پیام به همه کاربران متصل",
     ].join("\n")
@@ -252,9 +252,13 @@ export const handleBotCommand = internalAction({
       }
 
       if (cmd === "/webhook") {
-        const base = rest.replace(/\/+$/, "");
+        // بدون آرگومان: دامنه‌ی عمومی از env دپلویمنت خوانده می‌شود (کاملاً خودکار)
+        const base = (rest || process.env.GUARDASLI_PUBLIC_URL || "").trim().replace(/\/+$/, "");
         if (!/^https:\/\/.+/.test(base)) {
-          await reply("استفاده: /webhook https://panel.example.com");
+          await reply(
+            "استفاده: /webhook https://panel.example.com\n" +
+              "یا دامنه را با /setwebhook <آدرس> بفرستید. اگر GUARDASLI_PUBLIC_URL روی سرور تنظیم شده باشد، /webhook بدون آرگومان هم کار می‌کند.",
+          );
           return { ok: true };
         }
         try {
