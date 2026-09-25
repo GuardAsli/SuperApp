@@ -51,7 +51,11 @@ export const saveBotConfigAction = action({
     apiBase: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ botConfigId: string; webhookSecret: string }> => {
-    if (args.botToken.length < 20) {
+    const incoming = args.botToken.trim();
+    // پنل وقتی فیلد توکن خالی است مقدار sentinel صفر می‌فرستد — یعنی توکن فعلی بماند.
+    // قبلاً همین مقدار صفر رمزنگاری و ذخیره می‌شد و توکن واقعی نابود می‌شد!
+    const keepExisting = incoming.length === 0 || /^0+$/.test(incoming);
+    if (!keepExisting && incoming.length < 20) {
       throw new Error("VALIDATION_ERROR: توکن ربات نامعتبر است");
     }
     if (
@@ -67,10 +71,20 @@ export const saveBotConfigAction = action({
       api.auth.whoami,
       { token: args.token },
     );
-    const envelope = encryptSecret(args.botToken, master(), {
-      aad: `tenant:${who.tenantId}|purpose:telegram_bot_token`,
-      purpose: "telegram_bot_token",
-    });
+    // webhookSecret فقط در بار اول ساخته می‌شود؛ اگر هر بار جدید شود، webhook
+    // ثبت‌شده در تلگرام بی‌صدا از کار می‌افتد (هدر secret دیگر مطابقت ندارد).
+    const cfgInfo = await ctx.runQuery(api.telegram.botConfigGet, { token: args.token });
+    const existing = cfgInfo
+      ? await ctx.runQuery(internal.telegram.getBotConfigInternal, {
+          botConfigId: cfgInfo.botConfigId as never,
+        })
+      : null;
+    const envelope = keepExisting
+      ? "keep-existing"
+      : encryptSecret(incoming, master(), {
+          aad: `tenant:${who.tenantId}|purpose:telegram_bot_token`,
+          purpose: "telegram_bot_token",
+        });
     const res: { botConfigId: string; webhookSecret: string } = await ctx.runMutation(
       api.telegram.botConfigSave,
       {
@@ -86,7 +100,10 @@ export const saveBotConfigAction = action({
         ...(args.miniAppUrl !== undefined && args.miniAppUrl !== ""
           ? { miniAppUrl: args.miniAppUrl }
           : {}),
-        webhookSecret: randomSecret(),
+        webhookSecret:
+          existing && typeof existing.webhookSecret === "string" && existing.webhookSecret.length > 0
+            ? existing.webhookSecret
+            : randomSecret(),
         proof: master(),
       },
     );

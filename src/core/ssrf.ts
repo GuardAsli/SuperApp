@@ -86,11 +86,17 @@ export function validateOutboundUrl(raw: string): UrlCheck {
     bareHost.endsWith(".internal") ||
     bareHost.endsWith(".internal.")
   ) {
-    return { ok: false, reason: "میزبان داخلی مجاز نیست" };
+    return {
+      ok: false,
+      reason: "میزبان داخلی مجاز نیست — دامنه باید عمومی باشد و به همین سرور اشاره کند",
+    };
   }
   if (isIPv4(bareHost)) {
     if (isPrivateIPv4(bareHost)) {
-      return { ok: false, reason: "آدرس خصوصی مجاز نیست" };
+      return {
+        ok: false,
+        reason: "آدرس خصوصی مجاز نیست — دامنه‌ی عمومی https (مثل https://panel.example.com) لازم است",
+      };
     }
   } else if (isIPv6(bareHost)) {
     if (
@@ -100,7 +106,10 @@ export function validateOutboundUrl(raw: string): UrlCheck {
       bareHost.startsWith("fe80") ||
       bareHost === "::"
     ) {
-      return { ok: false, reason: "آدرس IPv6 داخلی مجاز نیست" };
+      return {
+        ok: false,
+        reason: "آدرس IPv6 داخلی مجاز نیست — دامنه‌ی عمومی https لازم است",
+      };
     }
   }
   return { ok: true };

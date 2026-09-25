@@ -299,6 +299,7 @@ run_app_install() {
     info "Deploying backend to the cloud deployment (${CONVEX_DEPLOY_KEY%%|*})..."
     if bunx convex deploy --yes 2>&1 | tail -5; then
       ok "backend deployed"
+      sync_convex_env
       verify_backend_live "${VITE_CONVEX_URL:-}"
     else
       warn "convex deploy failed — check the key, then rerun: cd ${INSTALL_DIR} && bunx convex deploy --yes"
@@ -316,6 +317,32 @@ run_app_install() {
     info "Bootstrapping super admin..."
     bun scripts/auto-bootstrap.mjs && ok "super admin ready" || warn "bootstrap deferred — rerun after backend is live"
   fi
+}
+
+# The Convex deployment reads its own env (process.env inside actions) — the
+# shell env file does NOT reach it. Without GUARDASLI_MASTER_SECRET there, the
+# bot token can never be decrypted and setWebhook always fails. Idempotent.
+sync_convex_env() {
+  local key="${CONVEX_DEPLOY_KEY:-}"
+  [ -n "$key" ] || return 0
+  command -v bunx >/dev/null 2>&1 || return 0
+  info "Syncing runtime secrets into the Convex deployment..."
+  local failed=0
+  while IFS='=' read -r name value; do
+    case "$name" in
+      GUARDASLI_MASTER_SECRET|GUARDASLI_TOKEN_PEPPER|GUARDASLI_AEAD_SALT|GUARDASLI_AEAD_KID|GUARDASLI_ENV|GUARDASLI_PUBLIC_URL)
+        if [ -n "$value" ]; then
+          if ! CONVEX_DEPLOY_KEY="$key" bunx convex env set "$name" "$value" >/dev/null 2>&1; then
+            warn "convex env set $name failed"
+            failed=1
+          fi
+        fi
+        ;;
+    esac
+  done < <(grep -E '^(GUARDASLI_MASTER_SECRET|GUARDASLI_TOKEN_PEPPER|GUARDASLI_AEAD_SALT|GUARDASLI_AEAD_KID|GUARDASLI_ENV|GUARDASLI_PUBLIC_URL)=' "$ENV_FILE" 2>/dev/null)
+  [ "$failed" = "0" ] \
+    && ok "deployment env ready (GUARDASLI_MASTER_SECRET etc.)" \
+    || warn "some env vars failed — bot/webhook needs them; rerun installer or guardasli convex"
 }
 
 # Live proof the cloud backend answers: /api/v1/health must say database ok.

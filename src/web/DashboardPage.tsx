@@ -19,6 +19,17 @@ const FRIENDLY: Record<string, { fa: string; en: string }> = {
 };
 
 function friendlyMsg(raw: string, locale: Locale): string {
+  // راهنمای خاص webhook — پیام خام برای ادمین مفیدتر از تعمیم است.
+  if (raw.includes("GUARDASLI_MASTER_SECRET")) {
+    return locale === "fa"
+      ? "متغیر محیطی GUARDASLI_MASTER_SECRET روی deployment تنظیم نشده — روی سرور دستور `sudo guardasli convex` را اجرا کنید (یا install را دوباره) و سپس دوباره تلاش کنید."
+      : "GUARDASLI_MASTER_SECRET is not set on the deployment — run `sudo guardasli convex` on the server (or rerun the installer) and retry.";
+  }
+  if (raw.includes("آدرس خصوصی") || raw.includes("میزبان داخلی") || raw.includes("IPv6 داخلی")) {
+    return locale === "fa"
+      ? "آدرس webhook باید دامنه‌ی عمومی https باشد که به همین سرور اشاره می‌کند — IP خصوصی یا لوکال مجاز نیست."
+      : "The webhook URL must be a public https domain pointing at this server — private/loopback IPs are not allowed.";
+  }
   const code = raw.split(":")[0]?.trim() ?? "";
   const row = FRIENDLY[code];
   return row ? row[locale] : raw;
@@ -879,7 +890,7 @@ function BotPanel({ token }: { token: string }) {
                 ...(adminId ? { adminTelegramUserId: Number(adminId) } : {}),
                 ...(miniAppUrl ? { miniAppUrl } : {}),
               });
-              return fa ? "پیکربندی ذخیره شد (webhook secret جدید)" : "Configuration saved (new webhook secret)";
+              return fa ? "پیکربندی ذخیره شد" : "Configuration saved";
             })}
             className="btn-primary px-4 py-2 font-bold"
           >
@@ -910,6 +921,11 @@ function BotPanel({ token }: { token: string }) {
         </div>
 
         <h3 className="mt-6 font-bold">{fa ? "تنظیم خودکار webhook" : "Automatic webhook"}</h3>
+        <p className="mt-1 text-xs text-core-muted">
+          {fa
+            ? "همان دامنه‌ی عمومی https پنل را بدهید (مثل https://panel.example.com). آدرس IP یا دامنه‌ی خصوصی پذیرفته نمی‌شود و اگر قبلاً پیکربندی را ذخیره کرده‌اید، یک‌بار اینجا را هم بزنید."
+            : "Use the panel's public https domain (e.g. https://panel.example.com). IPs and private domains are rejected; if you just saved the configuration, press this once too."}
+        </p>
         <div className="mt-2 flex flex-wrap gap-2">
           <input
             value={publicBase}

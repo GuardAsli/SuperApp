@@ -96,6 +96,7 @@ export const verifyMasterSecretProof = internalQuery({
  * ثبت/به‌روزرسانی پیکربندی bot هر tenant.
  * token تلگرام باید قبلاً در اکشن node رمزنگاری شده باشد (botConfigSaveAction).
  * webhookSecret هم توسط همان اکشن تولید می‌شود؛ کلاینت حق فرستادن مقدار دلخواه را ندارد.
+ * مقدار ویژه "keep-existing" یعنی بدون تغییر token — برای ذخیره‌های بعدی.
  */
 export const botConfigSave = mutation({
   args: {
@@ -119,13 +120,17 @@ export const botConfigSave = mutation({
     if (!proof.ok) {
       throw new Error("FORBIDDEN: ثبت پیکربندی bot فقط از طریق اکشن سرور مجاز است");
     }
+    const keepToken = args.botTokenEncrypted === "keep-existing";
     const existing = await ctx.db
       .query("botConfigs")
       .withIndex("by_tenant", (q) => q.eq("tenantId", actor.tenantId))
       .unique();
+    if (keepToken && !existing) {
+      throw new Error("VALIDATION_ERROR: هنوز توکن ربات ذخیره نشده است");
+    }
     if (existing) {
       await ctx.db.patch(existing._id, {
-        tokenEncrypted: args.botTokenEncrypted,
+        ...(keepToken ? {} : { tokenEncrypted: args.botTokenEncrypted }),
         displayName: args.displayName,
         ...(args.username !== undefined ? { username: args.username } : {}),
         ...(args.description !== undefined ? { description: args.description } : {}),

@@ -539,6 +539,23 @@ convex_deploy() {
     fi
     if bunx convex deploy --yes 2>&1 | tail -5; then
       ok "Convex backend deployed"
+      # The deployment needs its own env — without GUARDASLI_MASTER_SECRET the
+      # bot token can't be decrypted and setWebhook always fails. Idempotent.
+      local env_failed=0
+      while IFS='=' read -r name value; do
+        case "$name" in
+          GUARDASLI_MASTER_SECRET|GUARDASLI_TOKEN_PEPPER|GUARDASLI_AEAD_SALT|GUARDASLI_AEAD_KID|GUARDASLI_ENV|GUARDASLI_PUBLIC_URL)
+            if [ -n "$value" ]; then
+              if ! bunx convex env set "$name" "$value" >/dev/null 2>&1; then
+                warn "convex env set $name failed"
+                env_failed=1
+              fi
+            fi
+            ;;
+        esac
+      done < <(grep -E '^(GUARDASLI_MASTER_SECRET|GUARDASLI_TOKEN_PEPPER|GUARDASLI_AEAD_SALT|GUARDASLI_AEAD_KID|GUARDASLI_ENV|GUARDASLI_PUBLIC_URL)=' "${GUARDASLI_ENV}" 2>/dev/null)
+      [ "$env_failed" = "0" ] && ok "deployment env ready (GUARDASLI_MASTER_SECRET etc.)" \
+        || warn "some env vars failed — re-run this deploy or set them in the Convex Dashboard"
       local base="${VITE_CONVEX_URL:-}"
       if [ -n "${base}" ]; then
         sleep 3
