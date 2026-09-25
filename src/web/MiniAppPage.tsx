@@ -64,9 +64,12 @@ export default function MiniAppPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-6 py-10" dir={locale === "fa" ? "rtl" : "ltr"}>
+    <div className="relative min-h-full overflow-hidden" dir={locale === "fa" ? "rtl" : "ltr"}>
+      <div className="aurora" aria-hidden="true" />
+      <div className="grid-mesh" aria-hidden="true" />
+      <div className="mx-auto max-w-md px-6 py-10">
       <header className="text-center">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-core-primary text-2xl font-black text-core-primaryFg">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 to-indigo-400 text-2xl font-black text-slate-950 shadow-lg shadow-cyan-500/30">
           گ
         </div>
         <h1 className="mt-3 text-xl font-extrabold">{GUARDASLI.product} Mini App</h1>
@@ -123,8 +126,9 @@ export default function MiniAppPage() {
       </main>
 
       <footer className="mt-10 text-center text-xs text-core-muted">
-        {GUARDASLI.product} · {GUARDASLI.developer} · is0.0.1
+        {GUARDASLI.product} · {GUARDASLI.developer} · {GUARDASLI.initialVersion}
       </footer>
+      </div>
     </div>
   );
 }

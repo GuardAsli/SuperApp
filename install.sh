@@ -35,8 +35,15 @@ SKIP_SSL="${GUARDASLI_SKIP_SSL:-0}"
 SKIP_NGINX="${GUARDASLI_SKIP_NGINX:-0}"
 SKIP_CONVEX="${GUARDASLI_SKIP_CONVEX:-0}"
 PORT_UI="${GUARDASLI_PORT:-4173}"
+# Role entry points — the login page for each role lives on its own port.
+PORT_SUPER="${GUARDASLI_PORT_SUPER:-616}"
+PORT_RESELLER="${GUARDASLI_PORT_RESELLER:-105}"
 DEPLOY_KEY="${CONVEX_DEPLOY_KEY:-}"
 SERVER_IP=""
+OPEN_PANEL="${GUARDASLI_OPEN_PANEL:-1}"
+BACKGROUND=0
+# Keep the default non-interactive when stdin is not a terminal.
+if [ ! -t 0 ]; then OPEN_PANEL=0; fi
 
 wizard() {
   echo ""
@@ -73,6 +80,9 @@ while [ $# -gt 0 ]; do
     --skip-nginx) SKIP_NGINX=1; shift ;;
     --skip-convex) SKIP_CONVEX=1; shift ;;
     --deploy-key) DEPLOY_KEY="$2"; shift 2 ;;
+    --background|-b) BACKGROUND=1; OPEN_PANEL=0; shift ;;
+    --port-super) PORT_SUPER="$2"; shift 2 ;;
+    --port-reseller) PORT_RESELLER="$2"; shift 2 ;;
     --yes|-y)  shift ;;
     --help|-h) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)"; exit 1 ;;
@@ -84,6 +94,95 @@ info() { printf "${C_CYAN}[GuardAsli]${C_OFF} %s\n" "$*"; }
 ok()   { printf "${C_GREEN}[ OK ]${C_OFF} %s\n" "$*"; }
 warn() { printf "${C_YELLOW}[WARN]${C_OFF} %s\n" "$*"; }
 die()  { printf "${C_RED}[FAIL]${C_OFF} %s\n" "$*" >&2; exit 1; }
+
+# ── Install log ─────────────────────────────────────────────────────────────
+# Every step writes here AND to the terminal. If the SSH session dies the log
+# survives, so an interrupted install can always be inspected and re-run.
+INSTALL_LOG="${STATE_DIR}/install.log"
+CURRENT_STEP="startup"
+log_line() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" >>"$INSTALL_LOG" 2>/dev/null || true; }
+
+step() {
+  CURRENT_STEP="$1"
+  info "$1"
+  log_line "=== STEP: $1 ==="
+}
+
+step_ok()   { ok "$*";   log_line "OK: $*"; }
+step_warn() { warn "$*"; log_line "WARN: $*"; }
+
+# On any failure: say WHERE, and that re-running is safe (all steps idempotent).
+on_error() {
+  local code=$?
+  if [ "$code" -ne 0 ]; then
+    printf "${C_RED}[FAIL]${C_OFF} step '%s' failed (exit %s)\n" "$CURRENT_STEP" "$code" >&2
+    log_line "FAILED at step '$CURRENT_STEP' (exit $code)"
+    printf "  Log     : %s\n" "$INSTALL_LOG" >&2
+    printf "  Resume  : re-run the same command — completed steps are skipped.\n" >&2
+    printf "  Follow  : tail -f %s\n" "$INSTALL_LOG" >&2
+  fi
+}
+trap on_error EXIT
+
+have_timeout() { command -v timeout >/dev/null 2>&1; }
+
+# run_step <seconds> <label> <command...>
+# Live output (no more silent minutes), a hard timeout, and a log line — a slow
+# network can never freeze the terminal again.
+run_step() {
+  local limit="$1" label="$2"; shift 2
+  log_line "run: $label (timeout ${limit}s)"
+  local started; started="$(date +%s)"
+  if have_timeout; then
+    timeout --foreground -k 10 "$limit" "$@" 2>&1 | tee -a "$INSTALL_LOG" | sed 's/^/    /'
+    local rc=${PIPESTATUS[0]}
+  else
+    "$@" 2>&1 | tee -a "$INSTALL_LOG" | sed 's/^/    /'
+    local rc=${PIPESTATUS[0]}
+  fi
+  local took=$(( $(date +%s) - started ))
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    step_warn "${label} exceeded ${limit}s and was stopped (after ${took}s) — continuing"
+    return 124
+  fi
+  if [ "$rc" -ne 0 ]; then
+    step_warn "${label} failed (exit ${rc}, ${took}s)"
+    return "$rc"
+  fi
+  step_ok "${label} (${took}s)"
+  return 0
+}
+
+# A 512MB–2GB VPS has no swap: `vite build` makes the kernel OOM killer shoot
+# the shell, which looks exactly like "the terminal died mid-install".
+ensure_swap() {
+  local mem_mb
+  mem_mb="$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+  [ -n "$mem_mb" ] && [ "$mem_mb" -gt 0 ] || return 0
+  if [ "$mem_mb" -ge 3072 ]; then
+    step_ok "memory ${mem_mb} MB — no swap needed"
+    return 0
+  fi
+  if swapon --show 2>/dev/null | grep -q .; then
+    step_ok "swap already active"
+    return 0
+  fi
+  step_warn "only ${mem_mb} MB RAM — adding 2 GB swap so the build cannot be OOM-killed"
+  if ! swapon --show 2>/dev/null | grep -q . && [ ! -f /swapfile ]; then
+    fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+    chmod 600 /swapfile 2>/dev/null || true
+    mkswap /swapfile >/dev/null 2>&1 || true
+  fi
+  swapon /swapfile 2>/dev/null || true
+  # Keep it across reboots.
+  if ! grep -q '^/swapfile ' /etc/fstab 2>/dev/null; then
+    printf '/swapfile none swap sw 0 0\n' >> /etc/fstab 2>/dev/null || true
+  fi
+  # Lower swappiness so the swap is a safety net, not the main memory.
+  printf 'vm.swappiness=10\n' > /etc/sysctl.d/99-guardasli-swap.conf 2>/dev/null || true
+  sysctl -p /etc/sysctl.d/99-guardasli-swap.conf >/dev/null 2>&1 || true
+  step_ok "swap active (2 GB)"
+}
 
 # Exported bun path is required for every later step.
 export PATH="${HOME}/.bun/bin:/usr/local/bin:${PATH}"
@@ -125,7 +224,7 @@ detect_public_ip() {
 # 1. System packages
 # -----------------------------------------------------------------------------
 install_system_packages() {
-  info "Installing system packages..."
+  step "Installing system packages"
   local id
   id="$(detect_os | awk '{print $1}')"
   case "$id" in
@@ -133,56 +232,70 @@ install_system_packages() {
       export DEBIAN_FRONTEND=noninteractive
       # needrestart must never open an interactive TUI mid-install.
       echo 'needrestart_conf->{ui} = "0";' > /etc/needrestart/conf.d/guardasli-noninteractive.conf 2>/dev/null || true
-      apt-get update -y
-      apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
+      run_step 420 "apt-get update" apt-get update -y || true
+      run_step 600 "apt-get install" apt-get install -y \
+        -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
         curl ca-certificates git unzip openssl nginx certbot python3-certbot-nginx ufw rsync \
-        || warn "some system packages failed — continuing"
+        || true
       rm -f /etc/needrestart/conf.d/guardasli-noninteractive.conf 2>/dev/null || true
       ;;
     centos|rhel|rocky|almalinux|fedora)
       if command -v dnf >/dev/null 2>&1; then
-        dnf install -y curl ca-certificates git unzip openssl nginx certbot python3-certbot-nginx rsync || true
+        run_step 600 "dnf install" dnf install -y curl ca-certificates git unzip openssl nginx certbot python3-certbot-nginx rsync || true
       else
-        yum install -y curl ca-certificates git unzip openssl nginx rsync || true
+        run_step 600 "yum install" yum install -y curl ca-certificates git unzip openssl nginx rsync || true
       fi
       ;;
-    *) warn "unrecognized OS '${id}' — package install skipped" ;;
+    *) step_warn "unrecognized OS '${id}' — package install skipped" ;;
   esac
-  ok "system packages"
+  step_ok "system packages"
 }
 
 # -----------------------------------------------------------------------------
 # 2. Bun
 # -----------------------------------------------------------------------------
 install_bun() {
-  if command -v bun >/dev/null 2>&1; then ok "bun $(bun --version) present"; return; fi
-  info "Installing bun..."
-  curl -fsSL https://bun.sh/install | bash || die "bun install failed"
+  if command -v bun >/dev/null 2>&1; then step_ok "bun $(bun --version) present"; return; fi
+  step "Installing bun"
+  # Download first, then run: a stalled download can no longer hang the install.
+  local script="${STATE_DIR}/bun-install.sh"
+  if ! run_step 180 "download bun installer" curl -fsSL --retry 3 --retry-delay 2 \
+        --connect-timeout 15 --max-time 150 https://bun.sh/install -o "$script"; then
+    step_warn "could not download the bun installer — check your network, then re-run"
+    return 1
+  fi
+  if ! run_step 180 "install bun" bash "$script"; then
+    step_warn "bun install script failed"
+    return 1
+  fi
+  rm -f "$script"
   export PATH="${HOME}/.bun/bin:${PATH}"
   if [ -x "${HOME}/.bun/bin/bun" ]; then
     ln -sf "${HOME}/.bun/bin/bun" /usr/local/bin/bun 2>/dev/null || true
     ln -sf "${HOME}/.bun/bin/bunx" /usr/local/bin/bunx 2>/dev/null || true
   fi
-  command -v bun >/dev/null 2>&1 || die "bun is still not on PATH — install manually"
-  ok "bun $(bun --version)"
+  command -v bun >/dev/null 2>&1 || { step_warn "bun is still not on PATH — install manually"; return 1; }
+  step_ok "bun $(bun --version)"
 }
 
 # -----------------------------------------------------------------------------
 # 3. Source
 # -----------------------------------------------------------------------------
 clone_or_update() {
-  info "Fetching source -> ${INSTALL_DIR}"
+  step "Fetching source -> ${INSTALL_DIR}"
   mkdir -p "$(dirname "$INSTALL_DIR")"
   if [ -d "$INSTALL_DIR/.git" ]; then
-    git -C "$INSTALL_DIR" fetch --depth 1 origin "$BRANCH"
-    git -C "$INSTALL_DIR" checkout -f "$BRANCH"
-    git -C "$INSTALL_DIR" reset --hard "origin/${BRANCH}" >/dev/null 2>&1 || true
+    run_step 300 "git fetch" git -C "$INSTALL_DIR" fetch --depth 1 origin "$BRANCH" || true
+    run_step 60 "git checkout" git -C "$INSTALL_DIR" checkout -f "$BRANCH" || true
   else
     rm -rf "$INSTALL_DIR"
-    git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" \
-      || die "git clone failed for ${REPO_URL}"
+    if ! run_step 600 "git clone ${REPO_URL}" \
+          git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"; then
+      step_warn "git clone failed — check your network or the repo URL, then re-run"
+      return 1
+    fi
   fi
-  ok "source ready"
+  step_ok "source ready"
 }
 
 # -----------------------------------------------------------------------------
@@ -244,6 +357,8 @@ write_env() {
       echo "GUARDASLI_DEVELOPER=AsliCode"
       echo "GUARDASLI_VERSION=is0.0.1"
       echo "GUARDASLI_PORT=${PORT_UI}"
+      echo "GUARDASLI_PORT_SUPER=${PORT_SUPER}"
+      echo "GUARDASLI_PORT_RESELLER=${PORT_RESELLER}"
       echo "GUARDASLI_REPO_URL=${REPO_URL}"
       echo "PORT=${PORT_UI}"
     } > "$ENV_FILE"
@@ -265,66 +380,65 @@ write_env() {
 # 5. App install: deps + gates (non-fatal, timeout-guarded) + Convex deploy
 # -----------------------------------------------------------------------------
 run_app_install() {
-  info "bun install + production build..."
+  step "Application install (dependencies, checks, build)"
   cd "$INSTALL_DIR" || die "app dir missing"
   set -a
   # shellcheck disable=SC1090
   source "$ENV_FILE"
   set +a
 
-  bun install --frozen-lockfile >/dev/null 2>&1 || bun install || die "bun install failed"
-  ok "dependencies"
-
-  # Live progress + timeout guard: this stage used to sit silent for minutes.
-  if command -v timeout >/dev/null 2>&1; then
-    info "typecheck (max 3 min)..."
-    timeout 180 bun run typecheck >/dev/null 2>&1 \
-      && ok "typecheck" || warn "typecheck skipped or timed out (non-fatal here)"
-    info "tests (max 3 min)..."
-    timeout 180 bun test >/dev/null 2>&1 \
-      && ok "tests" || warn "tests skipped or timed out (non-fatal here)"
-  else
-    bun run typecheck >/dev/null 2>&1 && ok "typecheck" || warn "typecheck failed (non-fatal here)"
-    bun test >/dev/null 2>&1 && ok "tests" || warn "tests failed (non-fatal here)"
+  # Previously silent (`>/dev/null`) for minutes — that silence is what looked
+  # like a hang. Live output + hard timeout instead.
+  if ! run_step 600 "bun install" bun install --frozen-lockfile; then
+    run_step 600 "bun install (no lockfile)" bun install \
+      || { step_warn "dependency install failed — re-run the installer"; return 1; }
   fi
 
-  info "production build (vite)..."
-  bun run build || die "production build failed"
-  ok "build (dist/)"
+  # Quality gates stay non-fatal here, but are visible and time-boxed.
+  run_step 240 "typecheck" bun run typecheck || step_warn "typecheck did not pass (non-fatal during install)"
+  run_step 240 "tests" bun test || step_warn "tests did not pass (non-fatal during install)"
+
+  if ! run_step 600 "production build (vite)" bun run build; then
+    step_warn "production build failed — re-run the installer to retry"
+    return 1
+  fi
 
   # Backend deploy — OPTIONAL. An empty key configures later; it never blocks.
+  step "Backend deploy"
   if [ "$SKIP_CONVEX" = "1" ]; then
-    warn "backend deploy skipped (--skip-convex)"
+    step_warn "backend deploy skipped (--skip-convex)"
   elif valid_deploy_key "${CONVEX_DEPLOY_KEY:-}"; then
     info "Deploying backend to the cloud deployment (${CONVEX_DEPLOY_KEY%%|*})..."
-    if bunx convex deploy --yes 2>&1 | tail -5; then
-      ok "backend deployed"
+    if run_step 420 "convex deploy" bunx convex deploy --yes; then
+      step_ok "backend deployed"
       # The Convex deployment reads its OWN env (process.env inside actions);
       # the shell env file does NOT reach it. Without GUARDASLI_MASTER_SECRET
       # there, the bot token cannot be decrypted and setWebhook always fails.
       # One source of truth: scripts/sync-convex-env.mjs (bun run sync-env).
-      if bun scripts/sync-convex-env.mjs >/dev/null 2>&1; then
-        ok "deployment env synced (bot/webhook secrets ready)"
+      if run_step 180 "deployment env sync" bun scripts/sync-convex-env.mjs; then
+        step_ok "deployment env synced (bot/webhook secrets ready)"
       else
-        warn "deployment env sync incomplete — bot/webhook needs GUARDASLI_MASTER_SECRET on the deployment"
-        warn "retry with:  cd ${INSTALL_DIR} && bun run sync-env"
+        step_warn "deployment env sync incomplete — bot/webhook needs GUARDASLI_MASTER_SECRET"
+        step_warn "retry with:  cd ${INSTALL_DIR} && bun run sync-env"
       fi
       verify_backend_live "${VITE_CONVEX_URL:-}"
     else
-      warn "convex deploy failed — check the key, then rerun: cd ${INSTALL_DIR} && bunx convex deploy --yes"
+      step_warn "convex deploy failed — retry later: cd ${INSTALL_DIR} && bunx convex deploy --yes"
     fi
   elif [ -n "${VITE_CONVEX_URL:-}" ]; then
     info "Convex URL present without key — trying function push..."
-    bunx convex deploy --yes 2>&1 | tail -3 || warn "push failed — a full deploy key is required"
+    run_step 420 "convex deploy (no key)" bunx convex deploy --yes \
+      || step_warn "push failed — a full deploy key is required"
   else
-    warn "No deploy key given — backend NOT deployed"
-    warn "Re-run the installer, or:  sudo guardasli convex   (asks for the key)"
+    step_warn "No deploy key given — backend NOT deployed"
+    step_warn "Re-run the installer, or:  sudo guardasli convex   (asks for the key)"
   fi
 
   # Admin bootstrap (idempotent, safe to re-run).
   if [ -n "${VITE_CONVEX_URL:-}" ] && [ -n "${CONVEX_DEPLOY_KEY:-}" ]; then
-    info "Bootstrapping super admin..."
-    bun scripts/auto-bootstrap.mjs && ok "super admin ready" || warn "bootstrap deferred — rerun after backend is live"
+    run_step 120 "bootstrap super admin" bun scripts/auto-bootstrap.mjs \
+      && step_ok "super admin ready" \
+      || step_warn "bootstrap deferred — rerun after backend is live"
   fi
 }
 
@@ -355,7 +469,10 @@ setup_nginx() {
   [ -z "$DOMAIN" ] && { warn "no domain — nginx skipped (site served on :${PORT_UI})"; return 0; }
   command -v nginx >/dev/null 2>&1 || { warn "nginx not installed — skipped"; return 0; }
 
-  info "Configuring Nginx for ${DOMAIN}..."
+  step "Configuring Nginx for ${DOMAIN}"
+  # Port 80: the normal user entry. Ports 105/616: the reseller and super-admin
+  # login pages. All three proxy the same Vite build; the app reads the port to
+  # decide which role is allowed to sign in on that page.
   cat > /etc/nginx/sites-available/guardasli <<NGX
 server {
   listen 80;
@@ -374,20 +491,65 @@ server {
     proxy_read_timeout 90;
   }
 }
+
+# Reseller login page (port ${PORT_RESELLER})
+server {
+  listen ${PORT_RESELLER};
+  server_name ${DOMAIN};
+  client_max_body_size 25m;
+
+  location / {
+    proxy_pass http://127.0.0.1:${PORT_UI};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_read_timeout 90;
+  }
+}
+
+# Super-admin login page (port ${PORT_SUPER})
+server {
+  listen ${PORT_SUPER};
+  server_name ${DOMAIN};
+  client_max_body_size 25m;
+
+  location / {
+    proxy_pass http://127.0.0.1:${PORT_UI};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_read_timeout 90;
+  }
+}
 NGX
   ln -sf /etc/nginx/sites-available/guardasli /etc/nginx/sites-enabled/guardasli
   rm -f /etc/nginx/sites-enabled/default
-  nginx -t || warn "nginx config test failed"
+  if ! nginx -t; then
+    step_warn "nginx config test failed — keeping the previous config"
+    return 0
+  fi
   systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
-  ok "nginx -> 127.0.0.1:${PORT_UI}"
+  step_ok "nginx -> 127.0.0.1:${PORT_UI} (ports ${PORT_RESELLER}/${PORT_SUPER} for role logins)"
 
   if [ "$SKIP_SSL" != "1" ] && [ -n "$EMAIL" ]; then
     info "Issuing Let's Encrypt certificate for ${DOMAIN}..."
-    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect \
-      && ok "SSL active (auto-renew via certbot.timer)" \
-      || warn "certbot failed — check that DNS for ${DOMAIN} points to this server, then rerun: certbot --nginx -d ${DOMAIN}"
+    # A certificate covers the domain on every port, so 105/616 are covered too.
+    if run_step 300 "certbot" certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect; then
+      step_ok "SSL active (auto-renew via certbot.timer)"
+    else
+      step_warn "certbot failed — check that DNS for ${DOMAIN} points here, then rerun:"
+      step_warn "  certbot --nginx -d ${DOMAIN} -m ${EMAIL}"
+    fi
   else
-    warn "SSL skipped — run: certbot --nginx -d ${DOMAIN} -m ${EMAIL:-you@example.com} --redirect"
+    step_warn "SSL skipped — run: certbot --nginx -d ${DOMAIN} -m ${EMAIL:-you@example.com} --redirect"
   fi
 }
 
@@ -435,8 +597,11 @@ firewall_setup() {
   command -v ufw >/dev/null 2>&1 || return 0
   ufw allow 80/tcp  >/dev/null 2>&1 || true
   ufw allow 443/tcp >/dev/null 2>&1 || true
+  # Role login pages.
+  ufw allow "${PORT_RESELLER}/tcp" >/dev/null 2>&1 || true
+  ufw allow "${PORT_SUPER}/tcp" >/dev/null 2>&1 || true
   ufw allow OpenSSH >/dev/null 2>&1 || true
-  ok "firewall: 80/443/SSH open"
+  step_ok "firewall: 80/443/${PORT_RESELLER}/${PORT_SUPER}/SSH open"
 }
 
 # -----------------------------------------------------------------------------
@@ -464,23 +629,37 @@ print_summary_and_panel() {
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
   echo "  Path      : ${INSTALL_DIR}"
   echo "  Env file  : ${ENV_FILE}"
+  echo "  Log       : ${INSTALL_LOG}"
   echo "  Domain    : ${DOMAIN:-<none>}${SERVER_IP:+  ·  IP: ${SERVER_IP}}"
   echo "  URL       : ${DOMAIN:+https://${DOMAIN}}${DOMAIN:-http://${SERVER_IP:-<server-ip>}:${PORT_UI}}"
+  if [ -n "${DOMAIN:-}" ]; then
+    echo "  Users     : https://${DOMAIN}/                 (normal user login)"
+    echo "  Reseller  : https://${DOMAIN}:${PORT_RESELLER}/          (reseller login)"
+    echo "  SuperAdmin: https://${DOMAIN}:${PORT_SUPER}/           (super admin login)"
+  fi
   echo "  Backend   : ${VITE_CONVEX_URL:-<not deployed — no deploy key>}${CONVEX_DEPLOY_KEY:+ }"
   echo "  Admin     : ${GUARDASLI_ADMIN_USER:-admin}"
   echo "  Password  : ${GUARDASLI_ADMIN_PASS:-<see ${ENV_FILE}>}"
   echo ""
   echo "  Manage everything with:"
-  echo "    guardasli panel      <- interactive management panel (opens next)"
-  echo "    guardasli status | doctor | logs | ssl | backup | update"
+  echo "    guardasli panel      <- interactive management panel"
+  echo "    guardasli status | doctor | logs | ssl | backup | update | env"
   echo ""
   if [ -z "${CONVEX_DEPLOY_KEY:-}" ]; then
-    warn "Backend pending: re-run installer with the deploy key, or: sudo guardasli convex"
+    step_warn "Backend pending: re-run installer with the deploy key, or: sudo guardasli convex"
   fi
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
   echo ""
-  info "Opening the management panel (option 0 exits)..."
-  /usr/local/bin/guardasli panel 2>/dev/null || bash "${INSTALL_DIR}/scripts/guardasli.sh" panel
+  # The management panel is a nested TUI. Launching it from a non-interactive
+  # session (CI, piped curl|bash, a dying SSH) leaves the user staring at a
+  # frozen-looking screen — so only open it on a real terminal.
+  if [ "${OPEN_PANEL:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ]; then
+    info "Opening the management panel (choose 0 to exit)..."
+    /usr/local/bin/guardasli panel 2>/dev/null || bash "${INSTALL_DIR}/scripts/guardasli.sh" panel
+  else
+    info "Management panel not opened (non-interactive session)."
+    info "Start it any time with:  sudo guardasli panel"
+  fi
 }
 
 # Full Convex deploy key: required, must carry the deployment prefix and a
@@ -526,6 +705,34 @@ echo " GuardAsli installer · AsliCode · is0.0.1"
 echo " OS: $(detect_os)"
 echo ""
 need_root
+
+# ── Survive a dropped connection ────────────────────────────────────────────
+# An install can take several minutes. With --background the script re-executes
+# itself under setsid+nohup, so closing the terminal (or losing SSH) no longer
+# kills the install — it keeps writing to install.log.
+if [ "$BACKGROUND" = "1" ]; then
+  mkdir -p "$STATE_DIR"
+  LOG="${STATE_DIR}/install.log"
+  SELF="${STATE_DIR}/install.sh"
+  cp -f "${BASH_SOURCE[0]}" "$SELF" 2>/dev/null || SELF="${BASH_SOURCE[0]}"
+  ARGS=()
+  for a in "$@"; do ARGS+=("$a"); done
+  if setsid nohup bash "$SELF" "${ARGS[@]}" --background >>"$LOG" 2>&1 </dev/null & then
+    echo " Install continues in the background."
+    echo "   follow : tail -f $LOG"
+    echo "   check  : $SELF status  (once finished)"
+    exit 0
+  fi
+  echo " Could not detach; continuing in this session." >&2
+  BACKGROUND=0
+fi
+
+mkdir -p "$STATE_DIR" "${STATE_DIR}/logs"
+touch "$INSTALL_LOG" 2>/dev/null || true
+chmod 600 "$INSTALL_LOG" 2>/dev/null || true
+log_line "### GuardAsli installer started (branch=${BRANCH}, dir=${INSTALL_DIR})"
+
+ensure_swap
 wizard
 install_system_packages
 install_bun
@@ -537,3 +744,4 @@ setup_nginx
 setup_systemd
 install_command
 print_summary_and_panel
+log_line "### installer finished"

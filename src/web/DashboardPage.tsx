@@ -18,6 +18,23 @@ const FRIENDLY: Record<string, { fa: string; en: string }> = {
   PAYMENT_REQUIRED: { fa: "موجودی کافی نیست.", en: "Insufficient balance." },
 };
 
+/** برچسب فارسی نقش‌ها — هماهنگ با رنگ چیپ در index.css. */
+function roleFa(role: string): string {
+  const map: Record<string, string> = {
+    user: "کاربر",
+    reseller: "نماینده",
+    admin: "ادمین",
+    super_admin: "سوپر ادمین",
+  };
+  return map[role] ?? role;
+}
+
+function roleChipClass(role: string): string {
+  if (role === "super_admin") return "role-super";
+  if (role === "reseller" || role === "admin") return "role-reseller";
+  return "role-user";
+}
+
 function friendlyMsg(raw: string, locale: Locale): string {
   // راهنمای خاص webhook — پیام خام برای ادمین مفیدتر از تعمیم است.
   if (raw.includes("GUARDASLI_MASTER_SECRET")) {
@@ -251,23 +268,36 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8" dir={locale === "fa" ? "rtl" : "ltr"}>
+    <div className="relative min-h-full overflow-hidden" dir={locale === "fa" ? "rtl" : "ltr"}>
       <div className="aurora" aria-hidden="true" />
-
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold">
-            {t("dashboard", locale)} {branding.displayName}
-          </h1>
-          <p className="text-sm text-core-muted">
-            {whoami ? `${whoami.username} · ${role}` : "…"} · {GUARDASLI.product}
-          </p>
+      <div className="grid-mesh" aria-hidden="true" />
+      <div className="mx-auto max-w-6xl px-6 py-8">
+      <header className="card flex flex-wrap items-center justify-between gap-4 p-5">
+        <div className="flex items-center gap-3">
+          <div
+            className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-cyan-300 to-indigo-400 text-xl font-black text-slate-950 shadow-lg shadow-cyan-500/30"
+            aria-hidden="true"
+          >
+            گ
+          </div>
+          <div>
+            <h1 className="text-xl font-extrabold">
+              {t("dashboard", locale)} {branding.displayName}
+            </h1>
+            <p className="text-xs text-core-muted">
+              {whoami ? whoami.username : "…"} · {GUARDASLI.product} {GUARDASLI.initialVersion}
+            </p>
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`role-chip ${roleChipClass(role)}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            {roleFa(role)}
+          </span>
           <button
             type="button"
             onClick={() => switchLocale(locale === "fa" ? "en" : "fa")}
-            className="rounded-lg border px-3 py-2 text-sm font-semibold"
+            className="btn-ghost px-3 py-2 text-sm font-semibold"
           >
             {locale === "fa" ? "EN" : "FA"}
           </button>
@@ -277,23 +307,23 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
               sessionStorage.clear();
               window.location.hash = "#/";
             }}
-            className="rounded-lg border px-4 py-2 text-sm font-semibold hover:bg-core-surface"
+            className="btn-ghost px-4 py-2 text-sm font-semibold"
           >
             {t("logout", locale)}
           </button>
         </div>
       </header>
 
-      <nav className="mt-6 flex flex-wrap gap-2 border-b pb-3">
+      <nav className="mt-6 flex flex-wrap gap-2">
         {tabs.map(([key, label]) => (
           <button
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            className={`rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
               tab === key
-                ? "bg-core-primary text-core-primaryFg shadow-sm"
-                : "hover:bg-core-surface"
+                ? "bg-gradient-to-br from-cyan-400 to-indigo-500 text-slate-950 shadow-lg shadow-cyan-500/25"
+                : "border border-core-border bg-white/[0.03] text-core-muted hover:border-cyan-300/30 hover:text-core-text"
             }`}
           >
             {label}
@@ -320,11 +350,12 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
         {tab === "overview" && (
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
+              tone="emerald"
               title={t("balance", locale)}
               value={wallet ? `${wallet.balance.toLocaleString(locNum)} ${t("toman", locale)}` : "…"}
             />
-            <StatCard title={t("plans", locale)} value={plans ? String(plans.length) : "…"} />
-            <StatCard title="Role" value={role} />
+            <StatCard tone="indigo" title={t("plans", locale)} value={plans ? String(plans.length) : "…"} />
+            <StatCard tone="amber" title={locale === "fa" ? "نقش" : "Role"} value={roleFa(role)} />
           </div>
         )}
 
@@ -678,6 +709,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }
@@ -960,11 +992,20 @@ function BotPanel({ token }: { token: string }) {
   );
 }
 
-function StatCard({ title, value }: { title: string; value: string }) {
+function StatCard({ title, value, tone = "cyan" }: { title: string; value: string; tone?: string }) {
+  const tones: Record<string, string> = {
+    cyan: "from-cyan-400/20",
+    emerald: "from-emerald-400/20",
+    amber: "from-amber-400/20",
+    indigo: "from-indigo-400/20",
+  };
   return (
-    <div className="card p-5">
-      <div className="text-sm font-semibold text-core-muted">{title}</div>
-      <div className="mt-2 text-2xl font-black">{value}</div>
+    <div className="card p-5 transition-transform duration-200 hover:-translate-y-0.5">
+      <div className="flex items-center gap-2">
+        <span className={`h-8 w-1 rounded-full bg-gradient-to-b ${tones[tone] ?? tones.cyan} to-transparent`} />
+        <div className="text-sm font-semibold text-core-muted">{title}</div>
+      </div>
+      <div className="metric mt-2 text-2xl font-black text-gradient">{value}</div>
     </div>
   );
 }

@@ -168,6 +168,18 @@ sudo bash install.sh --domain panel.example.com --email you@example.com
 At the end it prints the panel URL (with the real server IP), the backend
 status and the admin password.
 
+> **An install that cannot hang:** every step is time-boxed and logged. If the
+> terminal closes or SSH drops, run it detached and follow the log:
+>
+> ```bash
+> sudo bash install.sh --background
+> tail -f /opt/guardasli/install.log
+> ```
+>
+> On small servers (< 2 GB RAM) the installer adds 2 GB swap so the build is not
+> OOM-killed. Re-running the same command is always safe — finished steps are
+> skipped.
+
 > **Note:** when provided, the deploy key must be the FULL value — it starts
 > with `prod:` or `dev:` and contains a `|` (e.g.
 > `prod:my-deployment|eyJ2MiI6...`). Full step-by-step guide:
@@ -189,6 +201,34 @@ Saving the bot configuration registers the Telegram webhook, and a daily cron
 re-registers it for every enabled bot — if the webhook is ever removed in
 @BotFather it comes back on its own. The **Set webhook** button works with an
 empty field, and `/webhook` in the bot needs no argument.
+
+### One login page per role
+
+Each role has its own entry port, and the rule is enforced **server-side** — a
+mismatched account is refused, not just hidden in the UI.
+
+| Role | URL |
+|---|---|
+| Normal user | `https://panel.example.com` (no port) |
+| Reseller | `https://panel.example.com:105` |
+| Super admin | `https://panel.example.com:616` |
+
+Change them with `--port-reseller` / `--port-super` (or
+`GUARDASLI_PORT_RESELLER` / `GUARDASLI_PORT_SUPER`).
+
+### One login page per role
+
+Each role has its own entry port, and the rule is enforced **server-side** — a
+mismatched account is refused, not just hidden in the UI.
+
+| Role | URL |
+|---|---|
+| Normal user | `https://panel.example.com` (no port) |
+| Reseller | `https://panel.example.com:105` |
+| Super admin | `https://panel.example.com:616` |
+
+Change them with `--port-reseller` / `--port-super` (or
+`GUARDASLI_PORT_RESELLER` / `GUARDASLI_PORT_SUPER`).
 
 The panel has 18 options: full install, domain, SSL, Telegram bot, admin creation,
 start/stop service, update, repair, backup & restore, logs, backend deploy,

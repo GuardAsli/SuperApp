@@ -2,38 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
-/* تم پیش‌فرض: سفید مرواریدی + آبی آسمانی روشن — مینیمال و مدرن */
+/* ============================================================================
+   GuardAsli — تم اصلی
+   هویت بصری: سپاهی عمیق + فیروزی/سیان سرد + کهربایی گرم برای نقش‌های مدیریتی.
+   همه‌ی رنگ‌ها با CSS variable تعریف می‌شوند تا تم و برندینگ مستأجر بتوانند
+   آن‌ها را بازنویسی کنند (src/web/branding.ts همین متغیرها را set می‌کند).
+   ========================================================================== */
 :root {
-  --ga-bg: #f7fbff;
-  --ga-surface: #ffffff;
-  --ga-border: #e3edf6;
-  --ga-text: #0f2437;
-  --ga-muted: #5c7288;
-  --ga-primary: #0ea5e9;
-  --ga-primary-fg: #ffffff;
-  --ga-accent: #f59e0b;
-  --ga-danger: #e5484d;
-  --ga-ok: #30a46c;
-  --ga-warn: #f5a623;
-  --ga-glow: rgba(14, 165, 233, 0.16);
-  --ga-shadow: 0 1px 2px rgba(15, 36, 55, 0.05), 0 8px 24px rgba(14, 165, 233, 0.07);
-  --ga-radius: 16px;
+  color-scheme: dark;
+
+  --ga-bg: #050b16;
+  --ga-bg-2: #08111f;
+  --ga-surface: rgba(13, 25, 42, 0.82);
+  --ga-surface-solid: #0d192a;
+  --ga-border: rgba(94, 234, 212, 0.14);
+  --ga-text: #e8f3ff;
+  --ga-muted: #8aa4c4;
+
+  --ga-primary: #22d3ee;
+  --ga-primary-strong: #06b6d4;
+  --ga-primary-fg: #04121c;
+  --ga-accent: #818cf8;
+  --ga-success: #34d399;
+  --ga-warn: #fbbf24;
+  --ga-danger: #fb7185;
+
+  /* نقش‌ها */
+  --ga-role-super: #fbbf24;
+  --ga-role-reseller: #38bdf8;
+  --ga-role-user: #34d399;
+
+  --ga-glow: rgba(34, 211, 238, 0.22);
+  --ga-glow-warm: rgba(251, 191, 36, 0.18);
+  --ga-shadow: 0 1px 2px rgba(2, 8, 20, 0.4), 0 18px 50px -18px rgba(34, 211, 238, 0.35);
+  --ga-shadow-lg: 0 30px 80px -30px rgba(34, 211, 238, 0.45);
+  --ga-radius: 18px;
+  --ga-ring: 0 0 0 3px rgba(34, 211, 238, 0.25);
 }
 
 .dark {
-  --ga-bg: #0b1220;
-  --ga-surface: #121a2b;
-  --ga-border: #22304a;
-  --ga-text: #e6eaf2;
-  --ga-muted: #8b95a9;
-  --ga-primary: #38bdf8;
-  --ga-primary-fg: #062018;
-  --ga-accent: #f59e0b;
-  --ga-danger: #f87171;
-  --ga-ok: #4ade80;
-  --ga-warn: #fbbf24;
-  --ga-glow: rgba(56, 189, 248, 0.14);
-  --ga-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+  color-scheme: dark;
 }
 
 html,
@@ -43,69 +51,134 @@ body,
 }
 
 body {
-  background: var(--ga-bg);
+  background:
+    radial-gradient(1200px 700px at 85% -10%, rgba(129, 140, 248, 0.16), transparent 60%),
+    radial-gradient(900px 600px at 5% 5%, rgba(34, 211, 238, 0.14), transparent 55%),
+    linear-gradient(180deg, var(--ga-bg) 0%, var(--ga-bg-2) 100%);
+  background-attachment: fixed;
   color: var(--ga-text);
-  font-family:
-    "Segoe UI",
-    Tahoma,
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: "Vazirmatn", "IRANSans", "Segoe UI", Tahoma, system-ui, -apple-system, sans-serif;
   margin: 0;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
   border-color: var(--ga-border);
 }
 
-/* ابزارهای ظاهری مشترک */
+::selection {
+  background: rgba(34, 211, 238, 0.32);
+  color: #ffffff;
+}
+
+/* اسکرول‌بار هماهنگ با تم */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.45), rgba(129, 140, 248, 0.45));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* ── اجزای مشترک ─────────────────────────────────────────────────────────── */
 .card {
   background: var(--ga-surface);
+  backdrop-filter: blur(18px) saturate(140%);
   border: 1px solid var(--ga-border);
   border-radius: var(--ga-radius);
   box-shadow: var(--ga-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+/* نوار نور بالای کارت — حس حرفه‌ای */
+.card::before {
+  content: "";
+  position: absolute;
+  inset-inline: 12%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(34, 211, 238, 0.75),
+    rgba(129, 140, 248, 0.6),
+    transparent
+  );
+  opacity: 0.9;
 }
 
 .btn-primary {
-  background: var(--ga-primary);
+  background: linear-gradient(135deg, var(--ga-primary) 0%, var(--ga-accent) 140%);
   color: var(--ga-primary-fg);
-  border-radius: 12px;
-  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  border-radius: 13px;
+  font-weight: 700;
+  box-shadow: 0 8px 24px -10px rgba(34, 211, 238, 0.75);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.25s ease,
+    filter 0.2s ease;
 }
-.btn-primary:hover {
-  filter: brightness(1.06);
-  box-shadow: 0 6px 20px var(--ga-glow);
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 14px 34px -12px rgba(34, 211, 238, 0.95);
   transform: translateY(-1px);
 }
-.btn-primary:active {
-  transform: translateY(0);
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.995);
+}
+.btn-primary:disabled {
+  opacity: 0.55;
+  filter: saturate(0.6);
 }
 
 .btn-ghost {
   border: 1px solid var(--ga-border);
-  background: transparent;
-  border-radius: 12px;
-  transition: background 0.2s ease, transform 0.15s ease;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ga-text);
+  border-radius: 13px;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
 }
-.btn-ghost:hover {
-  background: var(--ga-surface);
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(34, 211, 238, 0.4);
   transform: translateY(-1px);
 }
 
 .input {
-  background: var(--ga-bg);
+  background: rgba(5, 11, 22, 0.7);
   border: 1px solid var(--ga-border);
-  border-radius: 10px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  color: var(--ga-text);
+  border-radius: 12px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+.input:hover {
+  border-color: rgba(34, 211, 238, 0.3);
 }
 .input:focus {
   outline: none;
   border-color: var(--ga-primary);
-  box-shadow: 0 0 0 3px var(--ga-glow);
+  background: rgba(5, 11, 22, 0.9);
+  box-shadow: var(--ga-ring);
+}
+.input::placeholder {
+  color: rgba(138, 164, 196, 0.75);
 }
 
-/* حرکت پس‌زمینه‌ی ملایم — دو هاله‌ی آسمانی */
+/* ── پس‌زمینه‌های زنده ────────────────────────────────────────────────────── */
 .aurora {
   position: fixed;
   inset: 0;
@@ -117,23 +190,78 @@ body {
 .aurora::after {
   content: "";
   position: absolute;
-  width: 44rem;
-  height: 44rem;
+  width: 40rem;
+  height: 40rem;
   border-radius: 9999px;
-  filter: blur(90px);
-  opacity: 0.5;
+  filter: blur(110px);
 }
 .aurora::before {
-  background: radial-gradient(circle, var(--ga-glow), transparent 65%);
-  top: -12rem;
-  inset-inline-start: -10rem;
-  animation: drift 22s ease-in-out infinite alternate;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.28), transparent 65%);
+  top: -14rem;
+  inset-inline-start: -12rem;
+  animation: drift 24s ease-in-out infinite alternate;
 }
 .aurora::after {
-  background: radial-gradient(circle, var(--ga-glow), transparent 65%);
-  bottom: -14rem;
-  inset-inline-end: -12rem;
-  animation: drift 26s ease-in-out infinite alternate-reverse;
+  background: radial-gradient(circle, rgba(129, 140, 248, 0.26), transparent 65%);
+  bottom: -16rem;
+  inset-inline-end: -14rem;
+  animation: drift 28s ease-in-out infinite alternate-reverse;
+}
+
+/* شبکه‌ی نقطه‌ای ظریف برای حس فنی */
+.grid-mesh {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(148, 197, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 197, 255, 0.05) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 90% 65% at 50% 35%, #000 35%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 65% at 50% 35%, #000 35%, transparent 78%);
+}
+
+/* ── ابزارهای ظاهری ──────────────────────────────────────────────────────── */
+/* گرادیان متن برای تیترها */
+.text-gradient {
+  background: linear-gradient(120deg, #e8f3ff 0%, #67e8f9 45%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* چیپ نقش */
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid;
+}
+.role-super {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.role-reseller {
+  background: rgba(56, 189, 248, 0.14);
+  color: #bae6fd;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+.role-user {
+  background: rgba(52, 211, 153, 0.14);
+  color: #a7f3d0;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+/* اعداد/مقادیر شاخص */
+.metric {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 @keyframes drift {
@@ -141,7 +269,17 @@ body {
     transform: translate3d(0, 0, 0) scale(1);
   }
   to {
-    transform: translate3d(4rem, 3rem, 0) scale(1.08);
+    transform: translate3d(4rem, 3rem, 0) scale(1.12);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
   }
 }
 

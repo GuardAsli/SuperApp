@@ -36,6 +36,17 @@ export const registerAction = action({
   },
 });
 
+/**
+ * آیا نقش کاربر با نقش مجازِ صفحه‌ی ورود جور است؟
+ * صفحه‌ی سوپر ادمین فقط super_admin؛ صفحه‌ی نماینده reseller و بالادستی‌ها.
+ * نقش نامعتبر (مثلاً از یک کلاینت دستکاری‌شده) هیچ‌وقت پذیرفته نمی‌شود.
+ */
+function roleFitsEntry(entryRole: string, role: string): boolean {
+  if (entryRole === "super_admin") return role === "super_admin";
+  if (entryRole === "reseller") return ["reseller", "admin", "super_admin"].includes(role);
+  return false;
+}
+
 /** ساختار بازگشتی rotateSession از internal.auth */
 type SessionPair = {
   accessToken: string;
@@ -52,7 +63,17 @@ interface LoginResult {
 }
 
 export const loginAction = action({
-  args: { username: v.string(), password: v.string() },
+  args: {
+    username: v.string(),
+    password: v.string(),
+    /**
+     * نقشی که صفحه‌ی ورود اجازه می‌دهد (از پورت URL می‌آید).
+     * اختیاری است؛ اگر داده شود و با نقش واقعی حساب نخواند، ورود رد می‌شود.
+     * این تنها جایی است که محدودیت صفحه‌ی نقش در سمت سرور اعمال می‌شود —
+     * بررسی سمت کلاینت به‌تنهایی قابل دور زدن است.
+     */
+    expectRole: v.optional(v.string()),
+  },
   handler: async (ctx, args): Promise<LoginResult> => {
     const rl = await ctx.runMutation(internal.infra.rateLimitCheck, {
       bucketKey: `login:${args.username.toLowerCase()}`,
@@ -90,6 +111,11 @@ export const loginAction = action({
       throw new Error("UNAUTHENTICATED: نام کاربری یا رمز عبور نادرست است");
     }
     await ctx.runMutation(internal.auth.clearFailedLogins, { userId: user._id });
+    // محدودیت صفحه‌ی نقش (پورت اختصاصی) — سمت سرور اجباری می‌شود.
+    if (args.expectRole && !roleFitsEntry(args.expectRole, user.role)) {
+      await authFailureDelay();
+      throw new Error("FORBIDDEN: این صفحه مخصوص نقش دیگری است");
+    }
     const accessToken = randomHex(32);
     const refreshToken = randomHex(32);
     await ctx.runMutation(internal.auth.createSession, {
