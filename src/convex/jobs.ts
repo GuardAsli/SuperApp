@@ -12,6 +12,34 @@ export const dispatchBotCommand = internalMutation({
   handler: async (ctx, args) => {
     // محدود کردن طول متن bot برای جلوگیری از payload عظیم
     const text = args.text.slice(0, 4096);
+
+    // ————— دی‌دوپ: آپدیت تکراری وبهوک → یک پاسخ، نه دو منو پشت هم —————
+    // تلگرام در چند حالت همان آپدیت را دوباره می‌فرستد (retry شبکه، دابل‌ارسال،
+    // تپ پشت‌سرهم روی دکمه منو). بدون دی‌دوپ، هر آپدیت یک job جدا می‌سازد و کاربر
+    // همان منو را چندبار پشت هم می‌گیرد. پنجره ۱۰ ثانیه‌ای کافی است؛ فرمان‌های
+    // واقعیِ تکراریِ بعد از آن عادی پردازش می‌شوند.
+    const DEDUPE_WINDOW_MS = 10_000;
+    const cutoff = Date.now() - DEDUPE_WINDOW_MS;
+    const recent = await ctx.db
+      .query("jobs")
+      .withIndex("by_kind", (q) => q.eq("kind", "bot_command"))
+      .filter(
+        (q) =>
+          q.and(
+            q.gte(q.field("nextRunAt"), cutoff),
+            q.neq(q.field("status"), "failed"),
+          ),
+      )
+      .collect();
+    const dupe = recent.find(
+      (j) =>
+        j.payload &&
+        (j.payload as Record<string, unknown>).botConfigId === args.botConfigId &&
+        (j.payload as Record<string, unknown>).chatId === args.chatId &&
+        (j.payload as Record<string, unknown>).text === text,
+    );
+    if (dupe) return { ok: true, deduped: true };
+
     await ctx.db.insert("jobs", {
       kind: "bot_command",
       payload: {
@@ -25,7 +53,7 @@ export const dispatchBotCommand = internalMutation({
       maxAttempts: 3,
       nextRunAt: Date.now(),
     });
-    return { ok: true };
+    return { ok: true, deduped: false };
   },
 });
 

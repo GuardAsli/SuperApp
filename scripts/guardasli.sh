@@ -262,15 +262,25 @@ svc_status() {
 # ----------------------------------------------------------------------------
 ssl_issue() {
   title "SSL setup"
-  local domain
+  local domain email
   domain="$(env_get GUARDASLI_MAIN_DOMAIN)"
-  [ -z "${domain}" ] && die "Set GUARDASLI_MAIN_DOMAIN first (menu: 4 Reconfigure)"
-  mkdir -p "${GUARDASLI_ROOT}/ssl"
-  if command -v certbot >/dev/null 2>&1; then
-    info "certbot detected — issuing via ACME…"
-    ${SUDO:-} certbot -d "${domain}" -d "*.${domain}" --manual --preferred-challenges dns certonly \
-      || warn "certbot run failed — check DNS"
+  [ -z "${domain}" ] && die "Set GUARDASLI_MAIN_DOMAIN first (menu: 2 Reconfigure)"
+  email="$(env_get GUARDASLI_ACME_EMAIL '')"
+  if [ -z "${email}" ]; then
+    printf "Email for the SSL certificate: "
+    read -r email
+    [ -n "${email}" ] && env_upsert GUARDASLI_ACME_EMAIL "${email}"
+  fi
+  if command -v certbot >/dev/null 2>&1 && [ -d /etc/nginx ]; then
+    # مسیر nginx-01: خودکار، بدون DNS دستی — همان مسیر install.sh.
+    # قبلاً --manual --preferred-challenges dns بود که همیشه وسط کار می‌ایستاد
+    # و چیزی ثبت نمی‌شد؛ حالا certbot خودش nginx را پیکربندی و ریدایرکت فعال می‌کند.
+    ${SUDO:-} certbot --nginx -d "${domain}" --non-interactive --agree-tos \
+      -m "${email:-admin@${domain}}" --redirect \
+      && ok "SSL active for ${domain} (auto-renew via certbot.timer)" \
+      || warn "certbot failed — check DNS for ${domain} points to this server, then rerun: guardasli ssl"
   else
+    mkdir -p "${GUARDASLI_ROOT}/ssl"
     info "Generating self-signed certificate for ${domain} (valid 825 days)"
     openssl req -x509 -newkey rsa:4096 -sha256 -days 825 -nodes \
       -keyout "${GUARDASLI_ROOT}/ssl/privkey.pem" \
@@ -279,7 +289,7 @@ ssl_issue() {
       -addext "subjectAltName=DNS:${domain},DNS:*.${domain}" 2>/dev/null \
       || die "openssl certificate generation failed"
     ok "Certificate: ${GUARDASLI_ROOT}/ssl/fullchain.pem"
-    warn "Self-signed — for production install certbot and use ACME DNS-01 for wildcard"
+    warn "Self-signed — for production install certbot (apt install certbot python3-certbot-nginx) and rerun: guardasli ssl"
   fi
   env_upsert GUARDASLI_SSL_DIR "${GUARDASLI_ROOT}/ssl"
 }
@@ -407,6 +417,9 @@ do_reconfigure() {
   printf "Main domain [%s]: " "$(env_get GUARDASLI_MAIN_DOMAIN)"
   read -r D
   [ -n "${D}" ] && env_upsert GUARDASLI_MAIN_DOMAIN "${D}"
+  printf "SSL email (Let's Encrypt) [%s]: " "$(env_get GUARDASLI_ACME_EMAIL '')"
+  read -r E
+  [ -n "${E}" ] && env_upsert GUARDASLI_ACME_EMAIL "${E}"
   printf "Repo URL (for updates) [%s]: " "$(env_get GUARDASLI_REPO_URL)"
   read -r R
   [ -n "${R}" ] && env_upsert GUARDASLI_REPO_URL "${R}"
@@ -437,8 +450,19 @@ do_reconfigure() {
 do_update() {
   title "Update"
   deploy_source
+  # build_app شامل bun install + vite build + convex deploy است؛ بدون convex
+  # deploy توابع بک‌اند قدیمی می‌مانند و ربات/پنل بعد از آپدیت می‌شکنند.
   build_app
   svc_start
+  local url="$(env_get VITE_CONVEX_URL '')"
+  if [ -n "${url}" ]; then
+    info "Live check: ${url}/api/v1/health"
+    if curl -fsS --max-time 20 "${url}/api/v1/health" 2>/dev/null | grep -q '"database":"ok"'; then
+      ok "backend healthy after update"
+    else
+      warn "backend health pending — test: curl ${url}/api/v1/health"
+    fi
+  fi
   ok "Update complete — version ${GUARDASLI_VERSION}"
 }
 
@@ -509,8 +533,9 @@ convex_deploy() {
       env_upsert CONVEX_DEPLOY_KEY "${KEY}"
       export CONVEX_DEPLOY_KEY="${KEY}"
       local dname="${KEY%%|*}"; dname="${dname#*:}"
-      env_upsert VITE_CONVEX_URL "https://${dname}.convex.site"
-      export VITE_CONVEX_URL="https://${dname}.convex.site"
+      # VITE_CONVEX_URL must be .convex.cloud — the browser client rejects .convex.site
+      env_upsert VITE_CONVEX_URL "https://${dname}.convex.cloud"
+      export VITE_CONVEX_URL="https://${dname}.convex.cloud"
     fi
     if bunx convex deploy --yes 2>&1 | tail -5; then
       ok "Convex backend deployed"

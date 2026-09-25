@@ -143,7 +143,10 @@ export const handleBotCommand = internalAction({
         await reply(`🛡 پنل ادمین ${PRODUCT}\n\n${helpText(true)}`);
         return { ok: true };
       }
-      await reply("شما ادمین این ربات نیستید.");
+      // ادمین فعلی را لو نده؛ فقط بگو از کجا تغییر می‌شود.
+      await reply(
+        "شما ادمین این ربات نیستید.\n\nادمین فعلی می‌تواند با /setadmin <شناسه شما> دسترسی را منتقل کند، یا از پنل وب، بخش Bot، شناسه عددی را تغییر دهد.",
+      );
       return { ok: true };
     }
 
@@ -187,8 +190,10 @@ export const handleBotCommand = internalAction({
       }
 
       if (cmd === "/setadmin") {
-        const newId = Number(rest.replace(/[^0-9]/g, ""));
-        if (!rest || !Number.isFinite(newId) || newId <= 0 || String(newId) !== rest.trim()) {
+        // اعداد با فاصله/جداکننده هم قبول می‌شوند — فقط باید یک شناسه معتبر بماند.
+        const digits = rest.replace(/[^0-9]/g, "");
+        const newId = Number(digits);
+        if (!digits || !Number.isSafeInteger(newId) || newId <= 0) {
           await reply(
             "استفاده: /setadmin 123456789\n\nشناسه عددی را با /id از کاربر بگیرید.",
           );
@@ -198,7 +203,7 @@ export const handleBotCommand = internalAction({
           botConfigId: args.botConfigId,
           telegramUserId: newId,
         });
-        await reply(`✅ ادمین ربات به شناسه ${newId} تغییر کرد.`);
+        await reply(`✅ ادمین ربات به شناسه ${newId} تغییر کرد.\n\nحالا آن کاربر با /admin پنل کامل را می‌بیند.`);
         return { ok: true };
       }
 

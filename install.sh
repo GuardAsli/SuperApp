@@ -202,11 +202,13 @@ write_env() {
   fi
 
   # With a full deploy key the backend endpoints are known without contacting
-  # the cloud: HTTP-actions on <deploy-name>.convex.site, websocket on .cloud.
+  # the cloud. VITE_CONVEX_URL MUST be the .convex.cloud address — the browser
+  # ConvexReactClient refuses .convex.site (that host serves HTTP actions only,
+  # not the websocket sync the dashboard needs) and crashes the site.
   backend_url=""
   if valid_deploy_key "${DEPLOY_KEY}"; then
     local dname="${DEPLOY_KEY%%|*}"; dname="${dname#*:}"
-    backend_url="https://${dname}.convex.site"
+    backend_url="https://${dname}.convex.cloud"
   fi
 
   if [ -f "$ENV_FILE" ] && grep -q '^GUARDASLI_MASTER_SECRET=.' "$ENV_FILE" 2>/dev/null; then
