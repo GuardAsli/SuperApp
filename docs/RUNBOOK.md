@@ -57,18 +57,25 @@ bunx convex run authActions:bootstrapAdminAction \
 4. Payment webhooks use that public URL
 5. The deployment env is re-synced, so the bot webhook repairs itself
 
-## Role login ports (105 / 616)
+## Private role entry ports (operators only)
 
-Each role signs in on its own port: normal users on the plain domain, resellers
-on **105**, super admins on **616**. The rule is enforced in `loginAction`, not
-just in the UI.
+Each role signs in on its own private port: normal users on the plain domain,
+resellers and super admins on dedicated ports. The rule is enforced in
+`loginAction`, not just in the UI.
+
+**These ports are private, operations-only infrastructure.** They are never
+published on the public site — the only place customers see their entry is the
+role-correct login link the Telegram bot sends them automatically after a
+purchase/activation (and on demand via `/login` in the bot). Port numbers are
+operator configuration (`--port-reseller` / `--port-super`), not product
+documentation: do not put them in customer-facing copy, tickets, or ads.
 
 Why it sometimes looked "not applied":
 
 - the ports are created by nginx, so a code update alone does nothing — nginx
   has to be re-rendered (`guardasli update` now does this automatically)
 - `certbot --nginx` only ever patched the :80 block, so the role ports stayed
-  plain HTTP and `https://…:616` could never work. SSL now uses
+  plain HTTP and `https://…` on the private ports could never work. SSL now uses
   `certonly --webroot` and `scripts/nginx-render.sh` turns TLS on for all three
 
 Check and repair in one command:
@@ -90,9 +97,9 @@ sudo guardasli ssl        # certificate, then TLS on every role port
 sudo guardasli ports      # verify
 ```
 
-If the role ports are still HTTP after `guardasli ssl`, the certificate was not
-issued (usually DNS). The panel then works over `http://domain:105` and
-`http://domain:616` in the meantime.
+If the private role ports are still HTTP after `guardasli ssl`, the certificate
+was not issued (usually DNS). The role entries then work over plain http on
+their ports in the meantime.
 
 ## Telegram bot webhook
 

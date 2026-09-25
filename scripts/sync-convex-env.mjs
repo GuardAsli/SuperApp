@@ -32,6 +32,9 @@ const keys = [
   "GUARDASLI_PRODUCT",
   "GUARDASLI_DEVELOPER",
   "GUARDASLI_VERSION",
+  // پورت‌های اختصاصی نقش — تا لینک ورودی که ربات می‌فرستد با nginx هم‌خوان بماند
+  "GUARDASLI_PORT_SUPER",
+  "GUARDASLI_PORT_RESELLER",
 ];
 
 let ok = 0;

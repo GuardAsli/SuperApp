@@ -228,6 +228,19 @@ export function makeCtx(db: ReturnType<typeof makeDb>) {
       },
     },
   };
+  // Convex scheduler shim — scheduled work is recorded so tests can drain it
+  // manually (real Convex runs it right after the mutation commits).
+  ctx.__scheduled = [] as Array<{ fn: unknown; args: Record<string, unknown>; at: number | string }>;
+  ctx.scheduler = {
+    runAfter: async (delayMs: number, fn: unknown, args: Record<string, unknown>) => {
+      ctx.__scheduled.push({ fn, args, at: delayMs });
+      return null;
+    },
+    runAt: async (ts: number, fn: unknown, args: Record<string, unknown>) => {
+      ctx.__scheduled.push({ fn, args, at: ts });
+      return null;
+    },
+  };
   ctx.runQuery = async (r: any, args: any) => handlerOf(r)(ctx, args);
   ctx.runMutation = async (r: any, args: any) => handlerOf(r)(ctx, args);
   // Node actions run the same real handlers — needed for the webhook chain

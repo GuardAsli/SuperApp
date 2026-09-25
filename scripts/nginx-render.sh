@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GuardAsli — تنها منبع حقیقتِ پیکربندی nginx
-# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
+# Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 #
 # هر مسیر نصب/آپدیت/SSL از همین فایل استفاده می‌کند، پس پورت‌های نقش هیچ‌وقت
 # گم نمی‌شوند: پورت ۸۰ (کاربر عادی) · ۱۰۵ (نماینده) · ۶۱۶ (سوپر ادمین)

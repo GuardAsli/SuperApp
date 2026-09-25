@@ -202,33 +202,17 @@ re-registers it for every enabled bot — if the webhook is ever removed in
 @BotFather it comes back on its own. The **Set webhook** button works with an
 empty field, and `/webhook` in the bot needs no argument.
 
-### One login page per role
+### Role-scoped logins
 
-Each role has its own entry port, and the rule is enforced **server-side** — a
-mismatched account is refused, not just hidden in the UI.
+Every role signs in through its own private entry, and the rule is enforced
+**server-side** — a mismatched account is refused, not just hidden in the UI.
+These entry points are **private, operations-only** infrastructure: they are
+never advertised anywhere on the public site. After a purchase or activation,
+the Telegram bot delivers each buyer their own role-correct login link
+automatically (and `/login` in the bot re-sends it on demand at any time).
 
-| Role | URL |
-|---|---|
-| Normal user | `https://panel.example.com` (no port) |
-| Reseller | `https://panel.example.com:105` |
-| Super admin | `https://panel.example.com:616` |
-
-Change them with `--port-reseller` / `--port-super` (or
-`GUARDASLI_PORT_RESELLER` / `GUARDASLI_PORT_SUPER`).
-
-### One login page per role
-
-Each role has its own entry port, and the rule is enforced **server-side** — a
-mismatched account is refused, not just hidden in the UI.
-
-| Role | URL |
-|---|---|
-| Normal user | `https://panel.example.com` (no port) |
-| Reseller | `https://panel.example.com:105` |
-| Super admin | `https://panel.example.com:616` |
-
-Change them with `--port-reseller` / `--port-super` (or
-`GUARDASLI_PORT_RESELLER` / `GUARDASLI_PORT_SUPER`).
+Operators configure the private ports with `--port-reseller` / `--port-super`
+(or `GUARDASLI_PORT_RESELLER` / `GUARDASLI_PORT_SUPER`).
 
 The panel has 18 options: full install, domain, SSL, Telegram bot, admin creation,
 start/stop service, update, repair, backup & restore, logs, backend deploy,
@@ -251,7 +235,7 @@ bun convex dev --once
 ### Health check
 
 ```bash
-bun test        # 163 tests
+bun test        # 198 tests
 bun typecheck   # zero errors
 bun run build   # production bundle in dist/
 ```

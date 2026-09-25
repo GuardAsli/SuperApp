@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GuardAsli — Convex + app log and health monitor
-# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
+# Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 #
 # usage:
 #   bash scripts/monitor-convex.sh           # one-shot summary

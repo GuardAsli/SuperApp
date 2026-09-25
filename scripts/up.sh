@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GuardAsli — brings up everything automatically after the wizard
-# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
+# Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

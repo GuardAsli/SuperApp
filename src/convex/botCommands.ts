@@ -10,6 +10,76 @@ import { decryptBotToken, encryptSecret } from "../core/aead";
 const PRODUCT = "GuardAsli";
 const DEVELOPER = "AsliCode";
 
+/** برند متن ربات — فقط «Coded by». */
+export const BRAND_LINE = `Coded by ${DEVELOPER}`;
+
+/**
+ * آدرس عمومی پنل برای لینک ورود کاربران.
+ * پورت‌های نقش هرگز در سایت عمومی تبلیغ نمی‌شوند — فقط همین‌جا داخل ربات
+ * به خریدار/کاربر متصل داده می‌شود (خصوصی).
+ */
+function publicBase(): string {
+  const raw = (process.env.GUARDASLI_PUBLIC_URL ?? process.env.CONVEX_SITE_URL ?? "").trim();
+  return raw.replace(/\/+$/, "");
+}
+
+const DEFAULT_SUPER_PORT = 616;
+const DEFAULT_RESELLER_PORT = 105;
+
+/**
+ * پورت اختصاصی نقش — دقیقاً همان مقداری که اپراتور با
+ * --port-reseller / --port-super (یا GUARDASLI_PORT_*) تنظیم کرده است.
+ * بدون این، لینک ربات با nginx واقعی ناهماهنگ می‌شد.
+ */
+function portEnv(name: string, fallback: number): number {
+  const n = Number((process.env[name] ?? "").trim());
+  return Number.isInteger(n) && n > 0 && n <= 65535 ? n : fallback;
+}
+
+/**
+ * لینک ورود مناسب نقش کاربر را می‌سازد.
+ * اگر پورت‌های نقش روی دامنه تنظیم شده باشند، لینک اختصاصی همان نقش داده می‌شود؛
+ * در غیر این صورت لینک عمومی (ورود همه‌ی نقش‌ها) برگردانده می‌شود.
+ */
+export function loginUrlForRole(role: string): { url: string; scoped: boolean } {
+  const base = publicBase();
+  if (!base) return { url: "", scoped: false };
+  if (role === "super_admin") {
+    return { url: `${base}:${portEnv("GUARDASLI_PORT_SUPER", DEFAULT_SUPER_PORT)}/#/auth`, scoped: true };
+  }
+  if (role === "reseller" || role === "admin") {
+    return { url: `${base}:${portEnv("GUARDASLI_PORT_RESELLER", DEFAULT_RESELLER_PORT)}/#/auth`, scoped: true };
+  }
+  return { url: `${base}/#/auth`, scoped: false };
+}
+
+/** متن پیام «لینک ورود شما» برای یک نقش. */
+export function loginMessageForRole(role: string): string {
+  const { url, scoped } = loginUrlForRole(role);
+  if (!url) {
+    return (
+      "لینک ورود آماده نیست — دامنه‌ی عمومی سرور هنوز تنظیم نشده.\n" +
+      "بعد از تنظیم دامنه دوباره /login را بفرستید."
+    );
+  }
+  const label: Record<string, string> = {
+    user: "کاربر عادی",
+    reseller: "نماینده",
+    admin: "ادمین",
+    sub_reseller: "زیرنماینده",
+    super_admin: "سوپر ادمین",
+  };
+  const head = scoped
+    ? `🔐 لینک ورود اختصاصی شما (${label[role] ?? role}):`
+    : "🔐 لینک ورود شما:";
+  return (
+    `${head}\n${url}\n\n` +
+    "با همان نام کاربری و رمز پنل وارد شوید.\n" +
+    "این آدرس فقط برای خودتان است — با دیگران به اشتراک نگذارید.\n\n" +
+    BRAND_LINE
+  );
+}
+
 function master(): string {
   const s = process.env.GUARDASLI_MASTER_SECRET;
   if (!s || s.length < 16) {
@@ -20,12 +90,13 @@ function master(): string {
 
 function helpText(isAdmin: boolean): string {
   const base = [
-    `🛡 ${PRODUCT} Bot — Powered By ${DEVELOPER}`,
+    `🛡 ${PRODUCT} Bot — ${BRAND_LINE}`,
     "",
     "دستورهای عمومی:",
     "/help — همین راهنما",
     "/id — شناسه عددی تلگرام شما",
     "/me — حساب و موجودی متصل به این چت",
+    "/login — دریافت لینک ورود خودتان",
   ];
   if (!isAdmin) {
     return base.join("\n") + "\n\nبرای مدیریت ربات: /admin";
@@ -100,6 +171,23 @@ export const handleBotCommand = internalAction({
       await reply(helpText(isAdminCall));
       return { ok: true };
     }
+    if (cmd === "/login") {
+      // fallback دستی: نقش حساب متصل به این چت → لینک ورود همان نقش
+      const w = await ctx.runQuery(internal.telegram.botWalletInternal, {
+        botConfigId: args.botConfigId,
+        telegramUserId: fromId ?? Number(args.chatId),
+      });
+      if (!("linked" in w) || !w.linked) {
+        await reply(
+          "حسابی به این چت متصل نیست.\n\n" +
+            "در پنل وب بخش ربات، «شناسه عددی» شما (از /id) با نام کاربری‌تان پیوند می‌خورد؛ " +
+            "بعد از اتصال دوباره /login را بفرستید.",
+        );
+        return { ok: true };
+      }
+      await reply(loginMessageForRole(w.role));
+      return { ok: true };
+    }
     if (cmd === "/id") {
       await reply(
         `شناسه عددی تلگرام شما:\n${fromId ?? args.chatId}\n\nاین عدد را به ادمین بدهید تا شما را متصل کند.`,
@@ -169,7 +257,7 @@ export const handleBotCommand = internalAction({
             `مینی‌اپ: ${cfg.miniAppUrl ?? "— تنظیم نشده —"}`,
             `webhook secret: تنظیم شده`,
             "",
-            `Powered By ${DEVELOPER}`,
+            BRAND_LINE,
           ].join("\n"),
         );
         return { ok: true };

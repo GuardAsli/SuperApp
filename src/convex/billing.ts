@@ -241,6 +241,16 @@ export const provisionRun = internalMutation({
         activatedAt: Date.now(),
       });
       await ctx.db.patch(args.jobId, { status: "done" });
+      // بدون سرور هم فعال می‌شود → لینک ورود می‌رود (غیرمسدودکننده).
+      // ارسال از طریق scheduler انجام می‌شود (در mutation اجازه‌ی runAction نیست).
+      try {
+        await ctx.scheduler.runAfter(0, internal.telegramActions.sendLoginLinkAction, {
+          userId: sub.userId,
+          tenantId: sub.tenantId,
+        });
+      } catch {
+        // غیرمسدودکننده
+      }
       return { ok: true };
     }
     const server = await ctx.db.get(sub.serverId);
@@ -280,6 +290,16 @@ export const provisionFinish = internalMutation({
         ...(args.remoteUserId !== undefined ? { remoteUserId: args.remoteUserId } : {}),
       });
       await ctx.db.patch(args.jobId, { status: "done" });
+      // فعال‌سازی موفق → لینک ورود نقش‌محور به چت تلگرام کاربر می‌رود (غیرمسدودکننده).
+      // ارسال از طریق scheduler انجام می‌شود (در mutation اجازه‌ی runAction نیست).
+      try {
+        await ctx.scheduler.runAfter(0, internal.telegramActions.sendLoginLinkAction, {
+          userId: sub.userId,
+          tenantId: sub.tenantId,
+        });
+      } catch {
+        // غیرمسدودکننده
+      }
     } else {
       const attempt = job.attempt + 1;
       const failed = attempt >= job.maxAttempts;

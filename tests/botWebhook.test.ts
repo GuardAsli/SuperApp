@@ -22,6 +22,8 @@ import {
 import * as botActions from "../src/convex/botActions";
 import * as botCommands from "../src/convex/botCommands";
 import * as telegramActions from "../src/convex/telegramActions";
+import * as billing from "../src/convex/billing";
+import * as payments from "../src/convex/payments";
 import { stableTokenHash } from "../src/core/sessionToken";
 
 const PUBLIC_URL = "https://panel.example.com";
@@ -85,6 +87,9 @@ afterEach(() => {
   active?.cleanup();
   active = null;
   setEnv("GUARDASLI_PUBLIC_URL", PUBLIC_URL);
+  // پورت‌های اختصاصی نقش — هر تست از پیش‌فرض شروع می‌شود
+  setEnv("GUARDASLI_PORT_RESELLER", undefined);
+  setEnv("GUARDASLI_PORT_SUPER", undefined);
 });
 
 describe("webhook · first save registers automatically", () => {
@@ -561,5 +566,369 @@ describe("webhook · bot command", () => {
     });
 
     expect(h().calls.length).toBe(0);
+  });
+});
+
+// ————— لینک ورود نقش‌محور: /login دستی + ارسال خودکار بعد از خرید —————
+
+/** اجرای کارهای زمان‌بندی‌شده‌ی mutation (شبیه‌سازی commit → scheduler). */
+async function drainScheduled(hh: Harness) {
+  const queued = [...hh.ctx.__scheduled];
+  hh.ctx.__scheduled.length = 0;
+  for (const s of queued) {
+    await call(hh.ctx, s.fn as never, s.args);
+  }
+  return queued.length;
+}
+
+/**
+ * tenant + ادمین (u-1، همیشه super_admin برای مدیریت ربات) + ربات فعال
+ * + یک کاربر خریدار جدا با نقش/چت تلگرام دلخواه.
+ */
+async function seedBuyer(opts?: {
+  role?: string;
+  telegramUserId?: number | null;
+  withBot?: boolean;
+}) {
+  active = makeWebhookHarness();
+  const { token } = seedAdmin(h().ctx, h().db);
+  const t = h().db.tables as Record<string, any[]>;
+  // جدول‌هایی که در این describe استفاده می‌شوند (makeDb آن‌ها را lazy می‌سازد)
+  t.botUsers = t.botUsers ?? [];
+  t.subscriptions = t.subscriptions ?? [];
+  t.provisionJobs = t.provisionJobs ?? [];
+  t.wallets = t.wallets ?? [];
+  t.payments = t.payments ?? [];
+
+  const role = opts?.role ?? "super_admin";
+  const tg = opts?.telegramUserId === null ? undefined : (opts?.telegramUserId ?? 555111);
+  const buyerId = "u-buyer";
+  t.users.push({
+    _id: buyerId,
+    username: "buyer",
+    role,
+    tenantId: "t-1",
+    status: "active",
+    passwordHash: "x",
+    failedLogins: 0,
+    ...(tg !== undefined ? { telegramUserId: tg } : {}),
+  });
+
+  let saved: any = null;
+  if (opts?.withBot !== false) {
+    saved = await call(h().ctx, botActions.saveBotConfigAction, {
+      token,
+      botToken: botToken(20),
+      displayName: "Bot",
+      enabled: true,
+    });
+    if (tg !== undefined) {
+      t.botUsers.push({
+        _id: "bu-1",
+        botConfigId: saved.botConfigId,
+        telegramUserId: tg,
+        platformUserId: buyerId,
+        state: "linked",
+      });
+    }
+  }
+  return { token, saved, userId: buyerId as string, tenantId: "t-1" as string };
+}
+
+describe("login link · /login command", () => {
+  test("a linked super_admin gets the scoped :616 entry link", async () => {
+    const { saved } = await seedBuyer({ role: "super_admin", telegramUserId: 42 });
+    h().messages.length = 0;
+
+    const res = await call(h().ctx, botCommands.handleBotCommand, {
+      botConfigId: saved.botConfigId as never,
+      chatId: "42",
+      text: "/login",
+      telegramUserId: 42,
+    });
+
+    expect(res.ok).toBe(true);
+    const text = h().messages.join("\n");
+    expect(text).toContain("https://panel.example.com:616/#/auth");
+    expect(text).toContain("سوپر ادمین");
+    expect(text).toContain("Coded by AsliCode");
+    expect(text).not.toContain("Powered");
+    // لینک عمومی هرگز به ادمین سوپر داده نمی‌شود
+    expect(text).not.toContain("https://panel.example.com/#/auth");
+  });
+
+  test("a linked reseller gets the scoped :105 entry link", async () => {
+    const { saved } = await seedBuyer({ role: "reseller", telegramUserId: 77 });
+    h().messages.length = 0;
+
+    await call(h().ctx, botCommands.handleBotCommand, {
+      botConfigId: saved.botConfigId as never,
+      chatId: "77",
+      text: "/login",
+      telegramUserId: 77,
+    });
+
+    const text = h().messages.join("\n");
+    expect(text).toContain("https://panel.example.com:105/#/auth");
+    expect(text).toContain("نماینده");
+  });
+
+  test("a linked normal user gets the open login link without any port", async () => {
+    const { saved } = await seedBuyer({ role: "user", telegramUserId: 88 });
+    h().messages.length = 0;
+
+    await call(h().ctx, botCommands.handleBotCommand, {
+      botConfigId: saved.botConfigId as never,
+      chatId: "88",
+      text: "/login",
+      telegramUserId: 88,
+    });
+
+    const text = h().messages.join("\n");
+    expect(text).toContain("https://panel.example.com/#/auth");
+    expect(text).not.toContain(":616");
+    expect(text).not.toContain(":105");
+  });
+
+  test("an unlinked chat gets the connection hint instead of any link", async () => {
+    const { saved } = await seedBuyer({ role: "user", telegramUserId: 88 });
+    h().messages.length = 0;
+
+    await call(h().ctx, botCommands.handleBotCommand, {
+      botConfigId: saved.botConfigId as never,
+      chatId: "999",
+      text: "/login",
+      telegramUserId: 999,
+    });
+
+    const text = h().messages.join("\n");
+    expect(text).toContain("حسابی به این چت متصل نیست");
+    expect(text).not.toContain("https://");
+  });
+
+  test("without GUARDASLI_PUBLIC_URL the command explains instead of leaking", async () => {
+    const { saved } = await seedBuyer({ role: "user", telegramUserId: 88 });
+    h().messages.length = 0;
+    setEnv("GUARDASLI_PUBLIC_URL", undefined);
+
+    await call(h().ctx, botCommands.handleBotCommand, {
+      botConfigId: saved.botConfigId as never,
+      chatId: "88",
+      text: "/login",
+      telegramUserId: 88,
+    });
+
+    const text = h().messages.join("\n");
+    expect(text).toContain("لینک ورود آماده نیست");
+    expect(text).not.toContain("https://");
+  });
+
+  test("/login is advertised in the public help text", async () => {
+    const { saved } = await seedBuyer({ role: "user", telegramUserId: 88 });
+    h().messages.length = 0;
+
+    await call(h().ctx, botCommands.handleBotCommand, {
+      botConfigId: saved.botConfigId as never,
+      chatId: "88",
+      text: "/help",
+      telegramUserId: 88,
+    });
+
+    expect(h().messages.join("\n")).toContain("/login");
+  });
+
+  test("custom operator ports are respected so the link matches nginx", async () => {
+    const { saved } = await seedBuyer({ role: "reseller", telegramUserId: 77 });
+    h().messages.length = 0;
+    setEnv("GUARDASLI_PORT_RESELLER", "8443");
+    setEnv("GUARDASLI_PORT_SUPER", "9443");
+
+    await call(h().ctx, botCommands.handleBotCommand, {
+      botConfigId: saved.botConfigId as never,
+      chatId: "77",
+      text: "/login",
+      telegramUserId: 77,
+    });
+
+    const text = h().messages.join("\n");
+    expect(text).toContain("https://panel.example.com:8443/#/auth");
+    expect(text).not.toContain(":105");
+  });
+
+  test("an invalid port env falls back to the default instead of building a broken link", () => {
+    setEnv("GUARDASLI_PORT_SUPER", "not-a-port");
+    expect(botCommands.loginUrlForRole("super_admin").url).toBe(`${PUBLIC_URL}:616/#/auth`);
+  });
+});
+
+describe("login link · auto-send after purchase/activation", () => {
+  test("provisionFinish success delivers the role link to the buyer's chat", async () => {
+    const { saved, userId, tenantId } = await seedBuyer({ role: "super_admin", telegramUserId: 555111 });
+    const t = h().db.tables as Record<string, any[]>;
+    t.botUsers = t.botUsers ?? [];
+    t.subscriptions = t.subscriptions ?? [];
+    t.provisionJobs = t.provisionJobs ?? [];
+    t.subscriptions.push({
+      _id: "sub-1", tenantId, userId, planId: "plan-1",
+      status: "pending", provisioningState: "provisioning",
+    });
+    t.provisionJobs.push({
+      _id: "job-1", tenantId, subscriptionId: "sub-1",
+      attempt: 0, maxAttempts: 5, nextRunAt: Date.now(), status: "queued",
+    });
+    h().messages.length = 0;
+
+    const r = await call(h().ctx, billing.provisionFinish as never, {
+      jobId: "job-1", success: true, remoteUserId: "u-9",
+    });
+    expect(r.ok).toBe(true);
+    expect(t.subscriptions.find((s) => s._id === "sub-1")!.status).toBe("active");
+
+    // mutation فقط زمان‌بندی می‌کند؛ اجرای زمان‌بندی‌شده پیام را می‌فرستد
+    expect(await drainScheduled(h())).toBe(1);
+
+    const linkMsg = h().messages.find((m) => m.includes("https://"));
+    expect(linkMsg).toBeDefined();
+    expect(linkMsg!).toContain("https://panel.example.com:616/#/auth");
+    expect(linkMsg!).toContain("این آدرس فقط برای خودتان است");
+    expect(linkMsg!).toContain("Coded by AsliCode");
+    // botConfigId همان رباتِ tenant است
+    expect(saved.botConfigId).toBeTruthy();
+  });
+
+  test("a buyer without a Telegram chat gets nothing and no error", async () => {
+    const { userId, tenantId } = await seedBuyer({ role: "user", telegramUserId: null });
+    const t = h().db.tables as Record<string, any[]>;
+    t.subscriptions = t.subscriptions ?? [];
+    t.provisionJobs = t.provisionJobs ?? [];
+    t.subscriptions.push({
+      _id: "sub-2", tenantId, userId, planId: "plan-1",
+      status: "pending", provisioningState: "provisioning",
+    });
+    t.provisionJobs.push({
+      _id: "job-2", tenantId, subscriptionId: "sub-2",
+      attempt: 0, maxAttempts: 5, nextRunAt: Date.now(), status: "queued",
+    });
+    h().messages.length = 0;
+
+    await call(h().ctx, billing.provisionFinish as never, {
+      jobId: "job-2", success: true,
+    });
+    await drainScheduled(h());
+
+    expect(h().messages.length).toBe(0);
+  });
+
+  test("provisionRun without a server also schedules the link delivery", async () => {
+    const { userId, tenantId } = await seedBuyer({ role: "user", telegramUserId: 555111 });
+    const t = h().db.tables as Record<string, any[]>;
+    t.subscriptions = t.subscriptions ?? [];
+    t.provisionJobs = t.provisionJobs ?? [];
+    t.subscriptions.push({
+      _id: "sub-3", tenantId, userId, planId: "plan-1",
+      status: "pending", provisioningState: "queued",
+    });
+    t.provisionJobs.push({
+      _id: "job-3", tenantId, subscriptionId: "sub-3",
+      attempt: 0, maxAttempts: 5, nextRunAt: Date.now(), status: "queued",
+    });
+    h().messages.length = 0;
+
+    const r = await call(h().ctx, billing.provisionRun as never, { jobId: "job-3" });
+    expect(r.ok).toBe(true);
+    expect(t.subscriptions.find((s) => s._id === "sub-3")!.status).toBe("active");
+
+    await drainScheduled(h());
+    const linkMsg = h().messages.find((m) => m.includes("https://"));
+    expect(linkMsg).toBeDefined();
+    // کاربر عادی → لینک بدون پورت
+    expect(linkMsg!).toContain("https://panel.example.com/#/auth");
+    expect(linkMsg!).not.toContain(":616");
+    expect(linkMsg!).not.toContain(":105");
+  });
+
+  test("approving a card-to-card payment schedules the buyer's link", async () => {
+    const { token, userId, tenantId } = await seedBuyer({ role: "super_admin", telegramUserId: 555111 });
+    const t = h().db.tables as Record<string, any[]>;
+    t.wallets = t.wallets ?? [];
+    t.payments = t.payments ?? [];
+    t.wallets.push({ _id: "w-1", userId, balance: 0, status: "active" });
+    t.payments.push({
+      _id: "pay-1", tenantId, userId, method: "card_to_card",
+      amount: 5000, status: "pending_review", attemptCount: 0, createdAt: Date.now(),
+    });
+    h().messages.length = 0;
+
+    const r = await call(h().ctx, payments.cardReview as never, {
+      token, paymentId: "pay-1", decision: "approve",
+    });
+    expect(r.ok).toBe(true);
+    expect(t.wallets.find((w) => w._id === "w-1")!.balance).toBe(5000);
+
+    await drainScheduled(h());
+    const linkMsg = h().messages.find((m) => m.includes("https://"));
+    expect(linkMsg).toBeDefined();
+    expect(linkMsg!).toContain("https://panel.example.com:616/#/auth");
+  });
+
+  test("a provider-paid deposit schedules the buyer's link too", async () => {
+    const { userId, tenantId } = await seedBuyer({ role: "reseller", telegramUserId: 555111 });
+    const t = h().db.tables as Record<string, any[]>;
+    t.wallets = t.wallets ?? [];
+    t.payments = t.payments ?? [];
+    t.wallets.push({ _id: "w-2", userId, balance: 0, status: "active" });
+    t.payments.push({
+      _id: "pay-2", tenantId, userId, method: "cubepay",
+      amount: 7000, status: "awaiting_verify", providerPaymentId: "pp-9", attemptCount: 0, createdAt: Date.now(),
+    });
+    h().messages.length = 0;
+
+    const r = await call(h().ctx, payments.acceptProviderPayment as never, {
+      paymentId: "pay-2", expectedAmount: 7000, providerPaymentId: "pp-9",
+    });
+    expect(r.ok).toBe(true);
+
+    await drainScheduled(h());
+    const linkMsg = h().messages.find((m) => m.includes("https://"));
+    expect(linkMsg).toBeDefined();
+    expect(linkMsg!).toContain("https://panel.example.com:105/#/auth");
+  });
+
+  test("a Telegram failure never breaks the payment flow (non-blocking notify)", async () => {
+    const { userId, tenantId } = await seedBuyer({ role: "user", telegramUserId: 555111 });
+    const t = h().db.tables as Record<string, any[]>;
+    t.wallets = t.wallets ?? [];
+    t.payments = t.payments ?? [];
+    t.wallets.push({ _id: "w-3", userId, balance: 0, status: "active" });
+    t.payments.push({
+      _id: "pay-3", tenantId, userId, method: "card_to_card",
+      amount: 3000, status: "pending_review", attemptCount: 0, createdAt: Date.now(),
+    });
+    h().messages.length = 0;
+    // شبکه‌ی تلگرام را خراب می‌کنیم؛ کارت همچنان تایید و شارژ می‌شود
+    h().failNext.status = 500;
+    h().failNext.times = 1;
+    // توجه: failNext فقط setWebhook را خراب می‌کند؛ sendMessage را با
+    // جایگزینی موقت fetch برای همین آزمون خراب می‌کنیم.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any, init?: any) => {
+      if (String(input).includes("/sendMessage")) {
+        return new Response("boom", { status: 500 });
+      }
+      return realFetch(input as any, init as any);
+    }) as typeof fetch;
+    try {
+      const r = await call(h().ctx, payments.cardReview as never, {
+        token: "tok-admin", paymentId: "pay-3", decision: "approve",
+      });
+      expect(r.ok).toBe(true);
+      await drainScheduled(h());
+      expect(t.payments.find((p) => p._id === "pay-3")!.status).toBe("paid");
+      expect(t.wallets.find((w) => w._id === "w-3")!.balance).toBe(3000);
+      // پیام موفق ارسال نشده ولی هیچ استثنایی به سطح mutation نرسید
+      expect(h().messages.find((m) => m.includes("https://"))).toBeUndefined();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

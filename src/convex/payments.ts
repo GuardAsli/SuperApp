@@ -248,6 +248,16 @@ export const cardReview = mutation({
         reviewedAt: Date.now(),
         ledgerEntryId: res.ledgerEntryId,
       });
+      // بعد از تایید کارت‌به‌کارت هم لینک ورود کاربر می‌رود (غیرمسدودکننده).
+      // ارسال از طریق scheduler انجام می‌شود (در mutation اجازه‌ی runAction نیست).
+      try {
+        await ctx.scheduler.runAfter(0, internal.telegramActions.sendLoginLinkAction, {
+          userId: payment.userId,
+          tenantId: payment.tenantId,
+        });
+      } catch {
+        // غیرمسدودکننده
+      }
     } else if (args.decision === "reject") {
       await ctx.db.patch(args.paymentId, {
         status: "rejected",
@@ -617,6 +627,17 @@ export const acceptProviderPayment = internalMutation({
       ledgerEntryId: res.ledgerEntryId,
       reviewedAt: Date.now(),
     });
+    // بعد از واریز موفق، لینک ورود نقش‌محور به چت تلگرام کاربر می‌رود
+    // (اگر ربات/chat تنظیم باشد؛ شکست آن هرگز این تایید را خراب نمی‌کند).
+    // ارسال از طریق scheduler انجام می‌شود (در mutation اجازه‌ی runAction نیست).
+    try {
+      await ctx.scheduler.runAfter(0, internal.telegramActions.sendLoginLinkAction, {
+        userId: payment.userId,
+        tenantId: payment.tenantId,
+      });
+    } catch {
+      // غیرمسدودکننده
+    }
     await ctx.runMutation(internal.audit.log, {
       tenantId: payment.tenantId,
       actorUserId: payment.userId,

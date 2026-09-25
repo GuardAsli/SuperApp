@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GuardAsli is0.0.1 — fully automated installation wizard (no prompts)
-# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
+# Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 #
 # Usage:
 #   bun run wizard              # full install + Convex attempt + bootstrap
@@ -48,7 +48,7 @@ fi
 echo ""
 echo "═══════════════════════════════════════════"
 echo "  GuardAsli is0.0.1 — Fully Automated Wizard"
-echo "  Powered By AsliCode"
+echo "  Coded by AsliCode"
 echo "═══════════════════════════════════════════"
 echo ""
 
@@ -73,7 +73,7 @@ if [ ! -f "$ENV_FILE" ]; then
   SALT="$(rand_hex)"
   cat > "$ENV_FILE" <<EOF
 # GuardAsli is0.0.1 — wizard $(date -u +%Y-%m-%dT%H:%MZ)
-# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
+# Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 
 VITE_CONVEX_URL=
 CONVEX_DEPLOYMENT=

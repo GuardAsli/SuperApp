@@ -399,6 +399,31 @@ export const botWalletInternal = internalQuery({
   },
 });
 
+// ————— ارسال خودکار لینک ورود بعد از خرید/فعال‌سازی —————
+
+/**
+ * یافتن bot فعالِ tenant و chat متصل به کاربر — پله‌ی اول ارسال لینک ورود.
+ * اگر کاربر به هیچ bot متصل نباشد، هیچ پیامی فرستاده نمی‌شود (خطا نیست).
+ */
+export const botLoginTargetInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user || user.telegramUserId === undefined) return null;
+    const cfg = await ctx.db
+      .query("botConfigs")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", user.tenantId))
+      .unique();
+    if (!cfg || !cfg.enabled) return null;
+    return {
+      botConfigId: cfg._id,
+      tenantId: cfg.tenantId,
+      chatId: String(user.telegramUserId),
+      role: user.role,
+    };
+  },
+});
+
 /** اعتبارسنجی امضای webhook — مقایسه با webhookSecret هر tenant. */
 export const verifyWebhookSecret = internalQuery({
   args: { botConfigId: v.id("botConfigs"), secret: v.string() },

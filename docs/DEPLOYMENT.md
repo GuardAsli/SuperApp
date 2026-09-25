@@ -1,6 +1,6 @@
 # GuardAsli — Deployment Guide (Step by Step)
 
-**Product:** GuardAsli · **Developer:** AsliCode · **Powered By AsliCode** · Version `is0.0.1`
+**Product:** GuardAsli · **Developer:** AsliCode · **Coded by AsliCode** · Version `is0.0.1`
 
 This guide takes you from a fresh Ubuntu 24.04 server to a running, selling-ready
 panel.

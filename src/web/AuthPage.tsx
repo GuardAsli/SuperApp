@@ -1,17 +1,11 @@
-/** GuardAsli — صفحه ورود/ثبت‌نام با ورود تفکیک‌شده بر اساس پورت نقش. */
+/** GuardAsli — صفحه ورود/ثبت‌نام. */
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { GUARDASLI } from "../core/identity";
-import {
-  entryContext,
-  roleAllowed,
-  roleMismatchMessage,
-  roleEntryUrl,
-  RESELLER_PORT,
-  SUPER_ADMIN_PORT,
-} from "./entryPorts";
+import { entryContext, roleAllowed, roleMismatchMessage } from "./entryPorts";
+// nothing public-facing here — ports stay internal (delivered privately by the bot)
 
 type Mode = "login" | "register";
 
@@ -122,11 +116,11 @@ export default function AuthPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
         >
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-300 text-2xl font-black text-slate-950 shadow-lg shadow-cyan-500/30">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-300 text-2xl font-black text-slate-950 shadow-lg shadow-emerald-500/30">
             گ
           </div>
           <div className="mt-3 text-2xl font-extrabold tracking-tight">{GUARDASLI.product}</div>
-          <div className="text-xs text-core-muted">ساخته‌ی {GUARDASLI.developer}</div>
+          <div className="text-xs text-core-muted" dir="ltr">Coded by {GUARDASLI.developer}</div>
         </motion.a>
 
         {/* نشان نقش — فقط وقتی آدرس پورت دارد */}
@@ -142,7 +136,6 @@ export default function AuthPage() {
             >
               <span aria-hidden="true">{style.glyph}</span>
               ورود {entry.label}
-              <span className="opacity-60">· پورت {entry.port}</span>
             </span>
           </motion.div>
         )}
@@ -233,34 +226,12 @@ export default function AuthPage() {
               {mode === "login" ? "حساب ندارید؟ بسازید" : "حساب دارید؟ وارد شوید"}
             </button>
           )}
-
-          {/* راهنمای ورود نقش‌های دیگر — فقط در صفحه‌ی عمومی */}
-          {!entry.scoped && (
-            <div className="mt-5 space-y-1.5 border-t border-core-border pt-4 text-xs text-core-muted">
-              <p className="font-semibold text-core-text/80">ورود جداگانه‌ی هر نقش:</p>
-              <p>
-                نماینده:{" "}
-                <code className="text-core-primary" dir="ltr">
-                  {roleEntryUrl("reseller", window.location.origin)}
-                </code>
-              </p>
-              <p>
-                سوپر ادمین:{" "}
-                <code className="text-amber-300" dir="ltr">
-                  {roleEntryUrl("super_admin", window.location.origin)}
-                </code>
-              </p>
-            </div>
-          )}
         </motion.form>
 
         <a href="#/" className="mt-6 text-center text-sm text-core-muted hover:underline">
           بازگشت به صفحه‌ی اصلی
         </a>
       </div>
-      <p className="sr-only">
-        پورت‌های نقش: سوپر ادمین {SUPER_ADMIN_PORT}، نماینده {RESELLER_PORT}
-      </p>
     </div>
   );
 }

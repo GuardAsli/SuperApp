@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import { verifyTelegramInitData } from "../core/telegram";
+import { BRAND_LINE, loginUrlForRole } from "./botCommands";
 import { decryptBotToken, decryptSecret } from "../core/aead";
 import { scryptHashSync, scryptVerifySync } from "../core/password";
 import { validateOutboundUrl } from "../core/ssrf";
@@ -275,6 +276,64 @@ export const sendBotReply = internalAction({
     });
     if (!res.ok) throw new Error(`PROVIDER_ERROR: sendMessage HTTP ${res.status}`);
     return { ok: true };
+  },
+});
+
+/**
+ * ارسال لینک ورود نقش‌محور به کاربر بعد از خرید/فعال‌سازی.
+ * هر مرحله اختیاری است: bot تنظیم نشده / chat متصل نیست / دامنه تنظیم نیست →
+ * بی‌سروصدا رد می‌شود. خرابی تلگرام هرگز به caller نشت نمی‌کند.
+ */
+export const sendLoginLinkAction = internalAction({
+  args: {
+    userId: v.id("users"),
+    tenantId: v.id("tenants"),
+  },
+  handler: async (ctx, args): Promise<{ sent: boolean; reason?: string }> => {
+    try {
+      const target = await ctx.runQuery(internal.telegram.botLoginTargetInternal, {
+        userId: args.userId,
+      });
+      if (!target || target.tenantId !== args.tenantId) {
+        return { sent: false, reason: "NO_LINKED_BOT" };
+      }
+      const cfg = await ctx.runQuery(internal.telegram.getBotConfigInternal, {
+        botConfigId: target.botConfigId as never,
+      });
+      if (!cfg || !cfg.enabled) return { sent: false, reason: "BOT_DISABLED" };
+      const { url, scoped } = loginUrlForRole(target.role);
+      if (!url) return { sent: false, reason: "NO_PUBLIC_URL" };
+      const label: Record<string, string> = {
+        user: "کاربر عادی",
+        reseller: "نماینده",
+        admin: "ادمین",
+        sub_reseller: "زیرنماینده",
+        super_admin: "سوپر ادمین",
+      };
+      const head = scoped
+        ? `🔐 لینک ورود اختصاصی شما (${label[target.role] ?? target.role}):`
+        : "🔐 لینک ورود شما:";
+      const text =
+        `${head}\n${url}\n\n` +
+        "با همان نام کاربری و رمز پنل وارد شوید.\n" +
+        "این آدرس فقط برای خودتان است — با دیگران به اشتراک نگذارید.\n\n" +
+        BRAND_LINE;
+      let botToken: string;
+      try {
+        botToken = decryptBotToken(cfg.tokenEncrypted, masterSecret());
+      } catch {
+        return { sent: false, reason: "DECRYPT_FAILED" };
+      }
+      await ctx.runAction(internal.telegramActions.sendBotReply, {
+        botToken,
+        chatId: target.chatId,
+        text,
+      });
+      return { sent: true };
+    } catch {
+      // هیچ‌وقت جریان خرید را خراب نکن — فقط سیگنال بده.
+      return { sent: false, reason: "NOTIFY_FAILED" };
+    }
   },
 });
 

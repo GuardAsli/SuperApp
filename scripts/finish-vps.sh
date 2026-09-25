@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GuardAsli — finish installation after Convex login / domain setup
-# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
+# Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

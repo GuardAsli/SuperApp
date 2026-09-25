@@ -275,7 +275,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
       <header className="card flex flex-wrap items-center justify-between gap-4 p-5">
         <div className="flex items-center gap-3">
           <div
-            className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-cyan-300 to-indigo-400 text-xl font-black text-slate-950 shadow-lg shadow-cyan-500/30"
+            className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-emerald-300 to-teal-400 text-xl font-black text-slate-950 shadow-lg shadow-emerald-500/30"
             aria-hidden="true"
           >
             گ
@@ -322,8 +322,8 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
             onClick={() => setTab(key)}
             className={`rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
               tab === key
-                ? "bg-gradient-to-br from-cyan-400 to-indigo-500 text-slate-950 shadow-lg shadow-cyan-500/25"
-                : "border border-core-border bg-white/[0.03] text-core-muted hover:border-cyan-300/30 hover:text-core-text"
+                ? "bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/25"
+                : "border border-core-border bg-white/[0.03] text-core-muted hover:border-emerald-300/30 hover:text-core-text"
             }`}
           >
             {label}
@@ -354,7 +354,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
               title={t("balance", locale)}
               value={wallet ? `${wallet.balance.toLocaleString(locNum)} ${t("toman", locale)}` : "…"}
             />
-            <StatCard tone="indigo" title={t("plans", locale)} value={plans ? String(plans.length) : "…"} />
+            <StatCard tone="teal" title={t("plans", locale)} value={plans ? String(plans.length) : "…"} />
             <StatCard tone="amber" title={locale === "fa" ? "نقش" : "Role"} value={roleFa(role)} />
           </div>
         )}
@@ -797,10 +797,10 @@ function BrandingPanel({
         onClick={() => {
           const def = { ...branding, theme: "light" as const };
           update("displayName", GUARDASLI.product);
-          update("primaryColor", "#0ea5e9");
-          update("secondaryColor", "#38bdf8");
+          update("primaryColor", "#2fd08a");
+          update("secondaryColor", "#0ea5a0");
           update("accentColor", "#f59e0b");
-          update("backgroundColor", "#f7fbff");
+          update("backgroundColor", "#f4fdf9");
           update("theme", def.theme);
         }}
         className="btn-ghost mt-5 px-4 py-2 text-sm font-semibold"
@@ -992,12 +992,11 @@ function BotPanel({ token }: { token: string }) {
   );
 }
 
-function StatCard({ title, value, tone = "cyan" }: { title: string; value: string; tone?: string }) {
+function StatCard({ title, value, tone = "emerald" }: { title: string; value: string; tone?: string }) {
   const tones: Record<string, string> = {
-    cyan: "from-cyan-400/20",
     emerald: "from-emerald-400/20",
+    teal: "from-teal-400/20",
     amber: "from-amber-400/20",
-    indigo: "from-indigo-400/20",
   };
   return (
     <div className="card p-5 transition-transform duration-200 hover:-translate-y-0.5">

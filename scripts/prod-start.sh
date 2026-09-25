@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GuardAsli is0.0.1 — reliable production start path with a strict env gate
-# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
+# Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

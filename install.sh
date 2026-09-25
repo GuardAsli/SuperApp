@@ -2,7 +2,7 @@
 # =============================================================================
 #  GuardAsli — server installer (English only for SSH)
 #  Product:    GuardAsli
-#  Developer:  AsliCode · Powered By AsliCode
+#  Developer:  AsliCode · Coded by AsliCode
 #  Release:    is0.0.1   (format isMAJOR.MINOR.PATCH)
 #
 #  One command — opens the installer straight away:
@@ -47,7 +47,7 @@ if [ ! -t 0 ]; then OPEN_PANEL=0; fi
 
 wizard() {
   echo ""
-  echo "  GuardAsli installer — Powered By AsliCode"
+  echo "  GuardAsli installer — Coded by AsliCode"
   echo "  Press Enter to accept the default shown in [brackets]."
   echo ""
   if [ -z "${DOMAIN}" ]; then
@@ -583,7 +583,7 @@ print_summary_and_panel() {
   set +a
   echo ""
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
-  ok "GuardAsli is0.0.1 installed — Powered By AsliCode"
+  ok "GuardAsli is0.0.1 installed — Coded by AsliCode"
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
   echo "  Path      : ${INSTALL_DIR}"
   echo "  Env file  : ${ENV_FILE}"

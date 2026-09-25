@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GuardAsli — apply the Nginx config
-# Product: GuardAsli · Developer: AsliCode · Powered By AsliCode
+# Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 #
 # این اسکریپت فقط یک پوسته است؛ منطق واقعی در scripts/nginx-render.sh است تا
 # پورت‌های نقش (نماینده/سوپر ادمین) با هر بار اجرا حفظ شوند.

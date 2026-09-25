@@ -69,7 +69,7 @@ export default function MiniAppPage() {
       <div className="grid-mesh" aria-hidden="true" />
       <div className="mx-auto max-w-md px-6 py-10">
       <header className="text-center">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 to-indigo-400 text-2xl font-black text-slate-950 shadow-lg shadow-cyan-500/30">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-300 text-2xl font-black text-slate-950 shadow-lg shadow-emerald-500/30">
           گ
         </div>
         <h1 className="mt-3 text-xl font-extrabold">{GUARDASLI.product} Mini App</h1>
