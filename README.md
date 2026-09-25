@@ -211,7 +211,7 @@ bun convex dev --once
 ### Health check
 
 ```bash
-bun test        # 142 tests
+bun test        # 163 tests
 bun typecheck   # zero errors
 bun run build   # production bundle in dist/
 ```

@@ -153,7 +153,12 @@ bun typecheck
 bun run build
 ```
 
-Expect 142 tests passing and a clean TypeScript build.
+Expect 163 tests passing and a clean TypeScript build.
+
+The webhook suite (`tests/botWebhook.test.ts`) drives the real handlers with only
+the network edge mocked, and covers: automatic webhook registration on save,
+`keep-existing` token handling, webhook secret stability across updates, the
+daily self-healing cron, and the `/webhook` bot command.
 
 ---
 

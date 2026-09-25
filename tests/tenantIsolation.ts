@@ -187,14 +187,18 @@ const applyFilter = (rows: Doc[], fn: (q: any) => unknown): Doc[] =>
 import * as harnessModules from "../src/convex/_harnessModules";
 import { getFunctionName } from "convex/server";
 
-type FnRef = { _handler?: unknown; invokeQuery?: unknown } | undefined;
+type FnRef =
+  | { _handler?: unknown; invokeQuery?: unknown; invokeAction?: unknown; invokeMutation?: unknown }
+  | ((...args: any[]) => any)
+  | undefined;
 
 /** Resolve any function reference (module export OR anyApi proxy) to its real handler. */
 function handlerOf(fn: unknown): (ctx: any, args: any) => Promise<any> {
   const f = fn as any;
   // Module namespace exports are Convex function wrappers (objects OR functions)
-  // with the real handler attached under _handler (mutations) / invokeQuery (queries).
-  const direct = f?._handler ?? f?.invokeQuery;
+  // with the real handler attached under _handler (mutations) / invokeQuery (queries)
+  // / invokeAction (node actions).
+  const direct = f?._handler ?? f?.invokeQuery ?? f?.invokeAction ?? f?.invokeMutation;
   if (typeof direct === "function") return direct;
   // Opaque anyApi reference — Convex knows its path; map to the real module export.
   let name: string | null = null;
@@ -226,16 +230,21 @@ export function makeCtx(db: ReturnType<typeof makeDb>) {
   };
   ctx.runQuery = async (r: any, args: any) => handlerOf(r)(ctx, args);
   ctx.runMutation = async (r: any, args: any) => handlerOf(r)(ctx, args);
-  ctx.runAction = async (_r: any, _args: any) => {
-    throw new Error("runAction is not available in the isolation harness");
-  };
+  // Node actions run the same real handlers — needed for the webhook chain
+  // (botConfigSaveAction → setBotWebhookInternal → ensureBotWebhooksInternal).
+  ctx.runAction = async (r: any, args: any) => handlerOf(r)(ctx, args);
   return ctx;
 }
 
-/** Call a public/internal handler through the same ctx.runQuery/runMutation path Convex uses. */
+/**
+ * Call a public/internal handler through the same ctx.runQuery/runMutation path
+ * Convex uses. `fn` accepts either a module export or an api/internal reference
+ * (both are resolved to the real handler at runtime, so the strong Convex
+ * function types do not need to be widened here).
+ */
 export async function call(
   ctx: ReturnType<typeof makeCtx>,
-  fn: FnRef,
+  fn: unknown,
   args: Record<string, unknown>,
 ): Promise<any> {
   return handlerOf(fn)(ctx, args);
