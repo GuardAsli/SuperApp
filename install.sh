@@ -5,8 +5,11 @@
 #  Developer:  AsliCode · Powered By AsliCode
 #  Release:    is0.0.1   (format isMAJOR.MINOR.PATCH)
 #
-#  Usage:
-#    sudo bash install.sh                  <- wizard: asks everything interactively
+#  One command — opens the installer straight away:
+#    sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
+#
+#  Or from a checkout:
+#    sudo bash install.sh
 #    sudo bash install.sh --domain panel.example.com --email admin@example.com
 #    sudo bash install.sh --deploy-key 'prod:name|eyJ...'   <- non-interactive backend
 #
@@ -14,6 +17,10 @@
 #    system packages -> bun -> source -> secrets -> install -> backend deploy
 #    -> build -> live health verify -> admin bootstrap -> Nginx -> SSL
 #    -> systemd service -> firewall -> 'guardasli' command -> management panel
+#
+#  The Convex deploy key is OPTIONAL. Leave it empty and the installer
+#  continues happily; you can connect the backend later with:
+#    sudo guardasli convex
 # =============================================================================
 set -uo pipefail
 
@@ -67,7 +74,7 @@ while [ $# -gt 0 ]; do
     --skip-convex) SKIP_CONVEX=1; shift ;;
     --deploy-key) DEPLOY_KEY="$2"; shift 2 ;;
     --yes|-y)  shift ;;
-    --help|-h) sed -n '2,18p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)"; exit 1 ;;
   esac
 done
@@ -114,33 +121,6 @@ detect_public_ip() {
   echo "${ip:-}"
 }
 
-# Full Convex deploy key: required, must carry the deployment prefix and a
-# pipe separator (prod:name|token). Not the bare token — the CLI refuses it.
-valid_deploy_key() {
-  case "$1" in
-    dev:*|prod:*) [ "$1" != "${1%%|*}" ] ;;
-    *) return 1 ;;
-  esac
-}
-
-ask_deploy_key() {
-  [ "$SKIP_CONVEX" = "1" ] && { warn "backend deploy skipped (--skip-convex)"; return 0; }
-  while ! valid_deploy_key "${DEPLOY_KEY}"; do
-    if [ -n "${DEPLOY_KEY}" ]; then
-      warn "that key is incomplete — it must look like:  prod:your-deployment|eyJ2MiI6..."
-      warn "(the bare token alone is not accepted — copy the whole value from dashboard Settings > Deploy Keys)"
-    fi
-    printf "Convex deploy key (full value incl. 'prod:...|' prefix; blank = configure later): "
-    read -r DEPLOY_KEY
-    [ -z "${DEPLOY_KEY}" ] && break
-  done
-  if valid_deploy_key "${DEPLOY_KEY}"; then
-    ok "deploy key accepted (${DEPLOY_KEY%%|*})"
-  elif [ -n "${DEPLOY_KEY}" ]; then
-    warn "key format unexpected — will still try, but expect 'InvalidDeploymentName'"
-  fi
-}
-
 # -----------------------------------------------------------------------------
 # 1. System packages
 # -----------------------------------------------------------------------------
@@ -151,9 +131,13 @@ install_system_packages() {
   case "$id" in
     ubuntu|debian)
       export DEBIAN_FRONTEND=noninteractive
+      # needrestart must never open an interactive TUI mid-install.
+      echo 'needrestart_conf->{ui} = "0";' > /etc/needrestart/conf.d/guardasli-noninteractive.conf 2>/dev/null || true
       apt-get update -y
-      apt-get install -y curl ca-certificates git unzip openssl nginx certbot python3-certbot-nginx ufw rsync \
+      apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
+        curl ca-certificates git unzip openssl nginx certbot python3-certbot-nginx ufw rsync \
         || warn "some system packages failed — continuing"
+      rm -f /etc/needrestart/conf.d/guardasli-noninteractive.conf 2>/dev/null || true
       ;;
     centos|rhel|rocky|almalinux|fedora)
       if command -v dnf >/dev/null 2>&1; then
@@ -289,22 +273,24 @@ run_app_install() {
   bun install --frozen-lockfile >/dev/null 2>&1 || bun install || die "bun install failed"
   ok "dependencies"
 
-  # CI gates: informative on low-memory VPS boxes, never allowed to wedge the
-  # installer. Production correctness is enforced at deploy time instead.
+  # Live progress + timeout guard: this stage used to sit silent for minutes.
   if command -v timeout >/dev/null 2>&1; then
-    timeout 300 bun run typecheck >/dev/null 2>&1 \
+    info "typecheck (max 3 min)..."
+    timeout 180 bun run typecheck >/dev/null 2>&1 \
       && ok "typecheck" || warn "typecheck skipped or timed out (non-fatal here)"
-    timeout 300 bun test >/dev/null 2>&1 \
+    info "tests (max 3 min)..."
+    timeout 180 bun test >/dev/null 2>&1 \
       && ok "tests" || warn "tests skipped or timed out (non-fatal here)"
   else
     bun run typecheck >/dev/null 2>&1 && ok "typecheck" || warn "typecheck failed (non-fatal here)"
     bun test >/dev/null 2>&1 && ok "tests" || warn "tests failed (non-fatal here)"
   fi
 
+  info "production build (vite)..."
   bun run build || die "production build failed"
   ok "build (dist/)"
 
-  # Backend deploy — the full deploy key is required for a real cloud backend.
+  # Backend deploy — OPTIONAL. An empty key configures later; it never blocks.
   if [ "$SKIP_CONVEX" = "1" ]; then
     warn "backend deploy skipped (--skip-convex)"
   elif valid_deploy_key "${CONVEX_DEPLOY_KEY:-}"; then
@@ -483,6 +469,44 @@ print_summary_and_panel() {
   echo ""
   info "Opening the management panel (option 0 exits)..."
   /usr/local/bin/guardasli panel 2>/dev/null || bash "${INSTALL_DIR}/scripts/guardasli.sh" panel
+}
+
+# Full Convex deploy key: required, must carry the deployment prefix and a
+# pipe separator (prod:name|token). Not the bare token — the CLI refuses it.
+valid_deploy_key() {
+  case "$1" in
+    dev:*|prod:*) [ "$1" != "${1%%|*}" ] ;;
+    *) return 1 ;;
+  esac
+}
+
+# One quiet attempt. Empty input is ACCEPTED — the key is optional and the
+# backend can be connected afterwards with 'sudo guardasli convex'.
+ask_deploy_key_once() {
+  printf "Convex deploy key (optional — Enter to skip, configure later): "
+  read -r DEPLOY_KEY
+}
+
+ask_deploy_key() {
+  # Already supplied via --deploy-key or env: validate quietly, no reprompt loop.
+  if [ -n "${DEPLOY_KEY}" ]; then
+    if valid_deploy_key "${DEPLOY_KEY}"; then
+      ok "deploy key accepted (${DEPLOY_KEY%%|*})"
+    else
+      warn "key format unexpected — continuing anyway (installer will retry at deploy step)"
+    fi
+    return 0
+  fi
+  ask_deploy_key_once
+  if [ -z "${DEPLOY_KEY}" ]; then
+    ok "no deploy key — backend can be connected later with: sudo guardasli convex"
+    return 0
+  fi
+  if valid_deploy_key "${DEPLOY_KEY}"; then
+    ok "deploy key accepted (${DEPLOY_KEY%%|*})"
+  else
+    warn "key format unexpected — continuing anyway (installer will retry at deploy step)"
+  fi
 }
 
 echo ""

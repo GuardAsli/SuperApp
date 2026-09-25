@@ -8,14 +8,15 @@
 
 <div dir="rtl">
 
-## نصب روی سرور — دو دستور ساده
+## نصب روی سرور — یک دستور
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
-sudo bash install.sh
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
 ```
 
-نصب‌کننده چند سؤال می‌پرسد (دامنه، ایمیل) و بقیه‌اش خودش انجام می‌دهد:
+نصب‌کننده مستقیم باز می‌شود و حداکثر سه سؤال کوتاه می‌پرسد (دامنه، ایمیل SSL،
+کلید Deploy کانوکس — اختیاری: Enter بزنید تا رد شود و بعداً با
+`sudo guardasli convex` بک‌اند وصل شود) و بقیه‌اش خودش انجام می‌دهد:
 bun، بسته‌ها، رمزها، build، deploy بک‌اند (با کلید)، Nginx، SSL،
 سرویس systemd، دستور `guardasli` و باز شدن پنل مدیریت.
 

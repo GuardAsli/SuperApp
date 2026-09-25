@@ -3,8 +3,7 @@
 **Product:** GuardAsli · **Developer:** AsliCode · **Powered By AsliCode** · Version `is0.0.1`
 
 This guide takes you from a fresh Ubuntu 24.04 server to a running, selling-ready
-panel. Follow the steps in order. Do not skip **Step 2** — without the deploy key
-the backend (database, login, wallet) has nowhere to live.
+panel.
 
 ---
 
@@ -14,27 +13,35 @@ the backend (database, login, wallet) has nowhere to live.
 |---|---|
 | A fresh Ubuntu 24.04 (or 22.04) server, root access | Your VPS provider |
 | A domain (optional but recommended) pointed to the server IP | Your DNS provider |
-| A **full Convex deploy key** — see Step 2 | dashboard.convex.dev |
+| A **full Convex deploy key** — see Step 2 *(optional — the panel installs without it and you can connect the backend later)* | dashboard.convex.dev |
 
 Everything else (bun, nginx, certbot, firewall, service) is installed by the
 installer automatically. No other packages needed.
 
 ---
 
-## 1. Get the code onto the server
+## 1. One command — install
 
-SSH into your server and run:
+SSH into your server as root and run a single command; it downloads and opens
+the installer right away:
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
 ```
+
+That is the whole install. The installer asks up to three short questions
+(domain, SSL email, deploy key — all skippable) and does everything else
+itself. Prefer a checkout instead? `git clone` then `sudo bash install.sh`
+works identically.
 
 ---
 
-## 2. Get your Convex deploy key (THE step most people miss)
+## 2. Get your Convex deploy key (optional, but the panel needs a backend)
 
 The backend of GuardAsli runs on Convex — that is where the database, users,
 wallet, payments and bots live. To create that backend you need a **deploy key**.
+You can paste it during the install, or leave it empty and add it afterwards
+with `sudo guardasli convex`.
 
 1. Open <https://dashboard.convex.dev> and sign up / log in (free plan is enough).
 2. Create a project (any name, e.g. `guardasli`).
@@ -45,19 +52,9 @@ wallet, payments and bots live. To create that backend you need a **deploy key**
    prod:guardasli-abc123|eyJ2MiI6OGIyZWZjYTdkYjM2NDU4YmI5OTRlNzcyOTMwN2Q3MX0=
    ```
 
-   ⚠️ **Common mistake:** copying only the part after the `|`. That bare token is
-   NOT a valid key. The installer will reject it on purpose with a clear message.
    Copy the entire value including the `prod:...|` prefix.
 
-Keep this key private. You will paste it in Step 4 — that is the only time.
-
----
-
-## 3. Run the installer
-
-```bash
-sudo bash install.sh
-```
+Keep this key private. It is used once, during the deploy step.
 
 The wizard asks:
 
@@ -66,7 +63,7 @@ The wizard asks:
 | Domain for the panel | e.g. `panel.example.com` — or press Enter to skip and use the server IP |
 | Email for SSL | Your email (only if you gave a domain) |
 | Internal web port | Press Enter for `4173` |
-| **Convex deploy key** | **Paste the full key from Step 2** (starts with `prod:` or `dev:`) |
+| **Convex deploy key** | Paste the full key from Step 2, **or just press Enter to skip** and connect the backend later with `sudo guardasli convex` |
 
 If you prefer to pass things up front:
 
@@ -90,11 +87,12 @@ The installer performs, in order:
 2. Detects your **server public IP automatically** (never uses `127.0.0.1` for
    public URLs — loopback/link-local addresses are filtered)
 3. Generates all secrets (master key, token pepper, AEAD salt, admin password)
-4. Validates the deploy key format and **deploys the backend** to your Convex
-   deployment
+4. Validates the deploy key format (when provided) and **deploys the backend**
+   to your Convex deployment. With no key, the install continues and prints a
+   single `Backend pending` note — nothing blocks
 5. **Verifies the backend is really alive**: polls `/api/v1/health` up to 5 times
    until it reports `"database":"ok"` — the install is not called complete
-   without this proof
+   without this proof (skipped when no backend was deployed)
 6. Creates the super admin (username `admin`, random strong password — printed
    at the end and stored in `/opt/guardasli/.env`)
 7. Sets up Nginx + automatic SSL (Let's Encrypt) if a domain was given

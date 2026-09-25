@@ -31,28 +31,23 @@
 | برند | هر مشتری اسم و رنگ و دامنه‌ی خودش را دارد |
 | API | مسیر `/api/v1` با مشخصات OpenAPI |
 
-### نصب روی سرور (سه مرحله)
+### نصب روی سرور (یک دستور)
 
 پیش‌نیاز: یک سرور Ubuntu/Debian تازه و دسترسی root. همین!
 
 ```bash
-# ۱ — کد را بگیرید
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
-
-# ۲ — کلید کامل Deploy را از dashboard.convex.dev بگیرید
-#     (پروژه → Settings → Deploy Keys → Copy — کل مقدار با پیشوند prod:...|)
-
-# ۳ — نصب‌کننده را اجرا کنید؛ کلید را از شما می‌پرسد و همه‌چیز را خودش انجام می‌دهد
-sudo bash install.sh
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
 ```
 
-همین! نصب‌کننده خودش:
+همین! نصب‌کننده باز می‌شود، حداکثر سه سؤال کوتاه می‌پرسد (دامنه، ایمیل SSL،
+کلید Deploy کانوکس — **اختیاری**؛ خالی بگذارید و بعداً با `sudo guardasli
+convex` بک‌اند را وصل کنید) و خودش:
 
 - bun و بسته‌های لازم را نصب می‌کند
 - **IP عمومی سرور را خودکار تشخیص می‌دهد** (بدون آدرس لوکال)
 - رمزها و تنظیمات را می‌سازد
-- **بک‌اند را روی دپلویمنت ابری شما deploy می‌کند** و با health-check واقعی
-  (`database: "ok"`) زنده بودنش را تأیید می‌کند
+- با کلید Deploy: **بک‌اند را روی دپلویمنت ابری deploy می‌کند** و با
+  health-check واقعی (`database: "ok"`) زنده بودنش را تأیید می‌کند
 - برنامه را build و راه می‌اندازد
 - Nginx و SSL را تنظیم می‌کند
 - دستور `guardasli` را نصب می‌کند و **پنل مدیریت را باز می‌کند**
@@ -65,9 +60,9 @@ sudo bash install.sh --domain panel.example.com --email you@example.com
 
 در پایان، آدرس پنل (با IP واقعی سرور)، وضعیت بک‌اند و رمز ادمین را نشان می‌دهد.
 
-> ⚠️ **مهم:** کلید Deploy باید «کامل» باشد — یعنی با `prod:` یا `dev:` شروع شود و
-> علامت `|` داشته باشد (مثل `prod:my-deployment|eyJ2MiI6...`). فقط توکن برهنه
-> قبول نیست. راهنمای کامل مرحله‌به‌مرحله: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+> **نکته:** در صورت ارائه، کلید Deploy باید «کامل» باشد — یعنی با `prod:` یا
+> `dev:` شروع شود و علامت `|` داشته باشد (مثل `prod:my-deployment|eyJ2MiI6...`).
+> راهنمای کامل مرحله‌به‌مرحله: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ### مدیریت سرور بعد از نصب
 
@@ -141,28 +136,24 @@ Telegram Mini App and tenant-branded apps.
 | Branding | Each tenant gets its own name, colors and domain |
 | API | `/api/v1` with an OpenAPI spec |
 
-### Install on a server (three simple steps)
+### Install on a server (one command)
 
 Requirement: a fresh Ubuntu/Debian server with root access. That's it.
 
 ```bash
-# 1 — get the code
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
-
-# 2 — get your FULL deploy key from dashboard.convex.dev
-#     (project → Settings → Deploy Keys → Copy — the whole value incl. prod:...|)
-
-# 3 — run the installer; it asks for the key and does everything else
-sudo bash install.sh
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
 ```
 
-Done! The installer handles everything itself:
+Done! The installer opens right away, asks up to three short questions
+(domain, SSL email, Convex deploy key — **the key is optional**: leave it
+empty and connect the backend later with `sudo guardasli convex`), then
+handles everything itself:
 
 - installs bun and required packages
 - **auto-detects the server public IP** (never a loopback address)
 - creates secrets and configuration
-- **deploys the backend to your cloud deployment** and proves it is live with
-  a real health check (`database: "ok"`)
+- with a deploy key: **deploys the backend to your cloud deployment** and
+  proves it is live with a real health check (`database: "ok"`)
 - builds and starts the app
 - sets up Nginx and SSL
 - installs the `guardasli` command and **opens the management panel**
@@ -176,9 +167,9 @@ sudo bash install.sh --domain panel.example.com --email you@example.com
 At the end it prints the panel URL (with the real server IP), the backend
 status and the admin password.
 
-> ⚠️ **Important:** the deploy key must be the FULL value — it starts with
-> `prod:` or `dev:` and contains a `|` (e.g. `prod:my-deployment|eyJ2MiI6...`).
-> A bare token alone is rejected. Full step-by-step guide:
+> **Note:** when provided, the deploy key must be the FULL value — it starts
+> with `prod:` or `dev:` and contains a `|` (e.g.
+> `prod:my-deployment|eyJ2MiI6...`). Full step-by-step guide:
 > [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ### Managing the server afterwards

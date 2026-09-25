@@ -8,25 +8,20 @@ Persian version: [Learn.fa.md](Learn.fa.md) · Technical reference: [Docs.md](Do
 
 ---
 
-## 1. Install on a server (three steps)
+## 1. Install on a server (one command)
 
 ```bash
-# Step 1 — the code
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
-
-# Step 2 — get your FULL deploy key from dashboard.convex.dev
-#   (project → Settings → Deploy Keys → Copy; the whole value incl. prod:...|)
-
-# Step 3 — install
-sudo bash install.sh
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
 ```
 
-The installer asks for your domain and the **full deploy key**, then does
-everything itself: installs bun and packages, auto-detects the server public
-IP, creates secrets, deploys the backend to your cloud deployment, proves it
-is live with a real health check, builds the app, sets up Nginx and SSL,
-starts the service, installs the `guardasli` command and opens the
-management panel.
+That single command downloads and opens the installer straight away. It asks
+up to three short questions (domain, SSL email, Convex deploy key — the key
+is optional: press Enter to skip and connect the backend later with
+`sudo guardasli convex`), then does everything itself: installs bun and
+packages, auto-detects the server public IP, creates secrets, deploys the
+backend to your cloud deployment, proves it is live with a real health check,
+builds the app, sets up Nginx and SSL, starts the service, installs the
+`guardasli` command and opens the management panel.
 
 With a domain (SSL is automatic):
 
@@ -37,18 +32,10 @@ sudo bash install.sh --domain panel.example.com --email you@example.com
 At the end it prints the panel URL (with the real server IP), the backend
 status and the admin password. Save them.
 
-> ⚠️ The deploy key must be the FULL value: it starts with `prod:` or `dev:`
-> and contains a `|`. A bare token is rejected with a clear message. No key at
-> hand? `sudo guardasli` → option 16 asks for it later.
+> The deploy key must be the FULL value: it starts with `prod:` or `dev:`
+> and contains a `|`. Got no key at hand? Just press Enter at the prompt.
 >
 > Full guide and troubleshooting: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-
-Verify:
-
-```bash
-sudo guardasli status
-sudo guardasli doctor
-```
 
 ---
 

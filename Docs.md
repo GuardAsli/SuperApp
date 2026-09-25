@@ -190,16 +190,18 @@ Full reference: [docs/API.md](docs/API.md).
 
 ## 10. Installer & management panel
 
-**Server install — two commands:**
+**Server install — one command:**
 
 ```bash
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
-sudo bash install.sh
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
 ```
 
-The installer asks a few questions (domain, email) and does the rest:
-bun, packages, secrets, build, Convex deploy (if a deploy key is present),
-Nginx, SSL, systemd service, the `guardasli` command, and opens the panel.
+The installer opens straight away and asks up to three short questions
+(domain, SSL email, Convex deploy key — the key is optional; press Enter to
+skip and connect the backend later with `sudo guardasli convex`), then does
+the rest: bun, packages, secrets, build, Convex deploy (when a deploy key is
+provided), Nginx, SSL, systemd service, the `guardasli` command, and opens
+the panel.
 
 With a domain:
 

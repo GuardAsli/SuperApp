@@ -10,23 +10,19 @@
 
 ---
 
-## ۱. نصب روی سرور (سه مرحله)
+## ۱. نصب روی سرور (یک دستور)
 
 ```bash
-# مرحله ۱ — کد
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
-
-# مرحله ۲ — کلید کامل Deploy از dashboard.convex.dev
-#   (پروژه → Settings → Deploy Keys → Copy؛ کل مقدار با پیشوند prod:...|)
-
-# مرحله ۳ — نصب
-sudo bash install.sh
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
 ```
 
-نصب‌کننده دامنه و **کلید Deploy کامل** را می‌پرسد و بقیه‌اش خودش انجام می‌دهد:
-نصب bun و بسته‌ها، تشخیص خودکار IP عمومی سرور، ساخت رمزها، deploy بک‌اند
-روی دپلویمنت ابری شما، تأیید زنده بودن با health-check واقعی، build برنامه،
-تنظیم Nginx و SSL، راه‌اندازی سرویس، نصب دستور `guardasli` و باز شدن پنل مدیریت.
+همین یک دستور نصب‌کننده را مستقیم باز می‌کند. حداکثر سه سؤال کوتاه می‌پرسد
+(دامنه، ایمیل SSL، کلید Deploy کانوکس — کلید اختیاری است: Enter بزنید تا رد
+شود و بعداً با `sudo guardasli convex` بک‌اند را وصل کنید) و بقیه‌اش خودش
+انجام می‌دهد: نصب bun و بسته‌ها، تشخیص خودکار IP عمومی سرور، ساخت رمزها،
+deploy بک‌اند روی دپلویمنت ابری شما، تأیید زنده بودن با health-check واقعی،
+build برنامه، تنظیم Nginx و SSL، راه‌اندازی سرویس، نصب دستور `guardasli`
+و باز شدن پنل مدیریت.
 
 با دامنه (SSL خودکار):
 
@@ -36,18 +32,10 @@ sudo bash install.sh --domain panel.example.com --email you@example.com
 
 در پایان آدرس پنل (با IP واقعی سرور)، وضعیت بک‌اند و رمز ادمین را نشان می‌دهد. ذخیره‌شان کنید.
 
-> ⚠️ کلید Deploy باید کامل باشد: با `prod:` یا `dev:` شروع شود و `|` داشته باشد.
-> اگر فقط توکن بدهید، نصب‌کننده با پیام واضح رد می‌کند. اگر کلید ندارید،
-> `sudo guardasli` → گزینه ۱۶ بعداً آن را می‌پرسد.
+> کلید Deploy باید کامل باشد: با `prod:` یا `dev:` شروع شود و `|` داشته باشد.
+> کلید ندارید؟ همان‌جا Enter بزنید — بعداً اضافه می‌شود.
 >
 > راهنمای کامل و عیب‌یابی: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-
-راستی‌آزمایی:
-
-```bash
-sudo guardasli status
-sudo guardasli doctor
-```
 
 ---
 

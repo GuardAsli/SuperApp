@@ -36,19 +36,17 @@
 | برند | هر مشتری اسم و رنگ و دامنه‌ی خودش را دارد |
 | API | مسیر `/api/v1` با مشخصات OpenAPI |
 
-### نصب روی سرور (دو دستور ساده)
+### نصب روی سرور (یک دستور)
 
 پیش‌نیاز: یک سرور Ubuntu/Debian تازه و دسترسی root. همین!
 
 ```bash
-# ۱ — کد را بگیرید
-git clone https://github.com/GuardAsli/SuperApp.git guardasli && cd guardasli
-
-# ۲ — نصب‌کننده را اجرا کنید؛ از شما می‌پرسد و همه‌چیز را خودش انجام می‌دهد
-sudo bash install.sh
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
 ```
 
-همین! نصب‌کننده خودش:
+همین! نصب‌کننده باز می‌شود، حداکثر سه سؤال کوتاه می‌پرسد (دامنه، ایمیل SSL،
+کلید Deploy کانوکس — اختیاری؛ خالی بگذارید تا بعداً با `sudo guardasli convex`
+وصل شود) و خودش:
 
 - bun و بسته‌های لازم را نصب می‌کند
 - رمزها و تنظیمات را می‌سازد
