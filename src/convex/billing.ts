@@ -1,6 +1,6 @@
 /** GuardAsli — خرید/پرووایژنینگ: دبیت اتمی → خرید → پرووایژن → فعال‌سازی. */
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireActor, requirePermission, requireTenantScope } from "./auth";
@@ -267,6 +267,143 @@ export const provisionRun = internalMutation({
       return { ok: false };
     }
     return { ok: true, serverId: sub.serverId };
+  },
+});
+
+/**
+ * انتخاب کارهای provision سررسیدشده برای اجراکننده‌ی اکشن node.
+ * هر کار سررسید → running (قفل نرم) و به‌همراه مسیر tenant→server→provider اعتبارسنجی می‌شود.
+ * اشتراک بدون سرور همین‌جا با provisionRun فعال و کار تمام می‌شود (بدون خروج از mutation).
+ * اعتبار provider فقط به‌صورت envelope رمزنگاری‌شده به اکشن می‌رود — هرگز plaintext نیست.
+ */
+export const provisionPickDue = internalMutation({
+  args: { limit: v.number() },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const due = await ctx.db
+      .query("provisionJobs")
+      .withIndex("by_status_next", (q) => q.eq("status", "queued"))
+      .filter((q) => q.lte(q.field("nextRunAt"), now))
+      .take(args.limit);
+    const picked: Array<{ jobId: string; tenantId: string; envelope: string; baseUrl: string; kind: string }> = [];
+    for (const job of due) {
+      const sub = await ctx.db.get(job.subscriptionId);
+      if (!sub) {
+        await ctx.db.patch(job._id, { status: "dead", lastError: "subscription missing" });
+        continue;
+      }
+      if (!sub.serverId) {
+        // مسیر بدون سرور — همان منطق provisionRun: فعال + لینک ورود + کار done.
+        await ctx.db.patch(sub._id, {
+          status: "active",
+          provisioningState: "provisioned",
+          activatedAt: Date.now(),
+        });
+        await ctx.db.patch(job._id, { status: "done" });
+        try {
+          await ctx.scheduler.runAfter(0, internal.telegramActions.sendLoginLinkAction, {
+            userId: sub.userId,
+            tenantId: sub.tenantId,
+          });
+        } catch {
+          // غیرمسدودکننده
+        }
+        continue;
+      }
+      const server = await ctx.db.get(sub.serverId);
+      if (!server || !server.providerId) {
+        await failJob(ctx, job, "server/provider missing");
+        continue;
+      }
+      const provider = await ctx.db.get(server.providerId);
+      if (!provider || provider.status !== "active") {
+        await failJob(ctx, job, "provider inactive/missing");
+        continue;
+      }
+      if (provider.tenantId !== job.tenantId) {
+        await failJob(ctx, job, "cross-tenant provider");
+        continue;
+      }
+      // قفل نرم + ثبت زمان اجرا — معیار کهنگی برای provisionRequeueStale.
+      await ctx.db.patch(job._id, { status: "running", nextRunAt: now });
+      picked.push({
+        jobId: job._id,
+        tenantId: job.tenantId,
+        envelope: provider.credentialsEncrypted,
+        baseUrl: provider.baseUrl,
+        kind: provider.kind,
+      });
+    }
+    return { picked };
+  },
+});
+
+/**
+ * مشخصات ساخت remote user برای یک job — فقط اعداد/زمان، بدون هیچ secret.
+ * خوانده می‌شود توسط provisionWorker تا spec آداپتور از اشتراک واقعی ساخته شود.
+ */
+export const provisionSubscriptionSpec = internalQuery({
+  args: { jobId: v.id("provisionJobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return null;
+    const sub = await ctx.db.get(job.subscriptionId);
+    if (!sub) return null;
+    return {
+      trafficLimitGb: sub.trafficLimitGb ?? null,
+      expiredAt: sub.durationEndsAt ?? null,
+    };
+  },
+});
+
+/** خطای job → retry با backoff نمایی تا سقف attempt، وگرنه dead (قرارداد provisionRun). */
+async function failJob(
+  ctx: {
+    db: {
+      get: (id: any) => Promise<{ _id: string; attempt: number; maxAttempts: number } | null>;
+      patch: (id: any, data: Record<string, unknown>) => Promise<void>;
+    };
+  },
+  job: { _id: string; attempt: number; maxAttempts: number },
+  error: string,
+): Promise<void> {
+  const attempt = job.attempt + 1;
+  const dead = attempt >= job.maxAttempts;
+  await ctx.db.patch(job._id, {
+    status: dead ? "dead" : "queued",
+    attempt,
+    nextRunAt: Date.now() + Math.min(60_000 * 2 ** attempt, 3_600_000),
+    lastError: error,
+  });
+}
+
+/**
+ * بازگرداندن کارهای گیرکرده در running (اجرای اکشن بین pick و finish مرده باشد).
+ * معیار کهنگی: اجراکننده هنگام pick، nextRunAt را به زمان اجرا می‌برد؛ کار running ای که
+ * nextRunAt آن قدیمی‌تر از ۵ دقیقه است یعنی اجراکننده‌اش دیگر زنده نیست.
+ */
+export const provisionRequeueStale = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const staleBefore = Date.now() - 5 * 60_000;
+    const rows = await ctx.db
+      .query("provisionJobs")
+      .withIndex("by_status_next", (q) => q.eq("status", "running"))
+      .collect();
+    let requeued = 0;
+    for (const j of rows) {
+      if (j.nextRunAt > staleBefore) continue;
+      const attempt = j.attempt + 1;
+      const dead = attempt >= j.maxAttempts;
+      await ctx.db.patch(j._id, {
+        status: dead ? "dead" : "queued",
+        attempt,
+        nextRunAt: Date.now(),
+        ...(dead ? { lastError: "stale running (worker crash?)" } : {}),
+      });
+      requeued++;
+    }
+    return { requeued };
   },
 });
 

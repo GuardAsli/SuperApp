@@ -37,3 +37,4 @@ export * as jobs from "./jobs";
 export * as crons from "./crons";
 export * as runtime from "./runtime";
 export * as workerActions from "./workerActions";
+export * as provisionWorker from "./provisionWorker";

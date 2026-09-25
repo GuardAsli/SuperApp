@@ -11,6 +11,14 @@ crons.interval(
   { limit: 25 },
 );
 
+/** اجراکننده provisioning — هر دقیقه کارهای سررسید اشتراک‌های سروردار را به provider می‌رساند. */
+crons.interval(
+  "process provision jobs",
+  { minutes: 1 },
+  internal.provisionWorker.processDueProvisions,
+  { limit: 10 },
+);
+
 crons.interval(
   "purge expired sessions",
   { hours: 1 },

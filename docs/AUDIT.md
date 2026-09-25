@@ -20,7 +20,7 @@
 | 6 | کیف پول و Ledger (§5) | ✅ | `wallet.ledgerApply` فقط‌الحاقی، idempotent، `-1000` ضد اوردرافت؛ تست negative | — |
 | 7 | پرداخت (§6) | ✅ | ۴ کانال، `MAX_CARDS=10`، صف `payment_verify`، ضد-replay، نوتیف خودکار لینک ورود بعد از فعال‌سازی (scheduler) | — |
 | 8 | Providers (§7) | 🟡 | آداپتور واقعی ۴ خانواده API + تشخیص capability + SSRF (`src/core/providers/index.ts`) | **هیچ مسیر ران‌تایمی آداپتور را صدا نمی‌زند** (بند ۹ زیر) |
-| 9 | خط Provisioning (اشتراک → سرور) | ❌ | مدل داده کامل: `provisionJobs`, `billing.provisionRun/Finish`, retry/backoff | `provisionRun/Finish` **فقط در تست صدا زده می‌شوند**؛ نه cron، نه worker، نه صدا از `purchasePlan`. نتیجه: اشتراکِ دارای `serverId` برای همیشه `queued` می‌ماند |
+| 9 | خط Provisioning (اشتراک → سرور) | ✅ | اجراکننده کامل: `provisionWorker.processDueProvisions` (اکشن node) + cron هر دقیقه + `provisionPickDue/provisionRequeueStale` در billing؛ آداپتور واقعی ۴ خانواده؛ retry/backoff؛ بازیابی stale؛ تست E2E با provider جعلی | — |
 | 10 | تلگرام (§8) | ✅ | webhook per-tenant با امضا، cron ترمیم روزانه، claim ادمین، `/login` نقش‌محور، توکن رمزنگاری‌شده | — |
 | 11 | پاریتی ادمین ربات (§8) | ✅ | ۱۱ فرمان ربات + تب «ربات و مینی‌اپ» پنل + ثبت خودکار webhook (تست ۳۵کاسی botWebhook) | — |
 | 12 | HTTP API (§9) | 🟡 | `/api/v1` واقعی: health/ping/version/openapi/auth.register|login|refresh + ۳ webhook؛ صفحه مستندات روی سایت (`#/api`) | کلیدهای API: ساخت/فهرست/ابطال هست، اما **هیچ مسیر REST با کلید `ga_…` احراز نمی‌شود** — کلید عملاً غیرقابل استفاده (P0/P1) |
@@ -57,7 +57,7 @@
 ## ۳) نقشه راه اولویت‌بندی‌شده
 
 ### P0 — مسدودکننده‌های «production-ready»
-1. **اجراکننده Provisioning**: در `workerActions.processDueJobs` (یا cron جدا) برای اشتراک‌های `provisioningState=queued`: صدا زدن `billing.provisionRun` → اجرای عملیات provider (ساخت remote user با آداپتور) → `billing.provisionFinish(success, remoteUserId)`. نوتیف لینک ورود از قبل scheduler-محور و تست‌شده است. + تست E2E با provider جعلی.
+1. ~~**اجراکننده Provisioning**~~ — ✅ **انجام شد**: `src/convex/provisionWorker.ts` + cron «process provision jobs» (هر دقیقه) + `billing.provisionPickDue`/`provisionRequeueStale`/`provisionSubscriptionSpec`. تست E2E: `tests/provisionExecutor.test.ts` (۷ تست — خرید پلن سروردار → آداپتور واقعی → provisioned + لینک ورود).
 2. **UI CRUD ادمین** در داشبورد: پلن‌ها (`planCreate/planList`)، سرورها/پروایدرها (`serverUpsert/providerUpsert`)، کاربران (`userSetStatus`)، معرف‌ها، دامنه‌ها، بکاپ‌ها، کلیدهای API — بدون این‌ها پلتفرم فقط با فراخوانی دستی API قابل مدیریت است.
 3. **احراز کلید API روی REST**: یک مسیر عمومی `/api/v1` که با `Authorization: Bearer ga_…` (lookup `by_prefix` + `stableTokenHash` + status/expiry) پاس شود تا کلیدهای ساخته‌شده واقعاً قابل استفاده باشند.
 
@@ -92,8 +92,8 @@ bun run build                              → موفق
 ```
 
 شواهد کلیدی کد:
-- `provisionRun/Finish` فقط در `tests/botWebhook.test.ts` صدا زده می‌شوند (grep روی `src/` خالی).
-- `workerActions.processDueJobs` فقط `payment_verify | build(stub) | auto_backup | bot_command` را می‌شناسد — `provision` ندارد.
+- ~~`provisionRun/Finish` فقط در تست صدا زده می‌شوند~~ → **رفع شد** (بند ۱ P0 بالا، اجراکننده + cron + ۷ تست E2E).
+- `workerActions.processDueJobs` فقط `payment_verify | build(stub) | auto_backup | bot_command` را می‌شناسد — provisioning خط مستقل خودش را دارد (`provisionWorker`).
 - داشبورد: `planCreate/serverUpsert/providerUpsert/userSetStatus/...` → صفر ارجاع در `DashboardPage.tsx`.
 - `apiKeyList/Create/Revoke` وجود دارند؛ هیچ مصرف‌کننده‌ای برای `keyHash` غیر از ساخت وجود ندارد.
 
