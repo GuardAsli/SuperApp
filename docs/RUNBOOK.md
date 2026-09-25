@@ -57,6 +57,43 @@ bunx convex run authActions:bootstrapAdminAction \
 4. Payment webhooks use that public URL
 5. The deployment env is re-synced, so the bot webhook repairs itself
 
+## Role login ports (105 / 616)
+
+Each role signs in on its own port: normal users on the plain domain, resellers
+on **105**, super admins on **616**. The rule is enforced in `loginAction`, not
+just in the UI.
+
+Why it sometimes looked "not applied":
+
+- the ports are created by nginx, so a code update alone does nothing — nginx
+  has to be re-rendered (`guardasli update` now does this automatically)
+- `certbot --nginx` only ever patched the :80 block, so the role ports stayed
+  plain HTTP and `https://…:616` could never work. SSL now uses
+  `certonly --webroot` and `scripts/nginx-render.sh` turns TLS on for all three
+
+Check and repair in one command:
+
+```bash
+sudo guardasli ports
+```
+
+It reports: the domain, whether the nginx blocks exist, whether nginx is
+actually listening, whether a certificate is present, and it curls
+`/nginx-health` on all three ports. If the config is missing it rewrites it
+immediately.
+
+To apply after pulling new code:
+
+```bash
+sudo guardasli update     # source + build + service + nginx (now automatic)
+sudo guardasli ssl        # certificate, then TLS on every role port
+sudo guardasli ports      # verify
+```
+
+If the role ports are still HTTP after `guardasli ssl`, the certificate was not
+issued (usually DNS). The panel then works over `http://domain:105` and
+`http://domain:616` in the meantime.
+
 ## Telegram bot webhook
 
 The webhook is fully automatic — you rarely need to touch it.

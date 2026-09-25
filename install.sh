@@ -465,91 +465,49 @@ verify_backend_live() {
 # 6. Nginx + SSL
 # -----------------------------------------------------------------------------
 setup_nginx() {
-  [ "$SKIP_NGINX" = "1" ] && { warn "nginx skipped (--skip-nginx)"; return 0; }
-  [ -z "$DOMAIN" ] && { warn "no domain — nginx skipped (site served on :${PORT_UI})"; return 0; }
-  command -v nginx >/dev/null 2>&1 || { warn "nginx not installed — skipped"; return 0; }
+  [ "$SKIP_NGINX" = "1" ] && { step_warn "nginx skipped (--skip-nginx)"; return 0; }
+  [ -z "$DOMAIN" ] && { step_warn "no domain — nginx skipped (site served on :${PORT_UI})"; return 0; }
+  command -v nginx >/dev/null 2>&1 || { step_warn "nginx not installed — skipped"; return 0; }
+
+  # One renderer for every path (install / update / ssl) so the role ports can
+  # never be lost. It also opens the ports in the firewall and rolls back on a
+  # failed `nginx -t`.
+  nginx_apply() {
+    GA_DOMAIN="${DOMAIN}" \
+    GA_PORT_UI="${PORT_UI}" \
+    GA_PORT_RESELLER="${PORT_RESELLER}" \
+    GA_PORT_SUPER="${PORT_SUPER}" \
+    GA_TLS="${1:-auto}" \
+    bash "${INSTALL_DIR}/scripts/nginx-render.sh" 2>&1 | tee -a "$INSTALL_LOG" | sed 's/^/    /'
+  }
 
   step "Configuring Nginx for ${DOMAIN}"
-  # Port 80: the normal user entry. Ports 105/616: the reseller and super-admin
-  # login pages. All three proxy the same Vite build; the app reads the port to
-  # decide which role is allowed to sign in on that page.
-  cat > /etc/nginx/sites-available/guardasli <<NGX
-server {
-  listen 80;
-  server_name ${DOMAIN};
-  client_max_body_size 25m;
-
-  location / {
-    proxy_pass http://127.0.0.1:${PORT_UI};
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    proxy_read_timeout 90;
-  }
-}
-
-# Reseller login page (port ${PORT_RESELLER})
-server {
-  listen ${PORT_RESELLER};
-  server_name ${DOMAIN};
-  client_max_body_size 25m;
-
-  location / {
-    proxy_pass http://127.0.0.1:${PORT_UI};
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    proxy_read_timeout 90;
-  }
-}
-
-# Super-admin login page (port ${PORT_SUPER})
-server {
-  listen ${PORT_SUPER};
-  server_name ${DOMAIN};
-  client_max_body_size 25m;
-
-  location / {
-    proxy_pass http://127.0.0.1:${PORT_UI};
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    proxy_read_timeout 90;
-  }
-}
-NGX
-  ln -sf /etc/nginx/sites-available/guardasli /etc/nginx/sites-enabled/guardasli
-  rm -f /etc/nginx/sites-enabled/default
-  if ! nginx -t; then
-    step_warn "nginx config test failed — keeping the previous config"
+  if ! nginx_apply auto; then
+    step_warn "nginx configuration failed — the previous config was restored"
     return 0
   fi
-  systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
-  step_ok "nginx -> 127.0.0.1:${PORT_UI} (ports ${PORT_RESELLER}/${PORT_SUPER} for role logins)"
+  step_ok "nginx ready: ${DOMAIN} (user) · :${PORT_RESELLER} (reseller) · :${PORT_SUPER} (super admin)"
 
   if [ "$SKIP_SSL" != "1" ] && [ -n "$EMAIL" ]; then
-    info "Issuing Let's Encrypt certificate for ${DOMAIN}..."
-    # A certificate covers the domain on every port, so 105/616 are covered too.
-    if run_step 300 "certbot" certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect; then
-      step_ok "SSL active (auto-renew via certbot.timer)"
+    step "Issuing SSL certificate"
+    # certonly + webroot: certbot never rewrites our config, so the role ports
+    # keep their own blocks and we can switch TLS on for all three ourselves.
+    if run_step 300 "certbot (webroot)" certbot certonly --webroot -w /var/www/html \
+          -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring; then
+      step_ok "certificate issued for ${DOMAIN}"
+      # Re-render WITH TLS: this is what actually makes https://domain:616 work.
+      if nginx_apply 1; then
+        step_ok "HTTPS active on all role ports"
+      else
+        step_warn "could not enable TLS on the role ports — HTTP still works"
+      fi
     else
-      step_warn "certbot failed — check that DNS for ${DOMAIN} points here, then rerun:"
-      step_warn "  certbot --nginx -d ${DOMAIN} -m ${EMAIL}"
+      step_warn "certbot failed — check that DNS for ${DOMAIN} points to this server"
+      step_warn "then run:  sudo guardasli ssl"
     fi
   else
-    step_warn "SSL skipped — run: certbot --nginx -d ${DOMAIN} -m ${EMAIL:-you@example.com} --redirect"
+    step_warn "SSL skipped — run: sudo guardasli ssl"
+    log_line "role ports are currently HTTP only until SSL is issued"
   fi
 }
 

@@ -267,8 +267,101 @@ svc_status() {
 # ----------------------------------------------------------------------------
 # 6. SSL (self-signed bootstrap + ACME wildcard guidance)
 # ----------------------------------------------------------------------------
+# ── nginx: یک منبع حقیقت ───────────────────────────────────────────────────
+# scripts/nginx-render.sh پورت‌های نقش را می‌سازد، TLS را روی هر سه فعال
+# می‌کند، فایروال را باز می‌کند و اگر nginx -t شکست بخورد برمی‌گردد.
+nginx_apply() {
+  local domain; domain="$(env_get GUARDASLI_MAIN_DOMAIN)"
+  [ -z "${domain}" ] && { warn "no domain configured (guardasli reconfigure)"; return 1; }
+  local port_ui; port_ui="$(env_get GUARDASLI_PORT 4173)"
+  local port_r; port_r="$(env_get GUARDASLI_PORT_RESELLER 105)"
+  local port_s; port_s="$(env_get GUARDASLI_PORT_SUPER 616)"
+  local script="${GUARDASLI_APP_DIR}/scripts/nginx-render.sh"
+  if [ ! -f "${script}" ]; then
+    # اسکریپت همراه خودِ نسخه‌ی جدیدِ guardasli (وقتی از سورس جدید اجرا می‌شود)
+    script="$(cd "$(dirname "$0")" && pwd)/nginx-render.sh"
+  fi
+  if [ ! -f "${script}" ]; then
+    # آخرین تلاش: خودِ اسکریپت را از ریپو بگیر (بدون نیاز به آپدیت کامل)
+    script="${GUARDASLI_ROOT}/.nginx-render.sh"
+    local repo; repo="$(env_get GUARDASLI_REPO_URL '')"
+    if [ -n "${repo}" ] && command -v curl >/dev/null 2>&1; then
+      curl -fsSL --max-time 30 "${repo%.git}/raw/main/scripts/nginx-render.sh" -o "${script}" 2>/dev/null || true
+    fi
+  fi
+  [ -f "${script}" ] || { warn "nginx-render.sh not found — run: guardasli update"; return 1; }
+  GA_DOMAIN="${domain}" GA_PORT_UI="${port_ui}" \
+  GA_PORT_RESELLER="${port_r}" GA_PORT_SUPER="${port_s}" \
+  GA_TLS="${1:-auto}" bash "${script}"
+}
+
+# تشخیص کامل پورت‌های نقش — دقیقاً می‌گوید کجا گیر کرده است.
+check_ports() {
+  title "Role login ports"
+  local domain; domain="$(env_get GUARDASLI_MAIN_DOMAIN)"
+  local port_r; port_r="$(env_get GUARDASLI_PORT_RESELLER 105)"
+  local port_s; port_s="$(env_get GUARDASLI_PORT_SUPER 616)"
+  if [ -z "${domain}" ]; then
+    warn "no domain configured — set it with: guardasli reconfigure"
+    return 1
+  fi
+  ok "domain: ${domain}"
+  ok "reseller port: ${port_r} · super admin port: ${port_s}"
+
+  # ۱) آیا nginx بلوک‌ها را دارد؟
+  if grep -q "listen ${port_r};" /etc/nginx/sites-available/guardasli 2>/dev/null; then
+    ok "nginx config has port ${port_r}"
+  else
+    warn "nginx config is MISSING port ${port_r} — fixing now"
+    nginx_apply >/dev/null 2>&1 || warn "could not write the nginx config"
+  fi
+  if grep -q "listen ${port_s};" /etc/nginx/sites-available/guardasli 2>/dev/null; then
+    ok "nginx config has port ${port_s}"
+  else
+    warn "nginx config is MISSING port ${port_s} — fixing now"
+    nginx_apply >/dev/null 2>&1 || warn "could not write the nginx config"
+  fi
+
+  # ۲) آیا nginx واقعاً روی آن پورت‌ها گوش می‌دهد؟
+  if command -v ss >/dev/null 2>&1; then
+    for p in "${port_r}" "${port_s}"; do
+      if ss -ltn 2>/dev/null | grep -q ":${p} "; then
+        ok "listening on ${p}"
+      else
+        warn "NOT listening on ${p} — nginx may need: systemctl reload nginx"
+      fi
+    done
+  fi
+
+  # ۳) TLS روی پورت‌ها هست یا نه؟
+  local scheme="http"
+  if [ -f "/etc/letsencrypt/live/${domain}/fullchain.pem" ]; then
+    scheme="https"
+    ok "certificate present — HTTPS expected on every role port"
+  else
+    warn "no certificate yet — role ports are HTTP only. Run: guardasli ssl"
+  fi
+
+  # ۴) تست واقعی از خود سرور
+  for p in "" "${port_r}" "${port_s}"; do
+    local url="${scheme}://${domain}${p:+:${p}}/nginx-health"
+    if curl -k -fsS --max-time 10 "${url}" 2>/dev/null | grep -q ok; then
+      ok "live: ${url}"
+    else
+      warn "not answering: ${url}"
+    fi
+  done
+  echo ""
+  info "Open these in the browser:"
+  echo "  users     : ${scheme}://${domain}/"
+  echo "  reseller  : ${scheme}://${domain}:${port_r}/"
+  echo "  super     : ${scheme}://${domain}:${port_s}/"
+}
+
 ssl_issue() {
   title "SSL setup"
+  # nginx-render.sh ممکن است هنوز در نسخه‌ی قدیمی موجود نباشد؛ از پوشه‌ی
+  # جدیدِ اپ استفاده کن وگرنه بعد از آپدیت خودبه‌خود کپی می‌شود.
   local domain email
   domain="$(env_get GUARDASLI_MAIN_DOMAIN)"
   [ -z "${domain}" ] && die "Set GUARDASLI_MAIN_DOMAIN first (menu: 2 Reconfigure)"
@@ -279,13 +372,21 @@ ssl_issue() {
     [ -n "${email}" ] && env_upsert GUARDASLI_ACME_EMAIL "${email}"
   fi
   if command -v certbot >/dev/null 2>&1 && [ -d /etc/nginx ]; then
-    # مسیر nginx-01: خودکار، بدون DNS دستی — همان مسیر install.sh.
-    # قبلاً --manual --preferred-challenges dns بود که همیشه وسط کار می‌ایستاد
-    # و چیزی ثبت نمی‌شد؛ حالا certbot خودش nginx را پیکربندی و ریدایرکت فعال می‌کند.
-    ${SUDO:-} certbot --nginx -d "${domain}" --non-interactive --agree-tos \
-      -m "${email:-admin@${domain}}" --redirect \
-      && ok "SSL active for ${domain} (auto-renew via certbot.timer)" \
-      || warn "certbot failed — check DNS for ${domain} points to this server, then rerun: guardasli ssl"
+    # certonly + webroot: certbot فایل nginx ما را بازنویسی نمی‌کند، پس بعد از
+    # گرفتن گواهی خودمان TLS را روی هر سه پورت روشن می‌کنیم. این تنها راهی
+    # است که https://domain:105 و :616 هم گواهی می‌گیرند.
+    ${SUDO:-} nginx_apply >/dev/null 2>&1 || true
+    if ${SUDO:-} certbot certonly --webroot -w /var/www/html -d "${domain}" \
+          --non-interactive --agree-tos -m "${email:-admin@${domain}}" --keep-until-expiring; then
+      ok "certificate ready for ${domain}"
+      if ${SUDO:-} nginx_apply 1 >/dev/null 2>&1; then
+        ok "SSL active on the main site AND both role ports (105 / 616)"
+      else
+        warn "certificate issued but TLS config failed — rerun: guardasli ssl"
+      fi
+    else
+      warn "certbot failed — check DNS for ${domain} points to this server, then rerun: guardasli ssl"
+    fi
   else
     mkdir -p "${GUARDASLI_ROOT}/ssl"
     info "Generating self-signed certificate for ${domain} (valid 825 days)"
@@ -461,6 +562,11 @@ do_update() {
   # deploy توابع بک‌اند قدیمی می‌مانند و ربات/پنل بعد از آپدیت می‌شکنند.
   build_app
   svc_start
+  # nginx هم باید تازه شود وگرنه پورت‌های نقش (105/616) که در نسخه‌های
+  # قبلی نبودند هرگز ساخته نمی‌شوند — دلیل «پورت کار نمی‌کند».
+  nginx_apply || warn "nginx not updated — run: guardasli ports"
+  # خودِ دستور guardasli هم باید تازه شود (دسترس به زیر‌دستور جدید)
+  install_command >/dev/null 2>&1 || true
   local url="$(env_get VITE_CONVEX_URL '')"
   if [ -n "${url}" ]; then
     info "Live check: ${url}/api/v1/health"
@@ -616,6 +722,7 @@ do_panel() {
     printf "║ 16) Convex backend deploy                    ║\n"
     printf "║ 17) Admin credentials                        ║\n"
     printf "║ 18) Install 'guardasli' command              ║\n"
+    printf "║ 19) Check role login ports (105 / 616)        ║\n"
     printf "║  0) Exit                                     ║\n"
     printf "${C_BOLD}╚══════════════════════════════════════════════╝${C_OFF}\n"
     printf "Select: "
@@ -639,6 +746,7 @@ do_panel() {
       16) convex_deploy ;;
       17) show_admin_info ;;
       18) install_command ;;
+      19) check_ports ;;
       0) printf "\n"; break ;;
       *) warn "Invalid choice" ;;
     esac
@@ -685,6 +793,8 @@ case "${1:-}" in
   panel)    do_panel ;;
   admin)    bootstrap_admin ;;
   ssl)      ssl_issue ;;
+  nginx)    nginx_apply && ok "nginx applied" ;;
+  ports)    check_ports ;;
   env)      check_deployment_env ;;
   webhook)
     info "Webhook is automatic: it re-registers daily via the built-in cron."
