@@ -371,23 +371,37 @@ ssl_issue() {
     read -r email
     [ -n "${email}" ] && env_upsert GUARDASLI_ACME_EMAIL "${email}"
   fi
-  if command -v certbot >/dev/null 2>&1 && [ -d /etc/nginx ]; then
-    # certonly + webroot: certbot فایل nginx ما را بازنویسی نمی‌کند، پس بعد از
-    # گرفتن گواهی خودمان TLS را روی هر سه پورت روشن می‌کنیم. این تنها راهی
-    # است که https://domain:105 و :616 هم گواهی می‌گیرند.
-    ${SUDO:-} nginx_apply >/dev/null 2>&1 || true
-    if ${SUDO:-} certbot certonly --webroot -w /var/www/html -d "${domain}" \
-          --non-interactive --agree-tos -m "${email:-admin@${domain}}" --keep-until-expiring; then
-      ok "certificate ready for ${domain}"
-      if ${SUDO:-} nginx_apply 1 >/dev/null 2>&1; then
-        ok "SSL active on the main site AND both role ports (105 / 616)"
-      else
-        warn "certificate issued but TLS config failed — rerun: guardasli ssl"
-      fi
+  # پیش‌نیاز چالش webroot: پوشه با مالکیت مناسب + مسیر روی ۸۰ باز باشد.
+  if [ -n "${email}" ]; then
+    ${SUDO:-} mkdir -p /var/www/html/.well-known/acme-challenge
+    ${SUDO:-} chmod 755 /var/www/html /var/www/html/.well-known /var/www/html/.well-known/acme-challenge 2>/dev/null || true
+    # رندر HTTP-only قبل از certbot تا چالش روی ۸۰ پاس شود؛ TLS بعدش فعال می‌شود.
+    nginx_apply 0 >/dev/null 2>&1 || true
+    info "Issuing certificate for ${domain} (webroot challenge)..."
+    local out
+    out="$(${SUDO:-} certbot certonly --webroot -w /var/www/html -d "${domain}" \
+      --non-interactive --agree-tos -m "${email}" --keep-until-expiring 2>&1)" || {
+      printf '%s\n' "${out}" | tail -5 >&2
+      warn "certbot failed — see the lines above. Checklist:"
+      warn "  1) DNS A record of ${domain} points to this server (dig +short ${domain})"
+      warn "  2) port 80 open and reachable:   curl -I http://${domain}/"
+      warn "  3) rerun:  sudo guardasli ssl"
+      return 1
+    }
+    ok "certificate ready for ${domain}"
+    if nginx_apply 1 >/dev/null 2>&1; then
+      ok "SSL active on the main site AND both role ports (105 / 616)"
+      # دامنه https شد — GUARDASLI_PUBLIC_URL باید https باشد وگرنه تلگرام
+      # webhook را (که فقط https می‌پذیرد) ست نمی‌کند.
+      env_upsert GUARDASLI_PUBLIC_URL "https://${domain}"
+      env_upsert GUARDASLI_CORS_ORIGINS "https://${domain}"
+      ok "GUARDASLI_PUBLIC_URL -> https://${domain} (rerun sync-env or 'sudo guardasli convex' to apply on the backend)"
     else
-      warn "certbot failed — check DNS for ${domain} points to this server, then rerun: guardasli ssl"
+      warn "certificate issued but TLS config failed — rerun: guardasli ssl"
     fi
   else
+    info "No email given — issuing a self-signed certificate instead."
+    info "Telegram requires a trusted certificate; with self-signed the bot will NOT work."
     mkdir -p "${GUARDASLI_ROOT}/ssl"
     info "Generating self-signed certificate for ${domain} (valid 825 days)"
     openssl req -x509 -newkey rsa:4096 -sha256 -days 825 -nodes \
@@ -407,17 +421,28 @@ ssl_issue() {
 # ----------------------------------------------------------------------------
 telegram_setup() {
   title "Telegram bot"
-  info "Bot tokens are stored encrypted (AES-256-GCM) in the database."
-  info "Configure per-tenant bots from the admin panel: Telegram section."
-  printf "Bot token (blank to skip): "
+  info "The token is stored encrypted (AES-256-GCM) in the database and the"
+  info "webhook is registered on Telegram right here — fully automatic."
+  local key; key="$(env_get CONVEX_DEPLOY_KEY)"
+  [ -z "${key}" ] && { warn "No CONVEX_DEPLOY_KEY — run: sudo guardasli convex  first"; return 1; }
+  printf "Bot token from @BotFather (blank to skip): "
   read -r TOK
-  if [ -n "${TOK}" ]; then
-    printf "Tenant display name: "
-    read -r TNAME
-    env_upsert GUARDASLI_BOT_TOKEN "${TOK}"
-    env_upsert GUARDASLI_BOT_NAME "${TNAME:-GuardAsli Bot}"
-    ok "Bot token saved to env — it will be moved to encrypted storage on first run"
-  fi
+  [ -z "${TOK}" ] && { info "Skipped"; return 0; }
+  printf "Bot admin numeric Telegram ID (get it from @userinfobot; blank = first /admin claims): "
+  read -r ADMIN_ID
+  [ -n "${ADMIN_ID}" ] && ! [[ "${ADMIN_ID}" =~ ^[0-9]{4,20}$ ]] && { err "admin ID must be numeric (e.g. 123456789)"; return 1; }
+  (
+    cd "${GUARDASLI_APP_DIR}" || exit 1
+    export CONVEX_DEPLOY_KEY="${key}"
+    local admin_json="null"
+    [ -n "${ADMIN_ID}" ] && admin_json="${ADMIN_ID}"
+    if GUARDASLI_BOT_TOKEN="${TOK}" GUARDASLI_BOT_ADMIN_ID="${ADMIN_ID}" \
+      bun scripts/bot-bootstrap.mjs 2>&1 | tail -15; then
+      ok "Bot configured — send /start in Telegram to test it"
+    else
+      warn "bootstrap failed — check the token value and that the backend is live"
+    fi
+  )
 }
 
 # ----------------------------------------------------------------------------
@@ -525,6 +550,12 @@ do_reconfigure() {
   printf "Main domain [%s]: " "$(env_get GUARDASLI_MAIN_DOMAIN)"
   read -r D
   [ -n "${D}" ] && env_upsert GUARDASLI_MAIN_DOMAIN "${D}"
+  # دامنه → PUBLIC_URL همیشه https می‌شود (تلگرام فقط https می‌پذیرد).
+  # بدون دامنه → همان IP عمومی با پورت اپ.
+  if [ -n "${D}" ]; then
+    env_upsert GUARDASLI_PUBLIC_URL "https://${D}"
+    env_upsert GUARDASLI_CORS_ORIGINS "https://${D}"
+  fi
   printf "SSL email (Let's Encrypt) [%s]: " "$(env_get GUARDASLI_ACME_EMAIL '')"
   read -r E
   [ -n "${E}" ] && env_upsert GUARDASLI_ACME_EMAIL "${E}"
@@ -543,9 +574,11 @@ do_reconfigure() {
   if [ -n "${ip}" ] && { [ "${ip%%.*}" = "127" ] || [ "${ip%%.*}" = "169" ]; }; then ip=""; fi
   if [ -n "${ip}" ]; then
     env_upsert GUARDASLI_SERVER_IP "${ip}"
+    # فقط وقتی دامنه‌ای نیست، fallback روی http+IP می‌گذاریم.
     if [ -z "${D}" ] && [ -z "$(env_get GUARDASLI_MAIN_DOMAIN)" ]; then
       env_upsert GUARDASLI_PUBLIC_URL "http://${ip}:$(env_get GUARDASLI_PORT 3000)"
       env_upsert GUARDASLI_CORS_ORIGINS "http://${ip}:$(env_get GUARDASLI_PORT 3000)"
+      warn "No domain — Telegram webhook will NOT work with http://IP (https required)."
     fi
     ok "Server IP detected: ${ip}"
   fi

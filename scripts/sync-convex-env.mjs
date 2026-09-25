@@ -19,7 +19,13 @@ function loadEnv(path) {
   return out;
 }
 
-const env = { ...loadEnv(join(root, ".env.local")), ...process.env };
+const env = {
+  // نصب‌کننده روی VPS secrets را در <state>/.env می‌نویسد؛ ویزارد لوکال در .env.local —
+  // هر دو خوانده می‌شوند تا secrets به deployment برسند و ست‌کردن webhook ربات کار کند.
+  ...loadEnv(join(root, ".env")),
+  ...loadEnv(join(root, ".env.local")),
+  ...process.env,
+};
 
 const keys = [
   "GUARDASLI_MASTER_SECRET",
@@ -35,6 +41,7 @@ const keys = [
   // پورت‌های اختصاصی نقش — تا لینک ورودی که ربات می‌فرستد با nginx هم‌خوان بماند
   "GUARDASLI_PORT_SUPER",
   "GUARDASLI_PORT_RESELLER",
+  "GUARDASLI_MAIN_DOMAIN",
 ];
 
 let ok = 0;

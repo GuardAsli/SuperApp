@@ -27,6 +27,7 @@ import type * as jobs from "../jobs.js";
 import type * as paymentActions from "../paymentActions.js";
 import type * as payments from "../payments.js";
 import type * as providers from "../providers.js";
+import type * as provisionWorker from "../provisionWorker.js";
 import type * as referrals from "../referrals.js";
 import type * as runtime from "../runtime.js";
 import type * as storage from "../storage.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   paymentActions: typeof paymentActions;
   payments: typeof payments;
   providers: typeof providers;
+  provisionWorker: typeof provisionWorker;
   referrals: typeof referrals;
   runtime: typeof runtime;
   storage: typeof storage;

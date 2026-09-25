@@ -409,22 +409,33 @@ run_app_install() {
     step_warn "backend deploy skipped (--skip-convex)"
   elif valid_deploy_key "${CONVEX_DEPLOY_KEY:-}"; then
     info "Deploying backend to the cloud deployment (${CONVEX_DEPLOY_KEY%%|*})..."
-    if run_step 420 "convex deploy" bunx convex deploy --yes; then
-      step_ok "backend deployed"
-      # The Convex deployment reads its OWN env (process.env inside actions);
-      # the shell env file does NOT reach it. Without GUARDASLI_MASTER_SECRET
-      # there, the bot token cannot be decrypted and setWebhook always fails.
-      # One source of truth: scripts/sync-convex-env.mjs (bun run sync-env).
-      if run_step 180 "deployment env sync" bun scripts/sync-convex-env.mjs; then
-        step_ok "deployment env synced (bot/webhook secrets ready)"
+    local deploy_out
+    deploy_out="$(bunx convex deploy --yes 2>&1)" || {
+      printf '%s\n' "${deploy_out}" | tail -8 | sed 's/^/    /'
+      log_line "convex deploy FAILED: $(printf '%s' "${deploy_out}" | tail -3)"
+      # خطاهای شایع کلید — پیام اقدام‌پذیر به‌جای سکوت
+      if printf '%s' "${deploy_out}" | grep -qi "unauthorized\|invalid.*key\|deploy key"; then
+        step_warn "the deploy key was rejected — copy the FULL key (prod:name|eyJ...) from dashboard.convex.dev → Settings → Deploy Keys"
+      elif printf '%s' "${deploy_out}" | grep -qi "network\|ENOTFOUND\|timeout"; then
+        step_warn "network error reaching the cloud — check connectivity, then rerun the installer"
       else
-        step_warn "deployment env sync incomplete — bot/webhook needs GUARDASLI_MASTER_SECRET"
-        step_warn "retry with:  cd ${INSTALL_DIR} && bun run sync-env"
+        step_warn "convex deploy failed — full error above; retry later: cd ${INSTALL_DIR} && bunx convex deploy --yes"
       fi
-      verify_backend_live "${VITE_CONVEX_URL:-}"
+      return 0
+    }
+    printf '%s\n' "${deploy_out}" | tail -3 | sed 's/^/    /'
+    step_ok "backend deployed"
+    # The Convex deployment reads its OWN env (process.env inside actions);
+    # the shell env file does NOT reach it. Without GUARDASLI_MASTER_SECRET
+    # there, the bot token cannot be decrypted and setWebhook always fails.
+    # One source of truth: scripts/sync-convex-env.mjs (bun run sync-env).
+    if run_step 180 "deployment env sync" bun scripts/sync-convex-env.mjs; then
+      step_ok "deployment env synced (bot/webhook secrets ready)"
     else
-      step_warn "convex deploy failed — retry later: cd ${INSTALL_DIR} && bunx convex deploy --yes"
+      step_warn "deployment env sync incomplete — bot/webhook needs GUARDASLI_MASTER_SECRET"
+      step_warn "retry with:  cd ${INSTALL_DIR} && bun run sync-env"
     fi
+    verify_backend_live "${VITE_CONVEX_URL:-}"
   elif [ -n "${VITE_CONVEX_URL:-}" ]; then
     info "Convex URL present without key — trying function push..."
     run_step 420 "convex deploy (no key)" bunx convex deploy --yes \
