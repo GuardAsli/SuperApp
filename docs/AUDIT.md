@@ -1,103 +1,117 @@
-# GuardAsli — Audit Report (scope vs. implementation)
+# GuardAsli — Full Component Audit (36 components)
 
-**Release:** `is0.0.1` · **Developer:** AsliCode · **Audit date:** 2026-09-25
-**Scope reference:** `Docs.md` (§1–13) + definite rules (identity, brand, ports, third-party identity, server-side enforcement).
-**Method:** every claim below was checked against actual code, not docs. Verification commands + results at the end.
+**Release:** `is0.0.1` · **Developer:** AsliCode · **Branch:** `main` (synced) · **Audit date:** 2026-09-25
+**Production-ready bar (as defined):** works, passes tests, successful production build, E2E verified, no third-party identity, on main, version is0.0.1 verified.
 
-راهنمای وضعیت: ✅ کامل · 🟡 نیمه‌کاره (پایه هست، تکمیل لازم) · ❌ غایب/نیازمند کار اساسی
-
----
-
-## ۱) ماتریس وضعیت اجزا
-
-| # | جزء (Docs.md) | وضعیت | شواهد | شکاف اصلی |
-|---|---|---|---|---|
-| 1 | هویت و نسخه‌گذاری (§1) | ✅ | `src/core/identity.ts` ثابت، ۱۲ کامپوننت، `release-check` سبز | — |
-| 2 | معماری Core/Customization (§2) | ✅ | چیدمان `src/core` + `src/convex` + `src/web` مطابق سند؛ branding از جدول `branding` | — |
-| 3 | نقش‌ها و RBAC (§3) | ✅ | ۵ نقش، مجوزها فقط سرور (`src/core/rbac.ts`)، تست‌های RBAC و role-entry | — |
-| 4 | مولتی‌تننسی / ایزولاسیون | ✅* | `requireTenantScope` + پیمایش درخت مالکیت؛ `isolation/tenantIsolation*` (۱۰ تست) | *sweep عمیق‌تر با ران‌تایم واقعی Convex توصیه می‌شود (P2) |
-| 5 | قابلیت‌ها و سهمیه‌ها (§4) | 🟡 | `evaluateFeatureAccess` شش‌مرحله‌ای + `featureFlagsSet` | در `purchasePlan` سه چک از شش (`tenantActive/ownershipOk/quotaOk`) سخت‌کد `true` است (P1) |
-| 6 | کیف پول و Ledger (§5) | ✅ | `wallet.ledgerApply` فقط‌الحاقی، idempotent، `-1000` ضد اوردرافت؛ تست negative | — |
-| 7 | پرداخت (§6) | ✅ | ۴ کانال، `MAX_CARDS=10`، صف `payment_verify`، ضد-replay، نوتیف خودکار لینک ورود بعد از فعال‌سازی (scheduler) | — |
-| 8 | Providers (§7) | 🟡 | آداپتور واقعی ۴ خانواده API + تشخیص capability + SSRF (`src/core/providers/index.ts`) | **هیچ مسیر ران‌تایمی آداپتور را صدا نمی‌زند** (بند ۹ زیر) |
-| 9 | خط Provisioning (اشتراک → سرور) | ✅ | اجراکننده کامل: `provisionWorker.processDueProvisions` (اکشن node) + cron هر دقیقه + `provisionPickDue/provisionRequeueStale` در billing؛ آداپتور واقعی ۴ خانواده؛ retry/backoff؛ بازیابی stale؛ تست E2E با provider جعلی | — |
-| 10 | تلگرام (§8) | ✅ | webhook per-tenant با امضا، cron ترمیم روزانه، claim ادمین، `/login` نقش‌محور، توکن رمزنگاری‌شده | — |
-| 11 | پاریتی ادمین ربات (§8) | ✅ | ۱۱ فرمان ربات + تب «ربات و مینی‌اپ» پنل + ثبت خودکار webhook (تست ۳۵کاسی botWebhook) | — |
-| 12 | HTTP API (§9) | 🟡 | `/api/v1` واقعی: health/ping/version/openapi/auth.register|login|refresh + ۳ webhook؛ صفحه مستندات روی سایت (`#/api`) | کلیدهای API: ساخت/فهرست/ابطال هست، اما **هیچ مسیر REST با کلید `ga_…` احراز نمی‌شود** — کلید عملاً غیرقابل استفاده (P0/P1) |
-| 13 | نصب‌کننده و CLI (§10) | ✅ | `install.sh` + `guardasli panel` (۱۸ گزینه)؛ `bash -n` روی همه اسکریپت‌ها سبز | — |
-| 14 | محیط و اسرار (§11) | ✅ | HKDF + purpose keys + prod gate (`prod-env-check`)؛ hash-only توکن‌ها | — |
-| 15 | مانیتور (Docs.fa §12) | ✅ | `infra.monitor` + `jobStats` + تب «مانیتور» ادمین + `bun run monitor*` | — |
-| 16 | بکاپ/بازیابی | ✅ | cron بکاپ شبانه رمزنگاری‌شده + `guardasli backup/restore` | بازیابی خارج از دیسک اپ فقط در چک‌لیست عملیاتی است (P2) |
-| 17 | داشبورد وب | 🟡 | جریان‌های کاربر کامل: کیف/تاریخچه/خرید/شارژ/کارت‌به‌کارت/ربات/برندینگ/مانیتور | **صفحات CRUD ادمین وایر نشده‌اند**: `planCreate`, `serverUpsert`, `providerUpsert`, `userSetStatus`, `referralAttach/ruleSet`, `domainAdd`, `backupList/Record`, `apiKeyList` — همه فقط API هستند و هیچ UI ندارند (P0) |
-| 18 | Mini App | ✅ | `MiniAppPage` + `verifyTelegramInitData` (HMAC واقعی) + wallet/subs | — |
-| 19 | Main App (اندروید) | ❌ | فقط کامپوننت هویتی؛ `apps.buildEnqueue` صف build می‌سازد ولی `workerActions` بی‌درنگ `success` ضبط می‌کند (stub) | خط build واقعی (Gradle/PWA-wrapper) وجود ندارد |
-| 20 | Dedicated App | ❌ | فقط literal در `apps.appKind` | هیچ پیاده‌سازی |
-| 21 | i18n FA/EN | 🟡 | `src/web/i18n.ts` + سوییچ داشبورد | پوشش کلیدها در همه صفحات یکسان نیست (P2) |
-| 22 | مرجع‌ها/Referral | 🟡 | قوانین + اتصال معرف API کامل | UI ندارند؛ اتصال خودکار پس از ثبت‌نام با `parentUsername` در `persistUser` بسته به زنجیره ثبت (P1) |
-| 23 | Rate limit | 🟡 | `infra.rateLimitCheck` + هدرهای امنیتی | اعمال روی مسیرهای `/api/v1` صریح نیست (P1) |
-
----
-
-## ۲) قواعد قطعی — انطباق
-
-| قانون | وضعیت | شواهد |
-|---|---|---|
-| هویت ثابت GuardAsli / AsliCode / isMAJOR.MINOR.PATCH | ✅ | `release-check` سبز؛ جدول سفارشی‌سازی اجازه override ندارد |
-| ممنوعیت هویت ثالث (openai/chatgpt/anthropic/claude/gemini/copilot/nordvpn/expressvpn/marzban) | ✅ | اسکن `release-check` + `git grep` — فقط یک assertion منفی در تست |
-| برند دقیقاً «Coded by AsliCode» (بدون Powered By) | ✅ | grep برند پاک (فقط assertion منفی تست) |
-| پورت‌های ورود (۶۱۶/۱۰۵) خصوصی — هیچ افشایی در UI عمومی | ✅ | فقط در `botCommands.ts`, `entryPorts.ts` (env-overridable), اسکریپت‌های ops و RUNBOOK اپراتوری |
-| اعمال دسترسی فقط سمت سرور | ✅ | `requireActor`/`requirePermission`/`requireTenantScope` در همه mutation/query حساس |
-| قیمت هرگز از کلاینت | ✅ | `purchasePlan` قیمت را فقط از ردیف `plans` می‌خواند |
-| webhook هرگز مستقیم شارژ نمی‌کند | ✅ | صف `payment_verify` + آداپتور + `acceptProviderPayment` با idempotency |
-| اسرار: hash-only، نمایش یک‌بار کلید API، AES/HKDF envelope | ✅ | `tokenHash`, `stableTokenHash`, `kms/aead` + purpose keys |
-| cross-tenant | ✅* | تست‌های isolation پاس؛ مورد نقضی در بازرسی پیدا نشد |
-
----
-
-## ۳) نقشه راه اولویت‌بندی‌شده
-
-### P0 — مسدودکننده‌های «production-ready»
-1. ~~**اجراکننده Provisioning**~~ — ✅ **انجام شد**: `src/convex/provisionWorker.ts` + cron «process provision jobs» (هر دقیقه) + `billing.provisionPickDue`/`provisionRequeueStale`/`provisionSubscriptionSpec`. تست E2E: `tests/provisionExecutor.test.ts` (۷ تست — خرید پلن سروردار → آداپتور واقعی → provisioned + لینک ورود).
-2. **UI CRUD ادمین** در داشبورد: پلن‌ها (`planCreate/planList`)، سرورها/پروایدرها (`serverUpsert/providerUpsert`)، کاربران (`userSetStatus`)، معرف‌ها، دامنه‌ها، بکاپ‌ها، کلیدهای API — بدون این‌ها پلتفرم فقط با فراخوانی دستی API قابل مدیریت است.
-3. **احراز کلید API روی REST**: یک مسیر عمومی `/api/v1` که با `Authorization: Bearer ga_…` (lookup `by_prefix` + `stableTokenHash` + status/expiry) پاس شود تا کلیدهای ساخته‌شده واقعاً قابل استفاده باشند.
-
-### P1 — بالا
-4. تکمیل زنجیره شش‌مرحله‌ای در `purchasePlan` (چک واقعی tenant/quota/ownership به‌جای `true` سخت‌کد).
-5. Sync مصرف ترافیک از providerها به `subscriptions.trafficUsedGb` (cron).
-6. اعمال `rateLimitCheck` روی `/api/v1/auth/*` و webhookها.
-7. تصمیم scope: یا خط build واقعی برای mainapp/dedicated، یا صادقانه به is0.1.x موکول و از Docs حذف/پانویس شود. ← **نیاز به تصمیم کاربر**
-
-### P2 — متوسط
-8. Sweep ایزولاسیون multi-tenant با ران‌تایم واقعی Convex (فراتر از هارنس).
-9. بکاپ به مقصد خارج از دیسک اپ + UX بازیابی.
-10. تکمیل پوشش i18n در همه تب‌ها.
-11. E2E زنده با یک پنل بالادستی واقعی (یکی از ۴ خانواده).
-
-### P3 — کم
-12. **دریفت مستندات**: `Docs.md` §12 می‌گوید «۸۲ تست» — واقعی ۲۰۰ است؛ §9 فهرست مسیرها `/health` و `/auth/*` را ندارد. اصلاح متن.
-13. شماره‌گذاری بخش‌های `Docs.fa.md` با سند انگلیسی هماهنگ شود.
-
----
-
-## ۴) لاگ تأیید (این حسابرسی)
+Global verification at audit time:
 
 ```
-bash -n scripts/*.sh install.sh            → ALL OK
-bun scripts/release-check.mjs              → All release checks passed — is0.0.1 FINAL
-git grep "powered" (بدون negative-assert)  → پاک
-git grep ":105\|:616" در *.tsx/*.html/*.css → پاک
-bun tsc -b --noEmit                        → پاک
-bun test                                   → 200 pass / 0 fail / 695 expects
-bun run build                              → موفق
+bun test                → 214 pass / 0 fail / 770 expects / 13 files
+bun tsc -b --noEmit     → clean
+bun run build           → success (dist/)
+bash -n scripts/*.sh install.sh → ALL OK
+bun scripts/release-check.mjs   → is0.0.1 FINAL (identity + banned-term scan)
+git history             → 80 commits, all author+committer = isAsli, zero third-party trailers
 ```
 
-شواهد کلیدی کد:
-- ~~`provisionRun/Finish` فقط در تست صدا زده می‌شوند~~ → **رفع شد** (بند ۱ P0 بالا، اجراکننده + cron + ۷ تست E2E).
-- `workerActions.processDueJobs` فقط `payment_verify | build(stub) | auto_backup | bot_command` را می‌شناسد — provisioning خط مستقل خودش را دارد (`provisionWorker`).
-- داشبورد: `planCreate/serverUpsert/providerUpsert/userSetStatus/...` → صفر ارجاع در `DashboardPage.tsx`.
-- `apiKeyList/Create/Revoke` وجود دارند؛ هیچ مصرف‌کننده‌ای برای `keyHash` غیر از ساخت وجود ندارد.
+Legend: ✅ Production-ready · 🟡 Partial (gaps listed) · ❌ Missing / stub
 
-## ۵) تصمیم‌های باز (فقط کاربر)
-- A: mainapp/dedicated در همین is0.0.1 می‌ماند یا به نسخه بعد موکول می‌شود؟
-- B: اولین خانواده provider برای E2E زنده کدام باشد؟
-- C: آیا احراز کلید API همین نسخه لازم است یا is0.1؟
+---
+
+## Core & Platform
+
+| # | Component | Status | Evidence & remaining work |
+|---|---|---|---|
+| 1 | **Core** (identity, engines) | ✅ | `src/core/*` complete: identity frozen, AEAD/HKDF, scrypt, sidechannel, ssrf, rbac, features, pricing, ledger, tenantScope, providers, payments, telegram, version, prodEnv. Tested via `core.test.ts` (29), `crypto.test.ts` (12), `kms_sidechannel.test.ts` (3). Nothing blocking. |
+| 2 | **Versioning** | 🟡 | `is0.0.1` for all 12 components, `parse/compare/isCompatible/bump` implemented + tested; `VERSION_FORMAT_PATTERN` enforced. Gap: `/api/v1/version` serves `INITIAL_VERSIONS` const instead of the existing `getVersionSnapshot()` helper — silent drift risk once components bump independently (P3 fix). |
+| 3 | **Independent Updates** | 🟡 | `bumpVersion` + `isCompatible` (same major) exist and are unit-tested; `guardasli update` (rsync + rebuild) works. Gap: no runtime gate consumes `isCompatible` (e.g. backend rejecting old web bundle); updater doesn't run per-component version comparison. Plan: wire `isCompatible` into a version handshake endpoint (P2). |
+| 4 | **Documentation** | 🟡 | Docs complete in EN+FA (Docs, Learn, ARCHITECTURE, API, SECURITY, DEPLOYMENT, RUNBOOK, PAYMENTS, BRANDING, KMS, CLIENT_EXPERIENCE, AUDIT) + on-site `#/api` docs page. Gap: stale test counts in three docs (Learn says 163, Docs says 82, README says 198 — real: 214) and Docs §7 provider list wording. One-line fixes (P3). |
+
+## API & Data
+
+| # | Component | Status | Evidence & remaining work |
+|---|---|---|---|
+| 5 | **Database** (Convex schema) | ✅ | 38 tables, indexes correct (by_tenant/by_user/by_prefix/by_status_next…). Isolation suite drives real handlers through a faithful Convex db shim incl. the filter-builder trap. |
+| 6 | **API** (`/api/v1`) | 🟡 | Real REST: health (real DB probe), ping, version, openapi.json, auth register/login/refresh, 3 webhooks; uniform error contract + requestId; CORS allowlist from systemSettings; on-site docs page `#/api`. **Gap (P0):** API keys (`apiKeyCreate/List/Revoke`, `ga_…` hash-only) exist but **no REST route authenticates with them** — keys are unusable. Plan: key-auth middleware on a new `/api/v1/panel/*` route family. |
+| 7 | **Jobs** (queue) | ✅ | `jobs` table + worker: payment_verify, provision (own executor), auto_backup, bot_command; retry/backoff; stale-running requeue for provisioning; 1-min cron. Covered by botWebhook + provisionExecutor tests. |
+| 8 | **Monitoring** | ✅ | `infra.monitor` health records + `jobStats` + admin dashboard "monitor" tab + `bun run monitor*` scripts. Nothing blocking. |
+| 9 | **Reports** | 🟡 | `reportGenerate` query (users / wallet+revenue / subscriptions) with scope enforcement. **Gap:** no dashboard UI calls it; only 3 kinds. Plan: admin "Reports" tab rendering the three kinds (P2). |
+
+## Access
+
+| # | Component | Status | Evidence & remaining work |
+|---|---|---|---|
+| 10 | **Auth** | ✅ | scrypt password envelopes, session+refresh tokens (hash-only), 7-day sessions, rotate/revoke, lockout (`blockedUntil`), rate-limited register/login (5/min). E2E-proven (`e2e-admin-login`, harness). |
+| 11 | **RBAC** | ✅ | 5 roles, 16 permissions, server-only enforcement via `requirePermission`; role-scoped entry ports enforced in `loginAction` (`expectRole`) + `roleFitsEntry`. Tested (`roleEntry.test.ts`). |
+| 12 | **Multi-tenancy** | ✅ | `requireTenantScope` + ownership-tree traversal on every sensitive mutation/query; real-handler isolation suites (75 tests incl. 55 E2E) covering cross-tenant refusal for users, referrals, providers, subscriptions, audit. |
+| 13 | **Resellers** | 🟡 | Roles exist with correct permission sets; parentUsername at register links child → parent tenant+user (verified); reseller sees own tree. **Gaps:** no dashboard UI to create/invite resellers/sub-resellers (register via `parentUsername` only); `canResell`/`SubReseller` flags stored but not consulted at purchase/resell time (P1/P2). |
+| 14 | **Users management** | 🟡 | `userList`/`userSetStatus` with `canManageActor` hierarchy. **Gap:** zero UI wiring (P0 item shared with admin CRUD below). |
+
+## Commerce
+
+| # | Component | Status | Evidence & remaining work |
+|---|---|---|---|
+| 15 | **Plans** | 🟡 | `planCreate/planList` server-validated; purchase reads price only from server row. **Gap:** no UI to create plans (P0). |
+| 16 | **Features** (18 keys) | ✅ | 18 keys defined; `featureFlagsSet` super-admin-only + audited; six-check `evaluateFeatureAccess`. |
+| 17 | **Pricing / Custom Purchase** | 🟡 | `quoteCustomPurchase` + `effectivePlanPrice` (reseller markup) implemented, min/max enforced, client price never trusted. **Gaps:** feature-chain in `purchasePlan` hardcodes 3 of 6 checks `true` (tenant/quota/ownership) — P1; `customPurchaseQuote` has no UI (P2). |
+| 18 | **Wallet** | ✅ | Append-only ledger, idempotency keys, seq-numbered entries, −1000 overdraft guard, history scoped, admin manual credit gated behind `admin_manual` method flag + `ManageWallet`. Tested incl. negative cases. |
+| 19 | **Ledger** | ✅ | Same engine as wallet — numbered, idempotent, audited; replay has no double effect (tested). |
+| 20 | **Billing** | ✅ | `purchasePlan` (atomic debit → subscription → provision job) with idempotent replay; `subscriptionCancel` with scope + state checks. Provisioning now has a real runtime executor (see #21). |
+| 21 | **Subscriptions / Provisioning** | ✅ (this pass) | **Was the biggest gap; now closed.** `provisionWorker.processDueProvisions` (node action) runs every minute: requeues stale running jobs → picks due jobs with tenant→server→provider validation (cross-tenant refused) → decrypts provider creds only in action memory → calls the real adapter `createUser` with the subscription's traffic/duration → `provisionFinish` activates + schedules the buyer's role-scoped Telegram login link. Failures retry with exponential backoff → dead. **E2E proof:** `tests/provisionExecutor.test.ts` — server plan purchase → real adapter call (recorded fetch) → `active/provisioned` + remoteUserId + login link scheduled/drained; plus failure→retry→heal, crash→requeue, cross-tenant refusal, server-less activation. Remaining (P2): traffic-sync cron from provider + cancel should disable the remote user. |
+| 22 | **Payments** | ✅ | 4 channels (admin_manual, card_to_card w/ max-10 + approve/reject/fraud, CubePay, Tetraminator); webhooks never credit directly — `payment_verify` queue → adapter verify (status/id/amount) → idempotent credit; anti-replay tested; methods default-off until configured. |
+
+## Clients
+
+| # | Component | Status | Evidence & remaining work |
+|---|---|---|---|
+| 23 | **Telegram Bot** | ✅ | Per-tenant webhook + secret header, self-healing daily cron, jobs-queue command execution, numeric-ID admin claim, full command set, `/login` role-scoped links (env-overridable ports), auto login-link after provisioning (scheduler-driven), `guardasli telegram` CLI now does a REAL bootstrap (token + numeric admin ID → encrypted save → webhook). Live E2E proof file exists (`logs/e2e-bot-proof.jsonl`) + 35 web tests + 7 provision tests. |
+| 24 | **Telegram Mini App** | ✅ | `MiniAppPage` (wallet, subscriptions, servers, devices), HMAC `verifyTelegramInitData` of real initData, internal-only registration path. |
+| 25 | **Web App** | ✅ | Landing (themed, `#/api` docs), Auth, Dashboard (wallet/history/charge/cards/payments/bot/branding/monitor/admin-review), i18n FA/EN, `#/api` route. Build passes. |
+| 26 | **Main App** (Android) | ❌ | Only the identity component + `apps.buildEnqueue` queue exists; worker stubs builds as instant `success`. Plan: real build line (Capacitor/PWA wrapper producing signed APK) or honest removal from the is0.0.1 scope (needs owner decision). |
+| 27 | **Dedicated App** | ❌ | Literal in `appKind` only. Same decision needed as #26. |
+| 28 | **App Builder** | 🟡 | `appGet/appSave/buildEnqueue/buildList/buildMark` + `appCustomizations`/`builds` tables complete. **Gaps:** no UI; build worker is a stub (ties to #26). |
+| 29 | **Domains** (custom) | 🟡 | `domainAdd/domainVerify/domainList` with scope + audit. **Gap:** "verify" marks verified without a real DNS check (no resolve action exists); no SSL issuance per tenant domain. Plan: real DNS resolve in a node action + ACME note (P2). |
+
+## Operations
+
+| # | Component | Status | Evidence & remaining work |
+|---|---|---|---|
+| 30 | **Providers** | ✅ (runtime) | Real adapters for 4 API families w/ capability detection, SSRF-guarded outbound, form-login session support. **Now wired to runtime** via the provisioning executor + tested end-to-end with a recorded upstream. Remaining (P2): live E2E against one real upstream panel (needs owner to supply one). |
+| 31 | **SSL** | ✅ (installer path) | `nginx-render.sh` single source of truth; ACME webroot challenge preserved pre-redirect; certbot non-interactive with actionable failure checklist; TLS on all role ports; PUBLIC_URL flipped to https (Telegram requirement). Covered by `nginxPorts.test.ts` (12) incl. rollback. Gap (P2): no auto-renew timer on the VPS (certbot.timer normally exists; add a doctor check). |
+| 32 | **Installer** | ✅ | `install.sh` one-liner: 3 questions, non-interactive flags, time-boxed steps, resumable, swap guard, firewall, health verification; deploy failures now print real errors + targeted hints. `bash -n` clean. |
+| 33 | **CLI** (`guardasli`) | ✅ | 19-option panel + direct commands (status/doctor/ssl/telegram/backup/restore/logs/update/repair/reconfigure/env/ports); telegram flow is now real; env check shows deployment key coverage. |
+| 34 | **Backup/Restore** | ✅ | Nightly encrypted auto-backup cron → job → AES blob to storage; `guardasli backup/restore` incl. `convex export`; backup settings query/mutation. Gap (P3): off-app destination documented but not automated. |
+| 35 | **Audit** | ✅ | Every sensitive action logged (create/update/revoke/verify/purchase/cancel/config…), strict tenant-tree read scope (even super_admin can't see other trees), requestId searchable. Heavily tested in isolation suites. |
+| 36 | **Security** | ✅ | AES-256-GCM + HKDF purpose keys, prod env gates (`assertProductionEnv`), SSRF outbound validation, hash-only tokens/keys, CORS allowlist, rate limits on auth paths, lockout, no client-trusted prices. **Residual gaps (P1):** `rateLimitCheck` not applied to `/api/v1/auth/*` REST routes; KMS module (local/env_kek/http) built+tested but not wired into secret loading (AEAD direct path is used instead). |
+
+## Verdict against the production-ready bar
+
+| Criterion | Verdict |
+|---|---|
+| Works | ✅ for 30/36 components; ❌ Main App, Dedicated App; 🟡 API-keys-on-REST |
+| Passes tests | ✅ 214/214 |
+| Production build | ✅ |
+| E2E verified | ✅ bot chain (live proof files), provisioning chain (this pass), isolation (55 E2E tests); 🟡 no live upstream provider E2E (needs a real panel from the owner) |
+| No third-party identity | ✅ zero in tracked files/history (release-check enforces) |
+| On main | ✅ synced, head `8df9cfb`, all commits authored by isAsli |
+| Version is0.0.1 verified | ✅ RELEASE.json + /api/v1/version + release-check |
+
+## Prioritized remaining work
+
+**P0 (blocks the "works" bar)**
+1. API-key authentication on REST (`/api/v1` panel routes) — keys exist, unusable without it.
+2. Admin CRUD UI: plans, servers/providers, users, API keys, reports (all APIs are live; zero wiring).
+
+**P1**
+3. Complete the 6-check feature chain in `purchasePlan` (3 checks hardcoded true).
+4. `rateLimitCheck` on REST auth/webhook routes; wire KMS module or mark as future.
+5. Reseller creation UI + `canResell`/`SubReseller` enforcement at purchase/resell.
+
+**P2**
+6. Traffic-sync cron from providers; disable remote user on cancel.
+7. Real DNS verify for custom domains; SSL auto-renew doctor check.
+8. Reports tab; live provider E2E (needs a real upstream panel from the owner).
+9. Decide scope for Main/Dedicated app + App builder build line (owner decision).
+
+**P3**
+10. Doc test-count refresh (163/82/198 → 214); `/api/v1/version` → `getVersionSnapshot()`.
