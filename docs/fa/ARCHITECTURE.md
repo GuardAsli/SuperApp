@@ -1,6 +1,6 @@
 # GuardAsli — معماری / Architecture
 
-**نسخه:** `is0.1.0` · **توسعه‌دهنده:** AsliCode · **قالب نسخه:** `isMAJOR.MINOR.PATCH`
+**نسخه:** `is0.0.2` · **توسعه‌دهنده:** AsliCode · **قالب نسخه:** `isMAJOR.MINOR.PATCH`
 
 <div dir="rtl">
 
@@ -34,7 +34,7 @@
 
 هر جزء نسخه مستقل با قالب `isMAJOR.MINOR.PATCH` دارد:
 `core`, `api`, `web`, `bot`, `miniapp`, `mainapp`, `dedicated`, `installer`,
-`payment`, `providers`, `build`, `releases` — همگی منتشر شده با `is0.1.0`.
+`payment`, `providers`, `build`, `releases` — همگی منتشر شده با `is0.0.2`.
 
 به‌روزرسانی هر جزء بقیه را نمی‌شکند؛ سازگاری با تطابق major بررسی می‌شود
 (`isCompatible` در `src/core/version.ts`).
@@ -101,7 +101,7 @@ appear in any customization table and cannot be altered by any role.
 
 Every component carries an independent version in the `isMAJOR.MINOR.PATCH` format:
 `core`, `api`, `web`, `bot`, `miniapp`, `mainapp`, `dedicated`, `installer`,
-`payment`, `providers`, `build`, `releases` — all currently `is0.1.0`. Updates are
+`payment`, `providers`, `build`, `releases` — all currently `is0.0.2`. Updates are
 independent; compatibility requires a matching major version (`isCompatible` in
 `src/core/version.ts`).
 

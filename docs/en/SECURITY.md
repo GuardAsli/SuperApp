@@ -1,4 +1,4 @@
-# GuardAsli — Security (zero open holes for is0.1.0)
+# GuardAsli — Security (zero open holes for is0.0.2)
 
 **Product:** GuardAsli · **Developer:** AsliCode
 

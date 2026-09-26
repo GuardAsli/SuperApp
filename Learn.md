@@ -1,6 +1,6 @@
 # GuardAsli — Learn
 
-**Version:** `is0.1.0` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
+**Version:** `is0.0.2` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
 
 Step-by-step guides to install, configure, and operate **GuardAsli** by **AsliCode**.
 
@@ -125,7 +125,7 @@ If provisioning fails, the job retries with backoff; it never reports false succ
 bash scripts/guardasli.sh          # interactive menu
 bash scripts/guardasli.sh doctor   # health
 bash scripts/guardasli.sh backup   # encrypted backup
-bash scripts/guardasli.sh status   # version is0.1.0 + path
+bash scripts/guardasli.sh status   # version is0.0.2 + path
 bash scripts/guardasli.sh logs     # recent logs
 bash scripts/guardasli.sh update   # update components, keep data
 ```
@@ -174,4 +174,4 @@ daily self-healing cron, and the `/webhook` bot command.
 
 ---
 
-© AsliCode — GuardAsli `is0.1.0`
+© AsliCode — GuardAsli `is0.0.2`

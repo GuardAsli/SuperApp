@@ -2,7 +2,7 @@
   "product": "GuardAsli",
   "developer": "AsliCode",
   "format": "isMAJOR.MINOR.PATCH",
-  "release": "is0.1.0",
+  "release": "is0.0.2",
   "status": "final",
   "audit": "docs/en/AUDIT.md",
   "verified": {
@@ -24,17 +24,17 @@
     "wizard_installer": true
   },
   "components": {
-    "core": "is0.1.0",
-    "api": "is0.1.0",
-    "web": "is0.1.0",
-    "bot": "is0.1.0",
-    "miniapp": "is0.1.0",
-    "mainapp": "is0.1.0",
-    "dedicated": "is0.1.0",
-    "installer": "is0.1.0",
-    "payment": "is0.1.0",
-    "providers": "is0.1.0",
-    "build": "is0.1.0",
-    "releases": "is0.1.0"
+    "core": "is0.0.2",
+    "api": "is0.0.2",
+    "web": "is0.0.2",
+    "bot": "is0.0.2",
+    "miniapp": "is0.0.2",
+    "mainapp": "is0.0.2",
+    "dedicated": "is0.0.2",
+    "installer": "is0.0.2",
+    "payment": "is0.0.2",
+    "providers": "is0.0.2",
+    "build": "is0.0.2",
+    "releases": "is0.0.2"
   }
 }

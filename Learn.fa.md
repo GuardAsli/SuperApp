@@ -1,6 +1,6 @@
 # GuardAsli — آموزش
 
-**نسخه:** `is0.1.0` · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
+**نسخه:** `is0.0.2` · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
 
 راهنمای گام‌به‌گام نصب، پیکربندی و بهره‌برداری از **GuardAsli** ساخته‌ی **AsliCode**.
 
@@ -132,7 +132,7 @@ bash scripts/guardasli.sh reconfigure
 bash scripts/guardasli.sh          # منوی تعاملی
 bash scripts/guardasli.sh doctor   # سلامت
 bash scripts/guardasli.sh backup   # پشتیبان رمزنگاری‌شده
-bash scripts/guardasli.sh status   # نسخه is0.1.0 و مسیر
+bash scripts/guardasli.sh status   # نسخه is0.0.2 و مسیر
 bash scripts/guardasli.sh logs     # لاگ‌های اخیر
 bash scripts/guardasli.sh update   # به‌روزرسانی اجزا، حفظ داده
 ```
@@ -181,6 +181,6 @@ bun run build
 
 ---
 
-© AsliCode — GuardAsli `is0.1.0`
+© AsliCode — GuardAsli `is0.0.2`
 
 </div>

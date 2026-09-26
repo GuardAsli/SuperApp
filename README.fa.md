@@ -5,7 +5,7 @@
 <h1 align="center">GuardAsli</h1>
 
 <p align="center">
-  <b>نسخه:</b> <code>is0.1.0</code> ·
+  <b>نسخه:</b> <code>is0.0.2</code> ·
   <b>توسعه‌دهنده:</b> AsliCode
 </p>
 
@@ -139,6 +139,6 @@ bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password"
 
 ---
 
-© AsliCode — GuardAsli `is0.1.0`
+© AsliCode — GuardAsli `is0.0.2`
 
 </div>

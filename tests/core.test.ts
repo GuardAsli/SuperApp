@@ -21,26 +21,26 @@ describe("هویت مرکزی", () => {
     expect(GUARDASLI.developer).toBe("AsliCode");
     expect(GUARDASLI.versionFormat).toBe("isMAJOR.MINOR.PATCH");
   });
-  test("نسخه اولیه همه اجزا is0.1.0 است", () => {
+  test("نسخه اولیه همه اجزا is0.0.2 است", () => {
     for (const c of COMPONENTS) {
-      expect(INITIAL_VERSIONS[c]).toBe("is0.1.0");
+      expect(INITIAL_VERSIONS[c]).toBe("is0.0.2");
     }
   });
 });
 
 describe("نسخه‌گذاری isMAJOR.MINOR.PATCH", () => {
   test("پارس و اعتبارسنجی", () => {
-    expect(isValidVersion("is0.1.0")).toBe(true);
+    expect(isValidVersion("is0.0.2")).toBe(true);
     expect(isValidVersion("is10.20.30")).toBe(true);
     expect(isValidVersion("1.0.0")).toBe(false);
     expect(isValidVersion("v1.0.0")).toBe(false);
     expect(parseVersion("is2.3.4")).toEqual({ major: 2, minor: 3, patch: 4 });
   });
   test("مقایسه و bump", () => {
-    expect(compareVersions("is0.1.0", "is0.1.1")).toBe(-1);
+    expect(compareVersions("is0.0.2", "is0.1.1")).toBe(-1);
     expect(compareVersions("is1.0.0", "is0.9.9")).toBe(1);
     expect(compareVersions("is1.2.3", "is1.2.3")).toBe(0);
-    expect(bumpVersion("is0.1.0", "patch")).toBe("is0.1.1");
+    expect(bumpVersion("is0.0.2", "patch")).toBe("is0.0.3");
     expect(bumpVersion("is0.0.9", "minor")).toBe("is0.1.0");
     expect(bumpVersion("is0.9.9", "minor")).toBe("is0.10.0");
     expect(bumpVersion("is1.9.9", "major")).toBe("is2.0.0");

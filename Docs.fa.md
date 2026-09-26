@@ -1,6 +1,6 @@
 # GuardAsli — مستندات فنی
 
-**نسخه:** `is0.1.0` FINAL · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
+**نسخه:** `is0.0.2` FINAL · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
 
 > محصول **GuardAsli** · توسعه‌دهنده **AsliCode**
 
@@ -60,7 +60,7 @@ sudo guardasli panel
 |---|---|
 | محصول | GuardAsli |
 | توسعه‌دهنده | AsliCode |
-| انتشار | is0.1.0 |
+| انتشار | is0.0.2 |
 
 منبع: `src/core/identity.ts`
 
@@ -113,6 +113,6 @@ bun run monitor:jobs
 bun run ci
 ```
 
-© AsliCode — GuardAsli is0.1.0
+© AsliCode — GuardAsli is0.0.2
 
 </div>

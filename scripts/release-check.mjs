@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-/** GuardAsli is0.1.0 — pre-release gate. */
+/** GuardAsli is0.0.2 — pre-release gate. */
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
@@ -64,8 +64,8 @@ if (identity.includes('product: "GuardAsli"') && identity.includes('developer: "
 } else fail("Core identity mismatch");
 
 const release = JSON.parse(readFileSync(join(root, "RELEASE.json"), "utf8"));
-if (release.product === "GuardAsli" && release.developer === "AsliCode" && release.release === "is0.1.0") {
-  ok("RELEASE.json is0.1.0");
+if (release.product === "GuardAsli" && release.developer === "AsliCode" && release.release === "is0.0.2") {
+  ok("RELEASE.json is0.0.2");
 } else fail("RELEASE.json invalid");
 
 // الگوهای ممنوعه به‌صورت split ساخته می‌شوند تا خودِ این فایل حاوی نام ثالث نباشد (بند ۴).
@@ -109,4 +109,4 @@ if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);
 }
-console.log("\nAll release checks passed — GuardAsli is0.1.0 FINAL");
+console.log("\nAll release checks passed — GuardAsli is0.0.2 FINAL");

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 #  GuardAsli — Main Installer & Control Panel
-#  Developer: AsliCode          Version: is0.1.0
+#  Developer: AsliCode          Version: is0.0.2
 #  Format:    isMAJOR.MINOR.PATCH
 #  Invoke with bash:  bash scripts/guardasli.sh <command>
 # ============================================================================
@@ -15,7 +15,7 @@ set -uo pipefail
 # ----------------------------------------------------------------------------
 if [ "$(id -u)" = "0" ]; then SUDO=""; else command -v sudo >/dev/null 2>&1 && SUDO="sudo" || SUDO=""; fi
 
-GUARDASLI_VERSION="is0.1.0"
+GUARDASLI_VERSION="is0.0.2"
 GUARDASLI_PRODUCT="GuardAsli"
 GUARDASLI_DEVELOPER="AsliCode"
 GUARDASLI_ROOT="${GUARDASLI_ROOT:-/opt/guardasli}"
@@ -45,8 +45,13 @@ load_env() {
 env_upsert() {
   local key="$1" val="$2"
   touch "${GUARDASLI_ENV_FILE}"
+  # جداکننده‌ی sed نباید کاراکتری باشد که در مقدار می‌آید — کلید Convex
+  # deploy «prod:name|token» است؛ با «|» sed می‌ترکید (sed: unknown option to 's').
+  # جداکننده‌ی امن: «@». در جایگزین sed فقط & و \ معنی خاص دارند؛ & escape می‌شود
+  # (پس‌اسلش‌ها در این مقادیر — base64/JWT — وجود ندارند).
+  local esc="${val//&/\\&}"
   if grep -qE "^${key}=" "${GUARDASLI_ENV_FILE}" 2>/dev/null; then
-    sed -i.bak "s|^${key}=.*|${key}=${val}|" "${GUARDASLI_ENV_FILE}" && rm -f "${GUARDASLI_ENV_FILE}.bak"
+    sed -i.bak "s@^${key}=.*@${key}=${esc}@" "${GUARDASLI_ENV_FILE}" && rm -f "${GUARDASLI_ENV_FILE}.bak"
   else
     printf '%s=%s\n' "${key}" "${val}" >> "${GUARDASLI_ENV_FILE}"
   fi

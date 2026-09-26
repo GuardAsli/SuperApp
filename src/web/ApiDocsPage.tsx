@@ -79,9 +79,9 @@ const CURL_VERSION = `curl https://your-domain.com/api/v1/version`;
 const JSON_VERSION = `{
   "product": "GuardAsli",
   "developer": "AsliCode",
-  "version": "is0.1.0",
+  "version": "is0.0.2",
   "format": "isMAJOR.MINOR.PATCH",
-  "components": { "core": "is0.1.0", "api": "is0.1.0", "bot": "is0.1.0", "...": "..." },
+  "components": { "core": "is0.0.2", "api": "is0.0.2", "bot": "is0.0.2", "...": "..." },
   "requestId": "ga_..."
 }`;
 

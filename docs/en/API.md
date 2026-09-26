@@ -1,6 +1,6 @@
 # GuardAsli — API `/api/v1`
 
-**Version:** `is0.1.0` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
+**Version:** `is0.0.2` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
 
 ## Standard error format
 
@@ -74,13 +74,13 @@ curl https://panel.example.com/api/v1/version
 {
   "product": "GuardAsli",
   "developer": "AsliCode",
-  "version": "is0.1.0",
+  "version": "is0.0.2",
   "format": "isMAJOR.MINOR.PATCH",
   "components": {
-    "core": "is0.1.0", "api": "is0.1.0", "web": "is0.1.0", "bot": "is0.1.0",
-    "miniapp": "is0.1.0", "mainapp": "is0.1.0", "dedicated": "is0.1.0",
-    "installer": "is0.1.0", "payment": "is0.1.0", "providers": "is0.1.0",
-    "build": "is0.1.0", "releases": "is0.1.0"
+    "core": "is0.0.2", "api": "is0.0.2", "web": "is0.0.2", "bot": "is0.0.2",
+    "miniapp": "is0.0.2", "mainapp": "is0.0.2", "dedicated": "is0.0.2",
+    "installer": "is0.0.2", "payment": "is0.0.2", "providers": "is0.0.2",
+    "build": "is0.0.2", "releases": "is0.0.2"
   },
   "requestId": "ga_..."
 }
@@ -97,4 +97,4 @@ id and amount) via `acceptProviderPayment` with an idempotency key (anti-replay)
 
 ---
 
-© AsliCode — GuardAsli `is0.1.0`
+© AsliCode — GuardAsli `is0.0.2`

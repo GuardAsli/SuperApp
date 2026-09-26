@@ -1,6 +1,6 @@
 # GuardAsli — Technical Documentation
 
-**Version:** `is0.1.0` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
+**Version:** `is0.0.2` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
 
 > Product **GuardAsli** · Developer **AsliCode** — core identity is fixed and non-negotiable.
 
@@ -35,7 +35,7 @@ Source of truth: `src/core/identity.ts` and `src/core/version.ts`.
 | Product | `GuardAsli` |
 | Developer | `AsliCode` |
 | Version format | `isMAJOR.MINOR.PATCH` |
-| Initial release | `is0.1.0` for all 12 components |
+| Initial release | `is0.0.2` for all 12 components |
 
 Components: `core`, `api`, `web`, `bot`, `miniapp`, `mainapp`, `dedicated`, `installer`, `payment`, `providers`, `build`, `releases`.
 
@@ -283,4 +283,4 @@ Frontend → API → Authorization → Business Logic → Database
 
 ---
 
-© AsliCode — GuardAsli `is0.1.0`
+© AsliCode — GuardAsli `is0.0.2`

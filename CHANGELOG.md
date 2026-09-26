@@ -1,6 +1,6 @@
 # Changelog — GuardAsli
 
-## is0.1.0 — 2026-09-25 — FINAL
+## is0.0.2 — 2026-09-25 — FINAL
 
 ### Ops fixes: stale update path
 - `guardasli update` now refreshes the `guardasli` command itself correctly:
@@ -89,5 +89,5 @@
 
 ### Product
 - **GuardAsli** by **AsliCode**
-- Component versions `is0.1.0`
+- Component versions `is0.0.2`
 - Bilingual documentation (EN/FA)

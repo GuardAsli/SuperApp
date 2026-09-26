@@ -1,6 +1,6 @@
 # GuardAsli — برندینگ و شخصی‌سازی / Branding
 
-**نسخه:** `is0.1.0` · **توسعه‌دهنده:** AsliCode · **قالب نسخه:** `isMAJOR.MINOR.PATCH`
+**نسخه:** `is0.0.2` · **توسعه‌دهنده:** AsliCode · **قالب نسخه:** `isMAJOR.MINOR.PATCH`
 
 <div dir="rtl">
 

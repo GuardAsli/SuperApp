@@ -1,6 +1,6 @@
 # GuardAsli — Payments
 
-**Product:** GuardAsli · **Developer:** AsliCode · **Release:** is0.1.0
+**Product:** GuardAsli · **Developer:** AsliCode · **Release:** is0.0.2
 
 ## Methods (exactly four)
 

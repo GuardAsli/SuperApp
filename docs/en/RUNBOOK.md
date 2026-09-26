@@ -1,4 +1,4 @@
-# GuardAsli is0.1.0 — Production Runbook (VPS)
+# GuardAsli is0.0.2 — Production Runbook (VPS)
 
 **Product:** GuardAsli · **Developer:** AsliCode
 
