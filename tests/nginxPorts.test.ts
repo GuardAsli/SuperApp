@@ -64,7 +64,8 @@ function render(opts: { tls?: "auto" | "0" | "1"; secure?: boolean } = {}): Rend
 
 /** شمارش بلوک‌هایی که روی یک پورت گوش می‌دهند. */
 function listenOn(conf: string, port: string): number {
-  return (conf.match(new RegExp(`listen ${port};`, "g")) ?? []).length;
+  // "listen 80 default_server;" هم می‌شمارد — هارنس واقعی nginx این را می‌سازد
+  return (conf.match(new RegExp(`listen ${port}(\\s|;)`, "g")) ?? []).length;
 }
 
 beforeEach(() => {
@@ -195,5 +196,49 @@ describe("nginx · self-healing", () => {
     });
     expect(res.status).not.toBe(0);
     expect(`${res.stdout}${res.stderr}`).toContain("GA_DOMAIN is required");
+  });
+
+  test("port 80 is default_server so the stock nginx welcome page never wins", () => {
+    const r = render({ tls: "0", secure: false });
+    expect(r.conf).toContain("listen 80 default_server;");
+    expect(r.conf).toContain('server_name panel.example.com _;');
+  });
+
+  test("the stock conf.d/default.conf welcome site is removed", () => {
+    const root = mkdtempSync(join(tmpdir(), "ga-nginx-welcome-"));
+    roots.push(root);
+    const etc = join(root, "etc");
+    mkdirSync(join(etc, "conf.d"), { recursive: true });
+    mkdirSync(join(root, "webroot"), { recursive: true });
+    // صفحه‌ی استوک welcome — در دبیان/اوبونتو همان چیزی که روی IP باز می‌شود
+    writeFileSync(
+      join(etc, "conf.d", "default.conf"),
+      "server { listen 80 default_server; root /usr/share/nginx/html; }\n",
+    );
+    const res = spawnSync("bash", [SCRIPT], {
+      encoding: "utf8",
+      env: { ...process.env, GA_DOMAIN: "panel.example.com", GA_TLS: "0", GA_ETC: etc, GA_WEBROOT: join(root, "webroot"), GA_CERT_DIR: join(root, "none") },
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("removed stock nginx welcome site");
+    expect(existsSync(join(etc, "conf.d", "default.conf"))).toBe(false);
+  });
+
+  test("on distros without sites-enabled include, the config is also installed in conf.d", () => {
+    const root = mkdtempSync(join(tmpdir(), "ga-nginx-rhel-"));
+    roots.push(root);
+    const etc = join(root, "etc");
+    mkdirSync(join(etc, "conf.d"), { recursive: true });
+    mkdirSync(join(root, "webroot"), { recursive: true });
+    // nginx.conf WITHOUT any sites-enabled include (RHEL/Alma style)
+    writeFileSync(join(etc, "nginx.conf"), "events {}\nhttp { include /etc/nginx/conf.d/*.conf; }\n");
+    const res = spawnSync("bash", [SCRIPT], {
+      encoding: "utf8",
+      env: { ...process.env, GA_DOMAIN: "panel.example.com", GA_TLS: "0", GA_ETC: etc, GA_WEBROOT: join(root, "webroot"), GA_CERT_DIR: join(root, "none") },
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("conf.d/guardasli.conf");
+    const confD = readFileSync(join(etc, "conf.d", "guardasli.conf"), "utf8");
+    expect(listenOn(confD, "80")).toBe(1);
   });
 });

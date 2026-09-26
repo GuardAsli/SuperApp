@@ -10,6 +10,11 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 set -uo pipefail
 
+# ----------------------------------------------------------------------------
+# 0. Sudo: همه‌ی عملیات سیستمی با sudo — وقتی روت هستیم خالی می‌ماند.
+# ----------------------------------------------------------------------------
+if [ "$(id -u)" = "0" ]; then SUDO=""; else command -v sudo >/dev/null 2>&1 && SUDO="sudo" || SUDO=""; fi
+
 GUARDASLI_VERSION="is0.1.0"
 GUARDASLI_PRODUCT="GuardAsli"
 GUARDASLI_DEVELOPER="AsliCode"
@@ -191,6 +196,9 @@ build_app() {
 # 5. Service management (systemd preferred, nohup fallback)
 # ----------------------------------------------------------------------------
 svc_unit() {
+  # PORT حتماً ست می‌شود — env_get روی همان فایل .env می‌خواند. بدون این، اپ
+  # روی 5173 می‌افتد و nginx روی پورت دیگری پروکسی می‌کند (علت «سایت باز نمی‌شود»).
+  local port_ui; port_ui="$(env_get GUARDASLI_PORT 4173)"
   cat <<EOF
 [Unit]
 Description=${GUARDASLI_PRODUCT} control-plane · Coded by ${GUARDASLI_DEVELOPER}
@@ -201,6 +209,8 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${GUARDASLI_APP_DIR}
 EnvironmentFile=${GUARDASLI_ENV_FILE}
+Environment=PORT=${port_ui}
+Environment=NODE_ENV=production
 ExecStart=$(command -v bun) run dev
 Restart=always
 RestartSec=5
@@ -229,6 +239,7 @@ svc_start_nohup() {
   (
     cd "${GUARDASLI_APP_DIR}" || exit 1
     set -a; . "${GUARDASLI_ENV_FILE}"; set +a
+    export PORT="$(env_get GUARDASLI_PORT 4173)"
     nohup bun run dev >> "${GUARDASLI_LOG_DIR}/app.log" 2>&1 &
   )
   ok "Started via nohup (log: ${GUARDASLI_LOG_DIR}/app.log)"
@@ -248,7 +259,7 @@ svc_stop() {
     ${SUDO:-} systemctl stop "${GUARDASLI_SERVICE}"
     ok "Service stopped"
   else
-    pkill -f "bun run dev" 2>/dev/null && ok "Stopped nohup process" || warn "No process found"
+    pkill -f "vite" 2>/dev/null && ok "Stopped nohup process" || warn "No process found"
   fi
 }
 
@@ -256,7 +267,7 @@ svc_status() {
   if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files 2>/dev/null | grep -q "^${GUARDASLI_SERVICE}.service"; then
     systemctl status "${GUARDASLI_SERVICE}" --no-pager -l | head -12
   else
-    if pgrep -f "bun run dev" >/dev/null 2>&1; then
+    if pgrep -f "vite" >/dev/null 2>&1; then
       ok "Running (nohup)"
     else
       warn "Not running"
@@ -304,6 +315,12 @@ check_ports() {
   if [ -z "${domain}" ]; then
     warn "no domain configured — set it with: guardasli reconfigure"
     return 1
+  fi
+  # گزارش SSL در همان check_ports (کاربر بدون این، وضعیت گواهی را نمی‌بیند)
+  if [ -f "/etc/letsencrypt/live/${domain}/fullchain.pem" ]; then
+    ok "TLS certificate present (Let's Encrypt) — https://${domain}"
+  else
+    warn "no TLS certificate — run: sudo guardasli ssl"
   fi
   ok "domain: ${domain}"
   ok "reseller port: ${port_r} · super admin port: ${port_s}"
@@ -413,7 +430,14 @@ ssl_issue() {
     ok "Certificate: ${GUARDASLI_ROOT}/ssl/fullchain.pem"
     warn "Self-signed — for production install certbot (apt install certbot python3-certbot-nginx) and rerun: guardasli ssl"
   fi
-  env_upsert GUARDASLI_SSL_DIR "${GUARDASLI_ROOT}/ssl"
+  # مسیر گواهی واقعی: بعد از صدور Let's Encrypt همان مسیر رسمی certbot ثبت
+  # می‌شود تا nginx-render و status هر دو یک منبع حقیقت داشته باشند. (قبلاً
+  # همیشه مسیر self-signed ثبت می‌شد حتی وقتی گواهی معتبر داشتیم.)
+  if [ -f "/etc/letsencrypt/live/${domain}/fullchain.pem" ]; then
+    env_upsert GUARDASLI_SSL_DIR "/etc/letsencrypt/live/${domain}"
+  else
+    env_upsert GUARDASLI_SSL_DIR "${GUARDASLI_ROOT}/ssl"
+  fi
 }
 
 # ----------------------------------------------------------------------------
@@ -633,7 +657,18 @@ do_status() {
   ok "Domain:    $(env_get GUARDASLI_MAIN_DOMAIN '(not set)')"
   ok "Port:      $(env_get GUARDASLI_PORT 3000)"
   svc_status
-  [ -f "${GUARDASLI_ROOT}/ssl/fullchain.pem" ] && ok "SSL:       installed" || warn "SSL:       not configured"
+  # وضعیت SSL: هم self-signed (ssl/) هم certbot (/etc/letsencrypt) چک می‌شود —
+  # قبلاً فقط مسیر self-signed دیده می‌شد و با وجود گواهی معتبر می‌گفت "not configured".
+  local tls="not configured"
+  if [ -f "${GUARDASLI_ROOT}/ssl/fullchain.pem" ]; then
+    tls="installed (self-signed — for production rerun: guardasli ssl)"
+  fi
+  local dom; dom="$(env_get GUARDASLI_MAIN_DOMAIN)"
+  if [ -n "${dom}" ] && [ -f "/etc/letsencrypt/live/${dom}/fullchain.pem" ]; then
+    tls="active (Let's Encrypt) — https://${dom}"
+  fi
+  ok "SSL:       ${tls}"
+  ok "Public URL: $(env_get GUARDASLI_PUBLIC_URL '(not set)')"
   local n
   n="$(ls -1 "${GUARDASLI_BACKUP_DIR}"/guardasli-*.tar.gz 2>/dev/null | wc -l)"
   ok "Backups:   ${n} archive(s)"

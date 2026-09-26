@@ -2,6 +2,19 @@
 
 ## is0.1.0 — 2026-09-25 — FINAL
 
+### Ops fixes: SSL state, welcome page, service port
+- `guardasli status` now detects a Let's Encrypt certificate (previously only
+  the self-signed path was checked, so an issued cert showed "not configured")
+- `ssl_issue` records the real cert path (`/etc/letsencrypt/live/<domain>`)
+- nginx config is now `default_server` on port 80, removes the stock welcome
+  site (conf.d/default.conf) and installs itself into conf.d on distros whose
+  nginx.conf has no sites-enabled include — "Welcome to nginx" is over
+- sudo is resolved once at the top of guardasli (`${SUDO:-}` was always empty
+  when run as non-root)
+- systemd unit and nohup fallback export PORT; the app now binds the port
+  nginx actually proxies to
+- 3 new nginx render tests (default_server, welcome removal, conf.d fallback)
+
 ### Provisioning runtime (was the biggest gap)
 - Real executor: `provisionWorker.processDueProvisions` runs every minute via cron
 - Stale-running requeue (worker crash recovery) + exponential backoff to `dead`

@@ -102,10 +102,12 @@ TMP="$(mktemp)"
   echo ""
 
   # ── پورت ۸۰: چالش ACME + (اگر گواهی داریم) ریدایرکت به HTTPS
+  # default_server: هر میزبانِ ناشناس (مثلاً بازکردن با IP) هم به همین بلوک
+  # می‌رسد — دیگر هیچ‌وقت صفحه‌ی «Welcome to nginx» دیده نمی‌شود.
   cat <<EOF
 server {
-  listen 80;
-  server_name ${DOMAIN};
+  listen 80 default_server;
+  server_name ${DOMAIN} _;
   client_max_body_size 25m;
 
   # چالش ACME — باید قبل از ریدایرکت بماند
@@ -200,6 +202,21 @@ fi
 cp -f "${TMP}" "${CONF}"
 ln -sf "${CONF}" "${SITES_LIVE}/guardasli"
 rm -f "${SITES_LIVE}/default"
+
+# صفحه‌ی پیش‌فرض nginx (Welcome) در برخی توزیع‌ها در conf.d/default.conf است و
+# اگر روی ۸۰ بماند با default_server ما تداخل می‌کند — فقط نسخه‌ی استوک حذف می‌شود.
+if [ -f "${ETC}/conf.d/default.conf" ] && grep -q "/usr/share/nginx/html" "${ETC}/conf.d/default.conf" 2>/dev/null; then
+  rm -f "${ETC}/conf.d/default.conf"
+  log "removed stock nginx welcome site (conf.d/default.conf)"
+fi
+
+# اگر nginx.conf اصلاً sites-enabled را include نمی‌کند (RHEL/Alma و…)، همان
+# فایل را در conf.d هم می‌گذاریم تا کانفیگ واقعاً لود شود — وگرنه فقط
+# Welcome page می‌دیدید و انگار هیچ کانفیگی نوشته نشده است.
+if [ -f "${ETC}/nginx.conf" ] && ! grep -q "sites-enabled" "${ETC}/nginx.conf" 2>/dev/null; then
+  cp -f "${TMP}" "${ETC}/conf.d/guardasli.conf"
+  log "nginx.conf has no sites-enabled include — config also installed as conf.d/guardasli.conf"
+fi
 
 if [ "${TEST_MODE}" = "1" ]; then
   rm -f "${TMP}" "${BACKUP}"
