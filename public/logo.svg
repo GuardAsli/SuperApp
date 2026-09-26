@@ -15,5 +15,5 @@
     <path d="M26 50l14 14 24-26" stroke="#0b1220" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
   <text x="140" y="82" font-family="ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="52" font-weight="800" fill="#f8fafc" letter-spacing="0.5">GuardAsli</text>
-  <text x="142" y="122" font-family="ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="21" font-weight="500" fill="#7dd3fc" letter-spacing="2">ASLICODE · is0.0.1</text>
+  <text x="142" y="122" font-family="ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="21" font-weight="500" fill="#7dd3fc" letter-spacing="2">ASLICODE · is0.1.0</text>
 </svg>

@@ -97,7 +97,7 @@ export const runAutoBackup = internalAction({
     const snapshot = {
       product: "GuardAsli",
       developer: "AsliCode",
-      release: "is0.0.1",
+      release: "is0.1.0",
       kind: "auto_metadata",
       at: new Date().toISOString(),
       note: "No raw secrets; restore needs live MASTER + DB",

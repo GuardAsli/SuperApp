@@ -10,7 +10,7 @@ export const GUARDASLI = Object.freeze({
   product: "GuardAsli",
   developer: "AsliCode",
   versionFormat: "isMAJOR.MINOR.PATCH",
-  initialVersion: "is0.0.1",
+  initialVersion: "is0.1.0",
 } as const);
 
 export type Component =
@@ -48,18 +48,18 @@ export const COMPONENTS: readonly Component[] = [
  * (مثلاً payment → is0.0.2) و major را در صورت شکستن سازگاری افزایش دهید.
  */
 export const COMPONENT_VERSIONS: Readonly<Record<Component, string>> = Object.freeze({
-  core: "is0.0.1",
-  api: "is0.0.1",
-  web: "is0.0.1",
-  bot: "is0.0.1",
-  miniapp: "is0.0.1",
-  mainapp: "is0.0.1",
-  dedicated: "is0.0.1",
-  installer: "is0.0.1",
-  payment: "is0.0.1",
-  providers: "is0.0.1",
-  build: "is0.0.1",
-  releases: "is0.0.1",
+  core: "is0.1.0",
+  api: "is0.1.0",
+  web: "is0.1.0",
+  bot: "is0.1.0",
+  miniapp: "is0.1.0",
+  mainapp: "is0.1.0",
+  dedicated: "is0.1.0",
+  installer: "is0.1.0",
+  payment: "is0.1.0",
+  providers: "is0.1.0",
+  build: "is0.1.0",
+  releases: "is0.1.0",
 });
 
 /** سازگاری با کد/تست‌های قبلی */

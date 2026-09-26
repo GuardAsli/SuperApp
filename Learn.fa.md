@@ -1,6 +1,6 @@
 # GuardAsli — آموزش
 
-**نسخه:** `is0.0.1` · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
+**نسخه:** `is0.1.0` · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
 
 راهنمای گام‌به‌گام نصب، پیکربندی و بهره‌برداری از **GuardAsli** ساخته‌ی **AsliCode**.
 
@@ -35,7 +35,7 @@ sudo bash install.sh --domain panel.example.com --email you@example.com
 > کلید Deploy باید کامل باشد: با `prod:` یا `dev:` شروع شود و `|` داشته باشد.
 > کلید ندارید؟ همان‌جا Enter بزنید — بعداً اضافه می‌شود.
 >
-> راهنمای کامل و عیب‌یابی: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+> راهنمای کامل و عیب‌یابی: [docs/DEPLOYMENT.md](docs/fa/DEPLOYMENT.md)
 
 ---
 
@@ -132,7 +132,7 @@ bash scripts/guardasli.sh reconfigure
 bash scripts/guardasli.sh          # منوی تعاملی
 bash scripts/guardasli.sh doctor   # سلامت
 bash scripts/guardasli.sh backup   # پشتیبان رمزنگاری‌شده
-bash scripts/guardasli.sh status   # نسخه is0.0.1 و مسیر
+bash scripts/guardasli.sh status   # نسخه is0.1.0 و مسیر
 bash scripts/guardasli.sh logs     # لاگ‌های اخیر
 bash scripts/guardasli.sh update   # به‌روزرسانی اجزا، حفظ داده
 ```
@@ -173,14 +173,14 @@ bun run build
 
 | هدف | سند |
 |---|---|
-| معماری عمیق | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| قرارداد API | [docs/API.md](docs/API.md) |
-| قواعد برندینگ | [docs/BRANDING.md](docs/BRANDING.md) |
+| معماری عمیق | [docs/ARCHITECTURE.md](docs/fa/ARCHITECTURE.md) |
+| قرارداد API | [docs/API.md](docs/fa/API.md) |
+| قواعد برندینگ | [docs/BRANDING.md](docs/fa/BRANDING.md) |
 | فهرست فنی کامل | [Docs.fa.md](Docs.fa.md) |
 | آموزش انگلیسی | [Learn.md](Learn.md) |
 
 ---
 
-© AsliCode — GuardAsli `is0.0.1`
+© AsliCode — GuardAsli `is0.1.0`
 
 </div>

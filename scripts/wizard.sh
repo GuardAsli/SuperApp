@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GuardAsli is0.0.1 — fully automated installation wizard (no prompts)
+# GuardAsli is0.1.0 — fully automated installation wizard (no prompts)
 # Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 #
 # Usage:
@@ -47,7 +47,7 @@ fi
 
 echo ""
 echo "═══════════════════════════════════════════"
-echo "  GuardAsli is0.0.1 — Fully Automated Wizard"
+echo "  GuardAsli is0.1.0 — Fully Automated Wizard"
 echo "  Coded by AsliCode"
 echo "═══════════════════════════════════════════"
 echo ""
@@ -72,7 +72,7 @@ if [ ! -f "$ENV_FILE" ]; then
   PEPPER="$(rand_hex)"
   SALT="$(rand_hex)"
   cat > "$ENV_FILE" <<EOF
-# GuardAsli is0.0.1 — wizard $(date -u +%Y-%m-%dT%H:%MZ)
+# GuardAsli is0.1.0 — wizard $(date -u +%Y-%m-%dT%H:%MZ)
 # Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 
 VITE_CONVEX_URL=
@@ -92,7 +92,7 @@ GUARDASLI_ADMIN_PASS=${ADMIN_PASS}
 
 GUARDASLI_PRODUCT=GuardAsli
 GUARDASLI_DEVELOPER=AsliCode
-GUARDASLI_VERSION=is0.0.1
+GUARDASLI_VERSION=is0.1.0
 EOF
   ok ".env.local created"
 else
@@ -200,7 +200,7 @@ cat > "$STATE_FILE" <<EOF
 {
   "product": "GuardAsli",
   "developer": "AsliCode",
-  "release": "is0.0.1",
+  "release": "is0.1.0",
   "installedAt": "$(date -u +%Y-%m-%dT%H:%MZ)",
   "adminUser": "${ADMIN_USER}"
 }

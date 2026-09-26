@@ -1,6 +1,6 @@
 # GuardAsli — API `/api/v1`
 
-**نسخه:** `is0.0.1` · **توسعه‌دهنده:** AsliCode · **قالب نسخه:** `isMAJOR.MINOR.PATCH`
+**نسخه:** `is0.1.0` · **توسعه‌دهنده:** AsliCode · **قالب نسخه:** `isMAJOR.MINOR.PATCH`
 
 <div dir="rtl">
 
@@ -69,13 +69,13 @@ curl https://panel.example.com/api/v1/version
 {
   "product": "GuardAsli",
   "developer": "AsliCode",
-  "version": "is0.0.1",
+  "version": "is0.1.0",
   "format": "isMAJOR.MINOR.PATCH",
   "components": {
-    "core": "is0.0.1", "api": "is0.0.1", "web": "is0.0.1", "bot": "is0.0.1",
-    "miniapp": "is0.0.1", "mainapp": "is0.0.1", "dedicated": "is0.0.1",
-    "installer": "is0.0.1", "payment": "is0.0.1", "providers": "is0.0.1",
-    "build": "is0.0.1", "releases": "is0.0.1"
+    "core": "is0.1.0", "api": "is0.1.0", "web": "is0.1.0", "bot": "is0.1.0",
+    "miniapp": "is0.1.0", "mainapp": "is0.1.0", "dedicated": "is0.1.0",
+    "installer": "is0.1.0", "payment": "is0.1.0", "providers": "is0.1.0",
+    "build": "is0.1.0", "releases": "is0.1.0"
   },
   "requestId": "ga_..."
 }

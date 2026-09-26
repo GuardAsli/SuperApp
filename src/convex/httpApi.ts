@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { httpAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { newRequestId, safeInternalMessage } from "../core/errors";
-import { GUARDASLI, INITIAL_VERSIONS } from "../core/identity";
+import { GUARDASLI, getVersionSnapshot } from "../core/identity";
 import { healthHandler, registerHandler, loginHandler, refreshHandler } from "./httpAuth";
 
 /**
@@ -136,14 +136,17 @@ const routes: RouteDef[] = [
   {
     path: "/api/v1/version",
     method: "GET",
-    handler: async (_ctx, _req, requestId, headers) =>
-      jsonResponse(requestId, 200, {
-        product: GUARDASLI.product,
-        developer: GUARDASLI.developer,
-        version: GUARDASLI.initialVersion,
-        format: GUARDASLI.versionFormat,
-        components: INITIAL_VERSIONS,
-      }, headers),
+    handler: async (_ctx, _req, requestId, headers) => {
+      // همیشه از snapshot زنده — اگر اجزایی مستقل bump شوند، همین endpoint واقعیت را نشان می‌دهد.
+      const snap = getVersionSnapshot();
+      return jsonResponse(requestId, 200, {
+        product: snap.product,
+        developer: snap.developer,
+        version: snap.components.core,
+        format: snap.format,
+        components: snap.components,
+      }, headers);
+    },
   },
   {
     path: "/api/v1/openapi.json",

@@ -5,7 +5,7 @@
 <h1 align="center">GuardAsli</h1>
 
 <p align="center">
-  <b>نسخه:</b> <code>is0.0.1</code> ·
+  <b>نسخه:</b> <code>is0.1.0</code> ·
   <b>توسعه‌دهنده:</b> AsliCode ·
   <b>قالب نسخه:</b> <code>isMAJOR.MINOR.PATCH</code>
 </p>
@@ -62,7 +62,7 @@ sudo bash install.sh --domain panel.example.com --email you@example.com
 
 > **نکته:** در صورت ارائه، کلید Deploy باید «کامل» باشد — یعنی با `prod:` یا
 > `dev:` شروع شود و علامت `|` داشته باشد (مثل `prod:my-deployment|eyJ2MiI6...`).
-> راهنمای کامل مرحله‌به‌مرحله: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+> راهنمای کامل مرحله‌به‌مرحله: [docs/DEPLOYMENT.md](docs/en/DEPLOYMENT.md)
 
 ### مدیریت سرور بعد از نصب
 
@@ -103,12 +103,12 @@ bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password"
 
 | سند | محتوا |
 |---|---|
-| [راهنمای نصب](docs/DEPLOYMENT.md) | نصب مرحله‌به‌مرحله روی سرور |
-| [معماری](docs/ARCHITECTURE.md) | ساختار لایه‌ها و مدل امنیتی |
-| [API](docs/API.md) | مسیرها و کدهای خطا |
-| [پرداخت‌ها](docs/PAYMENTS.md) | روش‌های پرداخت و امنیت وب‌هوک |
-| [امنیت](docs/SECURITY.md) | رمزنگاری و نشست‌ها |
-| [اجرا](docs/RUNBOOK.md) | بهره‌برداری روزانه |
+| [راهنمای نصب](docs/en/DEPLOYMENT.md) | نصب مرحله‌به‌مرحله روی سرور |
+| [معماری](docs/en/ARCHITECTURE.md) | ساختار لایه‌ها و مدل امنیتی |
+| [API](docs/en/API.md) | مسیرها و کدهای خطا |
+| [پرداخت‌ها](docs/en/PAYMENTS.md) | روش‌های پرداخت و امنیت وب‌هوک |
+| [امنیت](docs/en/SECURITY.md) | رمزنگاری و نشست‌ها |
+| [اجرا](docs/en/RUNBOOK.md) | بهره‌برداری روزانه |
 
 ### مجوز
 
@@ -183,7 +183,7 @@ status and the admin password.
 > **Note:** when provided, the deploy key must be the FULL value — it starts
 > with `prod:` or `dev:` and contains a `|` (e.g.
 > `prod:my-deployment|eyJ2MiI6...`). Full step-by-step guide:
-> [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+> [docs/DEPLOYMENT.md](docs/en/DEPLOYMENT.md)
 
 ### Managing the server afterwards
 
@@ -235,7 +235,7 @@ bun convex dev --once
 ### Health check
 
 ```bash
-bun test        # 198 tests
+bun test        # 227 tests
 bun typecheck   # zero errors
 bun run build   # production bundle in dist/
 ```
@@ -252,12 +252,12 @@ bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password"
 
 | Document | Contents |
 |---|---|
-| [Deployment](docs/DEPLOYMENT.md) | Step-by-step server install guide |
-| [Architecture](docs/ARCHITECTURE.md) | Layers and security model |
-| [API](docs/API.md) | Endpoints and error codes |
-| [Payments](docs/PAYMENTS.md) | Payment methods and webhook security |
-| [Security](docs/SECURITY.md) | Crypto and sessions |
-| [Runbook](docs/RUNBOOK.md) | Day-to-day operations |
+| [Deployment](docs/en/DEPLOYMENT.md) | Step-by-step server install guide |
+| [Architecture](docs/en/ARCHITECTURE.md) | Layers and security model |
+| [API](docs/en/API.md) | Endpoints and error codes |
+| [Payments](docs/en/PAYMENTS.md) | Payment methods and webhook security |
+| [Security](docs/en/SECURITY.md) | Crypto and sessions |
+| [Runbook](docs/en/RUNBOOK.md) | Day-to-day operations |
 
 ### License
 

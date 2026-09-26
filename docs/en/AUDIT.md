@@ -1,16 +1,16 @@
 # GuardAsli — Full Component Audit (36 components)
 
-**Release:** `is0.0.1` · **Developer:** AsliCode · **Branch:** `main` (synced) · **Audit date:** 2026-09-25
-**Production-ready bar (as defined):** works, passes tests, successful production build, E2E verified, no third-party identity, on main, version is0.0.1 verified.
+**Release:** `is0.1.0` · **Developer:** AsliCode · **Branch:** `main` (synced) · **Audit date:** 2026-09-25
+**Production-ready bar (as defined):** works, passes tests, successful production build, E2E verified, no third-party identity, on main, version is0.1.0 verified.
 
 Global verification at audit time:
 
 ```
-bun test                → 214 pass / 0 fail / 770 expects / 13 files
+bun test                → 227 pass / 0 fail / 809 expects / 14 files
 bun tsc -b --noEmit     → clean
 bun run build           → success (dist/)
 bash -n scripts/*.sh install.sh → ALL OK
-bun scripts/release-check.mjs   → is0.0.1 FINAL (identity + banned-term scan)
+bun scripts/release-check.mjs   → is0.1.0 FINAL (identity + banned-term scan)
 git history             → 80 commits, all author+committer = isAsli, zero third-party trailers
 ```
 
@@ -23,9 +23,9 @@ Legend: ✅ Production-ready · 🟡 Partial (gaps listed) · ❌ Missing / stub
 | # | Component | Status | Evidence & remaining work |
 |---|---|---|---|
 | 1 | **Core** (identity, engines) | ✅ | `src/core/*` complete: identity frozen, AEAD/HKDF, scrypt, sidechannel, ssrf, rbac, features, pricing, ledger, tenantScope, providers, payments, telegram, version, prodEnv. Tested via `core.test.ts` (29), `crypto.test.ts` (12), `kms_sidechannel.test.ts` (3). Nothing blocking. |
-| 2 | **Versioning** | 🟡 | `is0.0.1` for all 12 components, `parse/compare/isCompatible/bump` implemented + tested; `VERSION_FORMAT_PATTERN` enforced. Gap: `/api/v1/version` serves `INITIAL_VERSIONS` const instead of the existing `getVersionSnapshot()` helper — silent drift risk once components bump independently (P3 fix). |
+| 2 | **Versioning** | 🟡 | `is0.1.0` for all 12 components, `parse/compare/isCompatible/bump` implemented + tested; `VERSION_FORMAT_PATTERN` enforced. Gap: `/api/v1/version` serves `INITIAL_VERSIONS` const instead of the existing `getVersionSnapshot()` helper — silent drift risk once components bump independently (P3 fix). |
 | 3 | **Independent Updates** | 🟡 | `bumpVersion` + `isCompatible` (same major) exist and are unit-tested; `guardasli update` (rsync + rebuild) works. Gap: no runtime gate consumes `isCompatible` (e.g. backend rejecting old web bundle); updater doesn't run per-component version comparison. Plan: wire `isCompatible` into a version handshake endpoint (P2). |
-| 4 | **Documentation** | 🟡 | Docs complete in EN+FA (Docs, Learn, ARCHITECTURE, API, SECURITY, DEPLOYMENT, RUNBOOK, PAYMENTS, BRANDING, KMS, CLIENT_EXPERIENCE, AUDIT) + on-site `#/api` docs page. Gap: stale test counts in three docs (Learn says 163, Docs says 82, README says 198 — real: 214) and Docs §7 provider list wording. One-line fixes (P3). |
+| 4 | **Documentation** | 🟡 | Docs complete in EN+FA (Docs, Learn, ARCHITECTURE, API, SECURITY, DEPLOYMENT, RUNBOOK, PAYMENTS, BRANDING, KMS, CLIENT_EXPERIENCE, AUDIT) + on-site `#/api` docs page. Gap: stale test counts in three docs (Learn says 163, Docs says 82, README says 198 — real: 227) and Docs §7 provider list wording. One-line fixes (P3). |
 
 ## API & Data
 
@@ -67,7 +67,7 @@ Legend: ✅ Production-ready · 🟡 Partial (gaps listed) · ❌ Missing / stub
 | 23 | **Telegram Bot** | ✅ | Per-tenant webhook + secret header, self-healing daily cron, jobs-queue command execution, numeric-ID admin claim, full command set, `/login` role-scoped links (env-overridable ports), auto login-link after provisioning (scheduler-driven), `guardasli telegram` CLI now does a REAL bootstrap (token + numeric admin ID → encrypted save → webhook). Live E2E proof file exists (`logs/e2e-bot-proof.jsonl`) + 35 web tests + 7 provision tests. |
 | 24 | **Telegram Mini App** | ✅ | `MiniAppPage` (wallet, subscriptions, servers, devices), HMAC `verifyTelegramInitData` of real initData, internal-only registration path. |
 | 25 | **Web App** | ✅ | Landing (themed, `#/api` docs), Auth, Dashboard (wallet/history/charge/cards/payments/bot/branding/monitor/admin-review), i18n FA/EN, `#/api` route. Build passes. |
-| 26 | **Main App** (Android) | ❌ | Only the identity component + `apps.buildEnqueue` queue exists; worker stubs builds as instant `success`. Plan: real build line (Capacitor/PWA wrapper producing signed APK) or honest removal from the is0.0.1 scope (needs owner decision). |
+| 26 | **Main App** (Android) | ❌ | Only the identity component + `apps.buildEnqueue` queue exists; worker stubs builds as instant `success`. Plan: real build line (Capacitor/PWA wrapper producing signed APK) or honest removal from the is0.1.0 scope (needs owner decision). |
 | 27 | **Dedicated App** | ❌ | Literal in `appKind` only. Same decision needed as #26. |
 | 28 | **App Builder** | 🟡 | `appGet/appSave/buildEnqueue/buildList/buildMark` + `appCustomizations`/`builds` tables complete. **Gaps:** no UI; build worker is a stub (ties to #26). |
 | 29 | **Domains** (custom) | 🟡 | `domainAdd/domainVerify/domainList` with scope + audit. **Gap:** "verify" marks verified without a real DNS check (no resolve action exists); no SSL issuance per tenant domain. Plan: real DNS resolve in a node action + ACME note (P2). |
@@ -89,12 +89,12 @@ Legend: ✅ Production-ready · 🟡 Partial (gaps listed) · ❌ Missing / stub
 | Criterion | Verdict |
 |---|---|
 | Works | ✅ for 30/36 components; ❌ Main App, Dedicated App; 🟡 API-keys-on-REST |
-| Passes tests | ✅ 214/214 |
+| Passes tests | ✅ 227/227 |
 | Production build | ✅ |
 | E2E verified | ✅ bot chain (live proof files), provisioning chain (this pass), isolation (55 E2E tests); 🟡 no live upstream provider E2E (needs a real panel from the owner) |
 | No third-party identity | ✅ zero in tracked files/history (release-check enforces) |
 | On main | ✅ synced, head `8df9cfb`, all commits authored by isAsli |
-| Version is0.0.1 verified | ✅ RELEASE.json + /api/v1/version + release-check |
+| Version is0.1.0 verified | ✅ RELEASE.json + /api/v1/version + release-check |
 
 ## Prioritized remaining work
 
@@ -114,4 +114,4 @@ Legend: ✅ Production-ready · 🟡 Partial (gaps listed) · ❌ Missing / stub
 9. Decide scope for Main/Dedicated app + App builder build line (owner decision).
 
 **P3**
-10. Doc test-count refresh (163/82/198 → 214); `/api/v1/version` → `getVersionSnapshot()`.
+10. Doc test-count refresh (163/82/198 → 227); `/api/v1/version` → `getVersionSnapshot()`.

@@ -1,6 +1,6 @@
 # GuardAsli — Learn
 
-**Version:** `is0.0.1` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
+**Version:** `is0.1.0` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
 
 Step-by-step guides to install, configure, and operate **GuardAsli** by **AsliCode**.
 
@@ -35,7 +35,7 @@ status and the admin password. Save them.
 > The deploy key must be the FULL value: it starts with `prod:` or `dev:`
 > and contains a `|`. Got no key at hand? Just press Enter at the prompt.
 >
-> Full guide and troubleshooting: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+> Full guide and troubleshooting: [docs/DEPLOYMENT.md](docs/en/DEPLOYMENT.md)
 
 ---
 
@@ -125,7 +125,7 @@ If provisioning fails, the job retries with backoff; it never reports false succ
 bash scripts/guardasli.sh          # interactive menu
 bash scripts/guardasli.sh doctor   # health
 bash scripts/guardasli.sh backup   # encrypted backup
-bash scripts/guardasli.sh status   # version is0.0.1 + path
+bash scripts/guardasli.sh status   # version is0.1.0 + path
 bash scripts/guardasli.sh logs     # recent logs
 bash scripts/guardasli.sh update   # update components, keep data
 ```
@@ -153,7 +153,7 @@ bun typecheck
 bun run build
 ```
 
-Expect 163 tests passing and a clean TypeScript build.
+Expect 227 tests passing and a clean TypeScript build.
 
 The webhook suite (`tests/botWebhook.test.ts`) drives the real handlers with only
 the network edge mocked, and covers: automatic webhook registration on save,
@@ -166,12 +166,12 @@ daily self-healing cron, and the `/webhook` bot command.
 
 | Goal | Document |
 |---|---|
-| Deep architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| API contracts | [docs/API.md](docs/API.md) |
-| Branding rules | [docs/BRANDING.md](docs/BRANDING.md) |
+| Deep architecture | [docs/ARCHITECTURE.md](docs/en/ARCHITECTURE.md) |
+| API contracts | [docs/API.md](docs/en/API.md) |
+| Branding rules | [docs/BRANDING.md](docs/en/BRANDING.md) |
 | Full technical index | [Docs.md](Docs.md) |
 | Persian tutorial | [Learn.fa.md](Learn.fa.md) |
 
 ---
 
-© AsliCode — GuardAsli `is0.0.1`
+© AsliCode — GuardAsli `is0.1.0`

@@ -1,8 +1,37 @@
 # Changelog — GuardAsli
 
-## is0.0.1 — Unreleased (working)
+## is0.1.0 — 2026-09-25 — FINAL
 
-### Telegram bot & Mini App (full admin parity)
+### Provisioning runtime (was the biggest gap)
+- Real executor: `provisionWorker.processDueProvisions` runs every minute via cron
+- Stale-running requeue (worker crash recovery) + exponential backoff to `dead`
+- Full tenant→server→provider validation; cross-tenant providers refused
+- Provider credentials decrypted only in action memory; real upstream `createUser`
+- Subscription activates (`provisioned`) + buyer's role-scoped login link sent
+- 7 E2E tests driving real handlers with only the network edge mocked
+
+### API keys on REST
+- `/api/v1/panel/{overview,users,subscriptions}` authenticate with `Authorization: Bearer ga_…`
+- Prefix lookup → hash → status → expiry → scope (`panel:read`); `lastUsedAt` stamped
+- Missing/unknown → 401; revoked/expired/out-of-scope → 403, standard error contract
+- API keys tab in the dashboard: create (raw value shown once), list, revoke
+- 13 tests including cross-tenant isolation through the real HTTP handler
+
+### Installer & ops fixes (field-reported)
+- SSL: HTTP-only pre-render so the ACME challenge passes; real certbot errors + checklist;
+  `PUBLIC_URL` switched to https after success (Telegram rejects http webhooks)
+- `guardasli telegram` is a real flow now: token + admin numeric ID → encrypted save → webhook
+  (`scripts/bot-bootstrap.mjs` replaces the dead env-token stub)
+- `sync-convex-env` reads BOTH `.env` (VPS installer) and `.env.local` (wizard) — secrets
+  actually reach the deployment; `GUARDASLI_MAIN_DOMAIN` added to the synced keys
+- `convex deploy` failures print the real error with targeted hints
+
+### Housekeeping
+- Docs split by language: `docs/en/*` and `docs/fa/*`, all links updated
+- `/api/v1/version` serves the live version snapshot (no drift)
+- Test-count claims in docs corrected; release-check covers the new layout
+
+## is0.0.1 — 2026-09-22 — FINAL
 - Bot admin identified by numeric Telegram ID; if unset, the first `/admin` sender claims it
 - Web commands: `/admin`, `/id`, `/me`, `/botinfo`, `/bot on|off`, `/setadmin`, `/token`, `/miniapp`, `/webhook`, `/stats`, `/broadcast`
 - Full bot management from the bot itself AND from the web admin panel (Bot & Mini App tab)
@@ -37,5 +66,5 @@
 
 ### Product
 - **GuardAsli** by **AsliCode**
-- Component versions `is0.0.1`
+- Component versions `is0.1.0`
 - Bilingual documentation (EN/FA)

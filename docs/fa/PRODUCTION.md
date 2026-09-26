@@ -1,6 +1,6 @@
 # GuardAsli — امنیت محیط Production
 
-**Product:** GuardAsli · **Developer:** AsliCode · **Release:** is0.0.1
+**Product:** GuardAsli · **Developer:** AsliCode · **Release:** is0.1.0
 
 ## متغیرهای اجباری
 

@@ -1,6 +1,6 @@
 # GuardAsli — Technical Documentation
 
-**Version:** `is0.0.1` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
+**Version:** `is0.1.0` · **Developer:** AsliCode · **Format:** `isMAJOR.MINOR.PATCH`
 
 > Product **GuardAsli** · Developer **AsliCode** — core identity is fixed and non-negotiable.
 
@@ -35,7 +35,7 @@ Source of truth: `src/core/identity.ts` and `src/core/version.ts`.
 | Product | `GuardAsli` |
 | Developer | `AsliCode` |
 | Version format | `isMAJOR.MINOR.PATCH` |
-| Initial release | `is0.0.1` for all 12 components |
+| Initial release | `is0.1.0` for all 12 components |
 
 Components: `core`, `api`, `web`, `bot`, `miniapp`, `mainapp`, `dedicated`, `installer`, `payment`, `providers`, `build`, `releases`.
 
@@ -55,7 +55,7 @@ Identity, RBAC, ledger, pricing, security engines, central auth, wallet, provide
 **Customization (fully brandable)**  
 Per-tenant branding, assets, UI texts, bot configs, app customizations, custom domains. Driven by tables + `src/web/branding.ts`.
 
-Full detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Full detail: [docs/ARCHITECTURE.md](docs/en/ARCHITECTURE.md).
 
 Repository layout:
 
@@ -184,7 +184,7 @@ Uniform error shape:
 
 Key routes: `ping`, `version`, `openapi.json`, Telegram webhooks, payment callbacks.
 
-Full reference: [docs/API.md](docs/API.md).
+Full reference: [docs/API.md](docs/en/API.md).
 
 ---
 
@@ -256,7 +256,7 @@ SSRF protection validates outbound URLs; private ranges and internal hosts are r
 ## 12. Testing & quality
 
 ```bash
-bun test        # 82 unit + integration tests
+bun test        # 227 unit + integration tests
 bun typecheck   # TypeScript, zero errors
 bun run build   # production bundle → dist/
 ```
@@ -274,13 +274,13 @@ Frontend → API → Authorization → Business Logic → Database
 
 | File | Content |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, purchase flow, security model |
-| [docs/API.md](docs/API.md) | Routes, error codes, webhook security |
-| [docs/BRANDING.md](docs/BRANDING.md) | Customizable fields + core boundary |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Server install guide |
+| [docs/ARCHITECTURE.md](docs/en/ARCHITECTURE.md) | Layers, purchase flow, security model |
+| [docs/API.md](docs/en/API.md) | Routes, error codes, webhook security |
+| [docs/BRANDING.md](docs/en/BRANDING.md) | Customizable fields + core boundary |
+| [docs/DEPLOYMENT.md](docs/en/DEPLOYMENT.md) | Server install guide |
 | [Learn.md](Learn.md) | Step-by-step tutorials |
 | [README.md](README.md) | Product overview |
 
 ---
 
-© AsliCode — GuardAsli `is0.0.1`
+© AsliCode — GuardAsli `is0.1.0`

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GuardAsli is0.0.1 — reliable production start path with a strict env gate
+# GuardAsli is0.1.0 — reliable production start path with a strict env gate
 # Product: GuardAsli · Developer: AsliCode · Coded by AsliCode
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -61,4 +61,4 @@ fi
 echo "[guardasli] production env OK"
 echo "  deploy: bunx convex deploy"
 echo "  then:   bun run sync-env   (pushes the same secrets into the Convex deployment)"
-echo "[guardasli] OK is0.0.1"
+echo "[guardasli] OK is0.1.0"

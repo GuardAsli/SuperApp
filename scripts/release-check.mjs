@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-/** GuardAsli is0.0.1 — pre-release gate. */
+/** GuardAsli is0.1.0 — pre-release gate. */
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
@@ -10,6 +10,15 @@ function ok(msg) { console.log(`✓ ${msg}`); }
 function fail(msg) { console.error(`✗ ${msg}`); failed++; }
 
 const mustExist = [
+  "docs/en/API.md",
+  "docs/en/RUNBOOK.md",
+  "docs/en/SECURITY.md",
+  "docs/en/DEPLOYMENT.md",
+  "docs/en/PAYMENTS.md",
+  "docs/fa/API.md",
+  "docs/fa/ARCHITECTURE.md",
+  "docs/fa/BRANDING.md",
+  "docs/fa/PRODUCTION.md",
   "src/core/identity.ts",
   "src/core/aead.ts",
   "src/core/password.ts",
@@ -30,11 +39,12 @@ const mustExist = [
   "scripts/wizard.sh",
   "scripts/prod-start.sh",
   "RELEASE.json",
-  "docs/RUNBOOK.md",
-  "docs/SECURITY.md",
-  "docs/PAYMENTS.md",
-  "docs/PRODUCTION.md",
-  "docs/KMS_AND_SIDECHANNEL.md",
+  "docs/en/RUNBOOK.md",
+  "docs/en/SECURITY.md",
+  "docs/en/PAYMENTS.md",
+  "docs/fa/PRODUCTION.md",
+  "docs/fa/KMS_AND_SIDECHANNEL.md",
+  "docs/en/AUDIT.md",
   "README.md",
   "README.fa.md",
   "Docs.md",
@@ -54,8 +64,8 @@ if (identity.includes('product: "GuardAsli"') && identity.includes('developer: "
 } else fail("Core identity mismatch");
 
 const release = JSON.parse(readFileSync(join(root, "RELEASE.json"), "utf8"));
-if (release.product === "GuardAsli" && release.developer === "AsliCode" && release.release === "is0.0.1") {
-  ok("RELEASE.json is0.0.1");
+if (release.product === "GuardAsli" && release.developer === "AsliCode" && release.release === "is0.1.0") {
+  ok("RELEASE.json is0.1.0");
 } else fail("RELEASE.json invalid");
 
 // الگوهای ممنوعه به‌صورت split ساخته می‌شوند تا خودِ این فایل حاوی نام ثالث نباشد (بند ۴).
@@ -78,7 +88,8 @@ const scanFiles = [
   "RELEASE.json",
   "src/core/clientExperience.ts",
   "src/core/providers/index.ts",
-  "docs/CLIENT_EXPERIENCE.md",
+  "docs/fa/CLIENT_EXPERIENCE.md",
+  "docs/en/AUDIT.md",
 ];
 for (const f of scanFiles) {
   const text = readFileSync(join(root, f), "utf8");
@@ -98,4 +109,4 @@ if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);
 }
-console.log("\nAll release checks passed — GuardAsli is0.0.1 FINAL");
+console.log("\nAll release checks passed — GuardAsli is0.1.0 FINAL");

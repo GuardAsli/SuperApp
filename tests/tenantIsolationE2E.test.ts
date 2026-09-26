@@ -90,7 +90,7 @@ function seedEconomy(s: Scenario) {
   });
   t.appCustomizations.push({
     _id: "app-B", tenantId: s.ids.tResB, appKind: "mainapp", appName: "B App",
-    version: "is0.0.1", buildNumber: 1, primaryColor: "#000000", secondaryColor: "#111111",
+    version: "is0.1.0", buildNumber: 1, primaryColor: "#000000", secondaryColor: "#111111",
     accentColor: "#222222", backgroundColor: "#333333", themeMode: "dark", featureFlags: [],
   });
   t.apiKeys.push({
@@ -560,7 +560,7 @@ describe("isolation · app builder, domains, api keys, backups, audit", () => {
     seedEconomy(s);
     s.db.tables.builds.push({
       _id: "build-B", tenantId: s.ids.tResB, appCustomizationId: "app-B",
-      status: "queued", platform: "android", version: "is0.0.1", buildNumber: 2, startedAt: Date.now(),
+      status: "queued", platform: "android", version: "is0.1.0", buildNumber: 2, startedAt: Date.now(),
     });
     const list = await call(s.ctx, apps.buildList as never, { token: s.tokens.resA });
     expect(JSON.stringify(list)).not.toContain("build-B");

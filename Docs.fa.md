@@ -1,10 +1,10 @@
 # GuardAsli — مستندات فنی
 
-**نسخه:** `is0.0.1` FINAL · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
+**نسخه:** `is0.1.0` FINAL · **توسعه‌دهنده:** AsliCode · **قالب:** `isMAJOR.MINOR.PATCH`
 
 > محصول **GuardAsli** · توسعه‌دهنده **AsliCode**
 
-انگلیسی: [Docs.md](Docs.md) · آموزش: [Learn.fa.md](Learn.fa.md) · نصب سرور: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+انگلیسی: [Docs.md](Docs.md) · آموزش: [Learn.fa.md](Learn.fa.md) · نصب سرور: [docs/DEPLOYMENT.md](docs/fa/DEPLOYMENT.md)
 
 <div dir="rtl">
 
@@ -60,7 +60,7 @@ sudo guardasli panel
 |---|---|
 | محصول | GuardAsli |
 | توسعه‌دهنده | AsliCode |
-| انتشار | is0.0.1 |
+| انتشار | is0.1.0 |
 
 منبع: `src/core/identity.ts`
 
@@ -113,6 +113,6 @@ bun run monitor:jobs
 bun run ci
 ```
 
-© AsliCode — GuardAsli is0.0.1
+© AsliCode — GuardAsli is0.1.0
 
 </div>

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 #  GuardAsli — Main Installer & Control Panel
-#  Developer: AsliCode          Version: is0.0.1
+#  Developer: AsliCode          Version: is0.1.0
 #  Format:    isMAJOR.MINOR.PATCH
 #  Invoke with bash:  bash scripts/guardasli.sh <command>
 # ============================================================================
@@ -10,7 +10,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 set -uo pipefail
 
-GUARDASLI_VERSION="is0.0.1"
+GUARDASLI_VERSION="is0.1.0"
 GUARDASLI_PRODUCT="GuardAsli"
 GUARDASLI_DEVELOPER="AsliCode"
 GUARDASLI_ROOT="${GUARDASLI_ROOT:-/opt/guardasli}"

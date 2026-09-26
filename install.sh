@@ -3,7 +3,7 @@
 #  GuardAsli — server installer (English only for SSH)
 #  Product:    GuardAsli
 #  Developer:  AsliCode · Coded by AsliCode
-#  Release:    is0.0.1   (format isMAJOR.MINOR.PATCH)
+#  Release:    is0.1.0   (format isMAJOR.MINOR.PATCH)
 #
 #  One command — opens the installer straight away:
 #    sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/GuardAsli/SuperApp/main/install.sh)"
@@ -336,7 +336,7 @@ write_env() {
     master="$(rand_hex)"; pepper="$(rand_hex)"; salt="$(rand_hex)"
     admin_pass="${GUARDASLI_ADMIN_PASS:-Ga$(rand_hex | cut -c1-12)A1}"
     {
-      echo "# GuardAsli is0.0.1 — generated $(date -u +%Y-%m-%dT%H:%MZ)"
+      echo "# GuardAsli is0.1.0 — generated $(date -u +%Y-%m-%dT%H:%MZ)"
       echo "# Product: GuardAsli · Developer: AsliCode"
       echo "GUARDASLI_ENV=production"
       echo "NODE_ENV=production"
@@ -355,7 +355,7 @@ write_env() {
       echo "GUARDASLI_ADMIN_PASS=${admin_pass}"
       echo "GUARDASLI_PRODUCT=GuardAsli"
       echo "GUARDASLI_DEVELOPER=AsliCode"
-      echo "GUARDASLI_VERSION=is0.0.1"
+      echo "GUARDASLI_VERSION=is0.1.0"
       echo "GUARDASLI_PORT=${PORT_UI}"
       echo "GUARDASLI_PORT_SUPER=${PORT_SUPER}"
       echo "GUARDASLI_PORT_RESELLER=${PORT_RESELLER}"
@@ -594,7 +594,7 @@ print_summary_and_panel() {
   set +a
   echo ""
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
-  ok "GuardAsli is0.0.1 installed — Coded by AsliCode"
+  ok "GuardAsli is0.1.0 installed — Coded by AsliCode"
   printf "${C_BOLD}══════════════════════════════════════════════════${C_OFF}\n"
   echo "  Path      : ${INSTALL_DIR}"
   echo "  Env file  : ${ENV_FILE}"
@@ -670,7 +670,7 @@ ask_deploy_key() {
 }
 
 echo ""
-echo " GuardAsli installer · AsliCode · is0.0.1"
+echo " GuardAsli installer · AsliCode · is0.1.0"
 echo " OS: $(detect_os)"
 echo ""
 need_root

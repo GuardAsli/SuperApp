@@ -5,7 +5,7 @@
 <h1 align="center">GuardAsli</h1>
 
 <p align="center">
-  <b>نسخه:</b> <code>is0.0.1</code> ·
+  <b>نسخه:</b> <code>is0.1.0</code> ·
   <b>توسعه‌دهنده:</b> AsliCode
 </p>
 
@@ -130,15 +130,15 @@ bunx convex run authActions:bootstrapAdminAction '{"username":"admin","password"
 
 | سند | محتوا |
 |---|---|
-| [راهنمای نصب](docs/DEPLOYMENT.md) | نصب مرحله‌به‌مرحله روی سرور |
-| [معماری](docs/ARCHITECTURE.md) | ساختار لایه‌ها و مدل امنیتی |
-| [API](docs/API.md) | مسیرها و کدهای خطا |
-| [پرداخت‌ها](docs/PAYMENTS.md) | روش‌های پرداخت و امنیت وب‌هوک |
-| [امنیت](docs/SECURITY.md) | رمزنگاری و نشست‌ها |
-| [اجرا](docs/RUNBOOK.md) | بهره‌برداری روزانه |
+| [راهنمای نصب](docs/fa/DEPLOYMENT.md) | نصب مرحله‌به‌مرحله روی سرور |
+| [معماری](docs/fa/ARCHITECTURE.md) | ساختار لایه‌ها و مدل امنیتی |
+| [API](docs/fa/API.md) | مسیرها و کدهای خطا |
+| [پرداخت‌ها](docs/fa/PAYMENTS.md) | روش‌های پرداخت و امنیت وب‌هوک |
+| [امنیت](docs/fa/SECURITY.md) | رمزنگاری و نشست‌ها |
+| [اجرا](docs/fa/RUNBOOK.md) | بهره‌برداری روزانه |
 
 ---
 
-© AsliCode — GuardAsli `is0.0.1`
+© AsliCode — GuardAsli `is0.1.0`
 
 </div>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
+import type { Id } from "../convex/_generated/dataModel";
 import { GUARDASLI } from "../core/identity";
 import { saveBranding, type TenantBranding } from "./branding";
 import { getLocale, setLocale, t, type Locale } from "./i18n";
@@ -66,6 +67,7 @@ type Tab =
   | "branding"
   | "bot"
   | "admin"
+  | "apikeys"
   | "monitor";
 
 export default function DashboardPage({ branding, onBrandingChange }: Props) {
@@ -155,6 +157,7 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
     if (isAdmin) {
       base.push(["bot", locale === "fa" ? "ربات و مینی‌اپ" : "Bot & Mini App"]);
       base.push(["admin", t("admin", locale)]);
+      base.push(["apikeys", locale === "fa" ? "کلیدهای API" : "API keys"]);
       base.push(["monitor", t("monitor", locale)]);
     }
     return base;
@@ -578,6 +581,8 @@ export default function DashboardPage({ branding, onBrandingChange }: Props) {
 
         {tab === "bot" && isAdmin && <BotPanel token={token} />}
 
+        {tab === "apikeys" && isAdmin && <ApiKeysPanel token={token} />}
+
         {tab === "monitor" && isAdmin && (
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="card p-6">
@@ -823,6 +828,147 @@ type BotConfigInfo = {
 };
 
 /** مدیریت کامل ربات و مینی‌اپ — معادل کامل بخش ربات در ربات (/admin). */
+/**
+ * پنل کلیدهای API — ساخت (نمایش یک‌بار مقدار خام)، فهرست و ابطال.
+ * سکوپ پیش‌فرض panel:read برای مسیرهای /api/v1/panel/*.
+ */
+function ApiKeysPanel({ token }: { token: string }) {
+  const fa = getLocale() === "fa";
+  const keys = useQuery(api.infra.apiKeyList, { token });
+  const create = useMutation(api.infra.apiKeyCreate);
+  const revoke = useMutation(api.infra.apiKeyRevoke);
+  const [name, setName] = useState("");
+  const [days, setDays] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [freshRaw, setFreshRaw] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const doCreate = async () => {
+    if (!name.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await create({
+        token,
+        name: name.trim(),
+        scopes: ["panel:read"],
+        ...(days && Number(days) > 0 ? { expiresInDays: Number(days) } : {}),
+      });
+      setFreshRaw(res.apiKey);
+      setCopied(false);
+      setName("");
+      setDays("");
+    } catch (e) {
+      setErr(friendlyMsg(String((e as Error).message), getLocale()));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doRevoke = async (apiKeyId: Id<"apiKeys">) => {
+    setBusy(true);
+    try {
+      await revoke({ token, apiKeyId });
+    } catch (e) {
+      setErr(friendlyMsg(String((e as Error).message), getLocale()));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card p-6">
+      <h2 className="text-lg font-extrabold">{fa ? "کلیدهای API" : "API keys"}</h2>
+      <p className="mt-1 text-xs text-core-muted">
+        {fa
+          ? "کلیدها مسیرهای /api/v1/panel/* را با هدر Authorization: Bearer باز می‌کنند. مقدار خام فقط یک‌بار نمایش داده می‌شود."
+          : "Keys authenticate /api/v1/panel/* via the Authorization: Bearer header. The raw value is shown only once."}
+      </p>
+
+      <div className="mt-4 flex flex-wrap items-end gap-2">
+        <label className="block text-sm font-semibold">
+          {fa ? "نام کلید" : "Key name"}
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="input mt-1 block w-52 px-3 py-2"
+            placeholder={fa ? "مثلاً integration" : "e.g. integration"}
+          />
+        </label>
+        <label className="block text-sm font-semibold">
+          {fa ? "انقضا (روز، خالی = بی‌پایان)" : "Expiry (days, blank = never)"}
+          <input
+            value={days}
+            onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, ""))}
+            className="input mt-1 block w-32 px-3 py-2"
+            dir="ltr"
+          />
+        </label>
+        <button type="button" disabled={busy || !name.trim()} onClick={doCreate} className="btn-primary px-4 py-2 font-bold disabled:opacity-50">
+          {fa ? "ساخت کلید" : "Create key"}
+        </button>
+      </div>
+
+      {freshRaw && (
+        <div className="mt-4 rounded-xl border border-emerald-400/40 bg-emerald-400/10 p-3">
+          <div className="text-xs font-bold text-emerald-200">
+            {fa ? "این مقدار فقط همین یک‌بار نمایش داده می‌شود — همین حالا کپی کنید:" : "Shown only once — copy it now:"}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="flex-1 overflow-x-auto rounded bg-black/40 px-2 py-1.5 text-left text-xs text-emerald-100" dir="ltr">{freshRaw}</code>
+            <button
+              type="button"
+              className="rounded-lg border border-emerald-300/30 px-2.5 py-1 text-xs font-bold text-emerald-200"
+              onClick={() => {
+                void navigator.clipboard.writeText(freshRaw);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+            >
+              {copied ? (fa ? "کپی شد ✓" : "Copied ✓") : fa ? "کپی" : "Copy"}
+            </button>
+          </div>
+        </div>
+      )}
+      {err && <div className="mt-3 text-sm text-red-400">{err}</div>}
+
+      <ul className="mt-4 space-y-2">
+        {(keys ?? []).map((k) => (
+          <li key={k.apiKeyId} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+            <span className="font-bold">{k.name}</span>
+            <code className="text-xs text-core-muted" dir="ltr">{k.prefix}…</code>
+            <span
+              className={`rounded-md px-2 py-0.5 text-[11px] font-black ${
+                k.status === "active" ? "bg-emerald-400/15 text-emerald-300" : "bg-red-400/15 text-red-300"
+              }`}
+            >
+              {k.status}
+            </span>
+            {k.expiresAt ? (
+              <span className="text-[11px] text-core-muted">{new Date(k.expiresAt).toLocaleDateString()}</span>
+            ) : null}
+            {k.lastUsedAt ? (
+              <span className="text-[11px] text-core-muted">· {new Date(k.lastUsedAt).toLocaleString()}</span>
+            ) : null}
+            {k.status === "active" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void doRevoke(k.apiKeyId)}
+                className="mr-auto rounded border border-red-500/60 px-2 py-1 text-xs font-bold text-red-400 disabled:opacity-50"
+              >
+                {fa ? "ابطال" : "Revoke"}
+              </button>
+            )}
+          </li>
+        ))}
+        {keys && keys.length === 0 && <li className="text-sm text-core-muted">—</li>}
+      </ul>
+    </div>
+  );
+}
+
 function BotPanel({ token }: { token: string }) {
   const fa = getLocale() === "fa";
   const cfg = useQuery(api.telegram.botConfigGet, { token });
