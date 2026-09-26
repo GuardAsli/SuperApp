@@ -186,7 +186,7 @@ const applyFilter = (rows: Doc[], fn: (q: any) => unknown): Doc[] =>
  * No production code is mocked at the authorization level — every internal
  * chain (ledgerApply, audit.log, provisionJobEnqueue, …) executes for real.
  */
-import * as harnessModules from "../src/convex/_harnessModules";
+import * as harnessModules from "./_harnessModules";
 import { getFunctionName } from "convex/server";
 
 type FnRef =
@@ -214,7 +214,7 @@ function handlerOf(fn: unknown): (ctx: any, args: any) => Promise<any> {
     const ns = (harnessModules as Record<string, Record<string, unknown>>)[mod];
     const resolved = ns?.[exportName];
     if (resolved) return handlerOf(resolved);
-    throw new Error(`harness has no real module for '${name}' — add it to src/convex/_harnessModules.ts`);
+    throw new Error(`harness has no real module for ${name} — add it to tests/_harnessModules.ts`);
   }
   throw new Error(
     "handler not accessible for this function ref — pass a module export or an api/internal reference",
