@@ -433,7 +433,7 @@ run_app_install() {
       step_ok "deployment env synced (bot/webhook secrets ready)"
     else
       step_warn "deployment env sync incomplete — bot/webhook needs GUARDASLI_MASTER_SECRET"
-      step_warn "retry with:  cd ${INSTALL_DIR} && bun run sync-env"
+      step_warn "retry with:  cd ${INSTALL_DIR} && bun scripts/sync-convex-env.mjs"
     fi
     verify_backend_live "${VITE_CONVEX_URL:-}"
   elif [ -n "${VITE_CONVEX_URL:-}" ]; then
@@ -679,14 +679,16 @@ need_root
 # An install can take several minutes. With --background the script re-executes
 # itself under setsid+nohup, so closing the terminal (or losing SSH) no longer
 # kills the install — it keeps writing to install.log.
-if [ "$BACKGROUND" = "1" ]; then
+if [ "$BACKGROUND" = "1" ] && [ "${GA_BACKGROUND_CHILD:-}" != "1" ]; then
+  # GA_BACKGROUND_CHILD guard: بدون این، فرزند هم --background را می‌گرفت و
+  # دوباره خودش را fork می‌کرد — حلقه‌ی بی‌نهایت (fork bomb).
   mkdir -p "$STATE_DIR"
   LOG="${STATE_DIR}/install.log"
   SELF="${STATE_DIR}/install.sh"
   cp -f "${BASH_SOURCE[0]}" "$SELF" 2>/dev/null || SELF="${BASH_SOURCE[0]}"
   ARGS=()
-  for a in "$@"; do ARGS+=("$a"); done
-  if setsid nohup bash "$SELF" "${ARGS[@]}" --background >>"$LOG" 2>&1 </dev/null & then
+  for a in "$@"; do [ "$a" = "--background" ] || [ "$a" = "-b" ] || ARGS+=("$a"); done
+  if GA_BACKGROUND_CHILD=1 setsid nohup bash "$SELF" "${ARGS[@]}" >>"$LOG" 2>&1 </dev/null & then
     echo " Install continues in the background."
     echo "   follow : tail -f $LOG"
     echo "   check  : $SELF status  (once finished)"

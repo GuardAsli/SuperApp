@@ -2,6 +2,16 @@
 
 ## is0.1.0 — 2026-09-25 — FINAL
 
+### Ops fixes: stale update path
+- `guardasli update` now refreshes the `guardasli` command itself correctly:
+  the source is resolved from the app dir first, and copying the command onto
+  itself is detected and skipped (previously new subcommands like `nginx`
+  stayed unknown and the version banner stayed old)
+- `build_app` exports `CONVEX_DEPLOY_KEY` — updates now really deploy the
+  backend instead of silently printing "Convex deploy skipped"
+- Installer `--background` no longer re-forks itself (the child kept the flag
+  and forked forever); deploy-key sync retry hints point to a runnable command
+
 ### Ops fixes: SSL state, welcome page, service port
 - `guardasli status` now detects a Let's Encrypt certificate (previously only
   the self-signed path was checked, so an issued cert showed "not configured")

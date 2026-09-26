@@ -182,12 +182,26 @@ build_app() {
   (
     cd "${GUARDASLI_APP_DIR}" || die "app dir missing"
     export GUARDASLI_MASTER_SECRET="$(env_get GUARDASLI_MASTER_SECRET)"
+    # بدون این export، بعد از هر update کد بک‌اند قدیمی می‌ماند و ربات/پنل
+    # می‌شکنند («Convex deploy skipped» بی‌دلیل نبود — کلید وجود داشت ولی
+    # هرگز به محیط منتقل نمی‌شد).
+    local dkey; dkey="$(env_get CONVEX_DEPLOY_KEY '')"
+    if [ -n "${dkey}" ]; then
+      export CONVEX_DEPLOY_KEY="${dkey}"
+    fi
     bun install >/dev/null 2>&1 || die "bun install failed"
     info "bun install complete"
     bun run build >/dev/null 2>&1 || die "vite build failed"
     info "Frontend build complete (dist/)"
-    bun convex deploy 2>/dev/null \
-      || info "Convex deploy skipped (no deployment linked in this environment)"
+    if [ -n "${dkey}" ]; then
+      if bunx convex deploy --yes 2>&1 | tail -3; then
+        info "Convex backend deployed"
+      else
+        warn "convex deploy failed — backend may be stale; check the key: sudo guardasli convex"
+      fi
+    else
+      info "Convex deploy skipped (no deploy key — run: sudo guardasli convex)"
+    fi
   )
   ok "Build finished"
 }
@@ -723,11 +737,11 @@ convex_deploy() {
       # The deployment needs its own env — without GUARDASLI_MASTER_SECRET the
       # bot token can't be decrypted and setWebhook always fails.
       # One source of truth: scripts/sync-convex-env.mjs (bun run sync-env).
-      if bun run sync-env >/dev/null 2>&1; then
+      if bun scripts/sync-convex-env.mjs >/dev/null 2>&1; then
         ok "deployment env synced (bot/webhook secrets ready)"
       else
         warn "deployment env sync incomplete — bot/webhook needs GUARDASLI_MASTER_SECRET on the deployment"
-        warn "retry with:  cd ${GUARDASLI_APP_DIR} && bun run sync-env"
+        warn "retry with:  cd ${GUARDASLI_APP_DIR} && bun scripts/sync-convex-env.mjs"
       fi
       local base="${VITE_CONVEX_URL:-}"
       if [ -n "${base}" ]; then
@@ -826,10 +840,21 @@ do_panel() {
 # ----------------------------------------------------------------------------
 install_command() {
   local target="/usr/local/bin/guardasli"
+  # منبع واقعی اسکریپت: همیشه از فایل اجراشده نیست — وقتی از target اجرا شده
+  # باشد، کپی کردن target روی خودش هیچ‌وقت دستور را نو نمی‌کند (دلیل اینکه
+  # بعد از update دستورهای جدید مثل nginx شناخته نمی‌شدند). اولویت: app dir →
+  # فایل اجراشده → پوشه‌ی اسکریپت جاری.
+  local self="${GUARDASLI_APP_DIR}/scripts/guardasli.sh"
+  [ -f "${self}" ] || self="${BASH_SOURCE[0]}"
+  [ -f "${self}" ] || self="$0"
+  if [ "$(readlink -f "${target}" 2>/dev/null)" = "$(readlink -f "${self}" 2>/dev/null)" ]; then
+    ok "Command already up to date: guardasli (${GUARDASLI_VERSION})"
+    return 0
+  fi
   if [ -w /usr/local/bin ] || [ "$(id -u)" = "0" ]; then
-    cp "$0" "${target}" && chmod +x "${target}" && ok "Command installed: guardasli"
+    cp "${self}" "${target}" && chmod +x "${target}" && ok "Command installed: guardasli"
   else
-    ${SUDO:-} cp "$0" "${target}" && ${SUDO:-} chmod +x "${target}" \
+    ${SUDO:-} cp "${self}" "${target}" && ${SUDO:-} chmod +x "${target}" \
       && ok "Command installed: guardasli" \
       || warn "Could not install to ${target} — run with sudo or invoke via: sh $0"
   fi
@@ -850,7 +875,7 @@ check_deployment_env() {
       if printf '%s' "${out}" | grep -q "^${n}="; then
         ok "deployment env: ${n} set"
       else
-        warn "deployment env: ${n} MISSING — fix with: bun run sync-env"
+        warn "deployment env: ${n} MISSING — fix with: cd ${GUARDASLI_APP_DIR} && bun scripts/sync-convex-env.mjs"
       fi
     done
   )
