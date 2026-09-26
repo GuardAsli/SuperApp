@@ -15,6 +15,10 @@ set -uo pipefail
 # ----------------------------------------------------------------------------
 if [ "$(id -u)" = "0" ]; then SUDO=""; else command -v sudo >/dev/null 2>&1 && SUDO="sudo" || SUDO=""; fi
 
+# Convex CLI بدون این روی Sentry telemetry قفل می‌کند (o*.ingest.sentry.io ETIMEOUT)
+# و کل deploy را می‌کشد — روی سرورهای بدون دسترسی آزاد به Sentry رایج است.
+export CONVEX_DISABLE_TELEMETRY=1
+
 GUARDASLI_VERSION="is0.0.2"
 GUARDASLI_PRODUCT="GuardAsli"
 GUARDASLI_DEVELOPER="AsliCode"
@@ -378,7 +382,15 @@ check_ports() {
     warn "no certificate yet — role ports are HTTP only. Run: guardasli ssl"
   fi
 
-  # ۴) تست واقعی از خود سرور
+  # ۴) آیا خود اپ روی پورت داخلی بالا است؟ (بدون این، پروکسی به جایی نمی‌رسد)
+  local port_ui; port_ui="$(env_get GUARDASLI_PORT 4173)"
+  if curl -fsS --max-time 5 "http://127.0.0.1:${port_ui}/" >/dev/null 2>&1; then
+    ok "app answering on 127.0.0.1:${port_ui}"
+  else
+    warn "app NOT answering on 127.0.0.1:${port_ui} — start it: guardasli start (or check logs)"
+  fi
+
+  # ۵) تست واقعی از خود سرور
   for p in "" "${port_r}" "${port_s}"; do
     local url="${scheme}://${domain}${p:+:${p}}/nginx-health"
     if curl -k -fsS --max-time 10 "${url}" 2>/dev/null | grep -q ok; then
@@ -464,6 +476,10 @@ ssl_issue() {
 # ----------------------------------------------------------------------------
 telegram_setup() {
   title "Telegram bot"
+  # env فایل حتماً لود می‌شود — bot-bootstrap به GUARDASLI_ADMIN_USER/PASS
+  # (اکانت ادمین نصب) و VITE_CONVEX_URL نیاز دارد؛ بدون این export، همیشه
+  # "ADMIN_USER/PASS are required" می‌دهد حتی وقتی همه‌چیز در .env هست.
+  load_env
   info "The token is stored encrypted (AES-256-GCM) in the database and the"
   info "webhook is registered on Telegram right here — fully automatic."
   local key; key="$(env_get CONVEX_DEPLOY_KEY)"
@@ -479,11 +495,22 @@ telegram_setup() {
     export CONVEX_DEPLOY_KEY="${key}"
     local admin_json="null"
     [ -n "${ADMIN_ID}" ] && admin_json="${ADMIN_ID}"
+    # اگر اکانت ادمین در .env نبود (نصب قدیمی یا رمز عوض‌شده)، همین‌جا تعاملی
+    # می‌پرسیم — به‌جای شکست مبهم "ADMIN_USER/PASS are required".
+    if [ -z "$(env_get GUARDASLI_ADMIN_USER '')" ] || [ -z "$(env_get GUARDASLI_ADMIN_PASS '')" ]; then
+      info "Admin account not found in ${GUARDASLI_ENV_FILE} — create/enter it once:"
+      printf "Admin username: "
+      read -r AU
+      printf "Admin password: "
+      read -rs AP; echo
+      [ -n "${AU}" ] && [ -n "${AP}" ] && env_upsert GUARDASLI_ADMIN_USER "${AU}" && env_upsert GUARDASLI_ADMIN_PASS "${AP}"
+      load_env
+    fi
     if GUARDASLI_BOT_TOKEN="${TOK}" GUARDASLI_BOT_ADMIN_ID="${ADMIN_ID}" \
       bun scripts/bot-bootstrap.mjs 2>&1 | tail -15; then
       ok "Bot configured — send /start in Telegram to test it"
     else
-      warn "bootstrap failed — check the token value and that the backend is live"
+      warn "bootstrap failed — see the output above (admin account missing? run menu 5 first)"
     fi
   )
 }

@@ -114,23 +114,27 @@ describe("nginx · TLS on the role ports", () => {
   test("with a certificate, TLS is applied to 105 and 616 — not only to 80", () => {
     const r = render({ secure: true });
     expect(r.status).toBe(0);
-    // پورت ۸۰ فقط ریدایرکت می‌کند؛ گواهی باید روی هر دو پورت نقش بنشیند
+    // پورت ۸۰ فقط ریدایرکت می‌کند؛ گواهی باید روی هر دو پورت نقش + ۴۴۳ بنشیند
     const sslCount = (r.conf.match(/ssl_certificate /g) ?? []).length;
-    expect(sslCount).toBe(2);
+    expect(sslCount).toBe(3);
     expect(r.conf).toContain("/live/panel.example.com/fullchain.pem");
     expect(r.conf).toContain("/live/panel.example.com/privkey.pem");
-    // هر دو پورت نقش باید داخل بلوک TLS باشند، نه فقط یکی
+    // هر دو پورت نقش و ۴۴۳ باید داخل بلوک TLS باشند، نه فقط یکی
     const block105 = r.conf.slice(r.conf.indexOf("listen 105;"), r.conf.indexOf("listen 616;"));
-    const block616 = r.conf.slice(r.conf.indexOf("listen 616;"));
+    const block616 = r.conf.slice(r.conf.indexOf("listen 616;"), r.conf.indexOf("listen 443"));
+    const block443 = r.conf.slice(r.conf.indexOf("listen 443"));
     expect(block105).toContain("ssl_certificate");
     expect(block616).toContain("ssl_certificate");
+    expect(block443).toContain("ssl_certificate");
+    // پورت اصلی کاربران: https://دامنه/ باید واقعاً بلوک داشته باشد
+    expect(r.conf).toContain("listen 443 ssl;");
   });
 
   test("the health endpoint `guardasli ports` relies on exists on every port", () => {
     const r = render({ secure: true });
     const health = (r.conf.match(/location = \/nginx-health/g) ?? []).length;
-    // ۸۰ (HTTP) + ۱۰۵ + ۶۱۶ — پورت ۸۰ وقتی TLS دارد ریدایرکت است و health ندارد
-    expect(health).toBe(2);
+    // ۱۰۵ + ۶۱۶ + ۴۴۳ — پورت ۸۰ وقتی TLS دارد ریدایرکت است و health ندارد
+    expect(health).toBe(3);
   });
 
   test("with a certificate, port 80 only redirects (the ACME challenge stays reachable)", () => {

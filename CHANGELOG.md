@@ -2,6 +2,19 @@
 
 ## is0.0.2 — 2026-09-25 — FINAL
 
+### Ops fixes: port 443, telegram env, telemetry
+- nginx renderer now also emits the main `listen 443 ssl` block — with a
+  certificate the plain `https://domain/` entry never had a server block and
+  the site refused to open (only ports 80→redirect, 105, 616 were rendered)
+- firewall opens 443 alongside the role ports
+- `guardasli telegram` loads the env file before bootstrapping and, when the
+  admin account is missing from it, asks for it interactively instead of
+  failing with an opaque "ADMIN_USER/PASS are required"
+- `CONVEX_DISABLE_TELEMETRY=1` exported everywhere the Convex CLI runs —
+  deploys were hanging on Sentry telemetry ETIMEOUT on servers without free
+  egress to ingest.sentry.io
+- `guardasli ports` also checks the app itself answers on the internal port
+
 ### Ops fixes: stale update path
 - `guardasli update` now refreshes the `guardasli` command itself correctly:
   the source is resolved from the app dir first, and copying the command onto

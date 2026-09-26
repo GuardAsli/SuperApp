@@ -177,6 +177,22 @@ EOF
   fi
   proxy_block | sed "s/__PORT_UI__/${PORT_UI}/g"
   echo "}"
+
+  # ── پورت ۴۴۳ (ورود اصلی کاربران) — بدون این https://دامنه هرگز باز نمی‌شد
+  # و کاربر فقط روی پورت‌های نقش می‌توانست وارد شود.
+  if [ "${HAVE_TLS}" = "1" ]; then
+    cat <<EOF
+
+# ── ورود اصلی کاربران (443) ──
+server {
+  listen 443 ssl;
+  server_name ${DOMAIN} _;
+  client_max_body_size 25m;
+${TLS_DIRECTIVES}
+EOF
+    proxy_block | sed "s/__PORT_UI__/${PORT_UI}/g"
+    echo "}"
+  fi
 } > "${TMP}"
 
 # map لازم برای websocket در http{} — اگر موجود نباشد، map ساده می‌سازیم
@@ -245,6 +261,7 @@ rm -f "${TMP}" "${BACKUP}"
 if [ "${TEST_MODE}" = "0" ] && command -v ufw >/dev/null 2>&1; then
   ufw allow "${PORT_RESELLER}/tcp" >/dev/null 2>&1 || true
   ufw allow "${PORT_SUPER}/tcp" >/dev/null 2>&1 || true
+  ufw allow 443/tcp >/dev/null 2>&1 || true
 fi
 
 SCHEME="http"

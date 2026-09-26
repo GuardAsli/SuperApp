@@ -95,6 +95,10 @@ ok()   { printf "${C_GREEN}[ OK ]${C_OFF} %s\n" "$*"; }
 warn() { printf "${C_YELLOW}[WARN]${C_OFF} %s\n" "$*"; }
 die()  { printf "${C_RED}[FAIL]${C_OFF} %s\n" "$*" >&2; exit 1; }
 
+# Convex CLI بدون این روی Sentry telemetry قفل می‌کند (o*.ingest.sentry.io ETIMEOUT)
+# و کل deploy را می‌کشد — روی سرورهای بدون دسترسی آزاد به Sentry رایج است.
+export CONVEX_DISABLE_TELEMETRY=1
+
 # ── Install log ─────────────────────────────────────────────────────────────
 # Every step writes here AND to the terminal. If the SSH session dies the log
 # survives, so an interrupted install can always be inspected and re-run.
