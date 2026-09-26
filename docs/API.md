@@ -38,9 +38,26 @@ Stack trace هرگز در پاسخ نمی‌آید.
 | `/api/v1/ping` | GET | بررسی زنده بودن |
 | `/api/v1/version` | GET | نسخه همه اجزا |
 | `/api/v1/openapi.json` | GET | مشخصات OpenAPI 3.1 |
+| `/api/v1/panel/overview` | GET | نمای کلی tenant — 🔑 کلید API (`panel:read`) |
+| `/api/v1/panel/users` | GET | کاربران tenant — 🔑 کلید API (`panel:read`) |
+| `/api/v1/panel/subscriptions` | GET | آخرین ۱۰۰ اشتراک tenant — 🔑 کلید API (`panel:read`) |
 | `/api/v1/telegram/webhook/{botConfigId}` | POST | وب‌هوک بات هر مشتری |
 | `/api/v1/payments/tetraminator/webhook?order_id=` | POST | صف تأیید پرداخت |
 | `/api/v1/payments/cubepay/callback?order_id=` | POST | صف تأیید پرداخت |
+
+### احراز کلید API
+
+مسیرهای `panel/*` با کلید API ساخته‌شده در پنل احراز می‌شوند — نه با نشست کاربری:
+
+```bash
+curl -H "Authorization: Bearer ga_xxxxxxxxxxxxxxxxxxxx" \
+  https://panel.example.com/api/v1/panel/overview
+```
+
+- کلید فقط یک‌بار در زمان ساخت نمایش داده می‌شود؛ فقط hash ذخیره می‌شود.
+- خطاها: بدون/کلید نادرست → `401 UNAUTHENTICATED`؛ ابطال‌شده/منقضی/بدون سکوپ → `403 FORBIDDEN`.
+- `lastUsedAt` هر کلید با هر استفاده به‌روز می‌شود.
+- داده‌ها همیشه محدود به tenant همان کلید است — کلید هیچ‌گاه از مرز tenant عبور نمی‌کند.
 
 ### نمونه: `GET /api/v1/version`
 
@@ -92,9 +109,26 @@ never exposed.
 | `/api/v1/ping` | GET | Liveness check |
 | `/api/v1/version` | GET | Component versions |
 | `/api/v1/openapi.json` | GET | OpenAPI 3.1 specification |
+| `/api/v1/panel/overview` | GET | Tenant overview — 🔑 API key (`panel:read`) |
+| `/api/v1/panel/users` | GET | Tenant users — 🔑 API key (`panel:read`) |
+| `/api/v1/panel/subscriptions` | GET | Latest 100 subscriptions — 🔑 API key (`panel:read`) |
 | `/api/v1/telegram/webhook/{botConfigId}` | POST | Per-tenant bot webhook |
 | `/api/v1/payments/tetraminator/webhook?order_id=` | POST | Payment verification queue |
 | `/api/v1/payments/cubepay/callback?order_id=` | POST | Payment verification queue |
+
+#### API key authentication
+
+`panel/*` routes authenticate with an API key created in the panel — not a user session:
+
+```bash
+curl -H "Authorization: Bearer ga_xxxxxxxxxxxxxxxxxxxx" \
+  https://panel.example.com/api/v1/panel/overview
+```
+
+- The raw key is shown once at creation; only a hash is stored.
+- Errors: missing/unknown key → `401 UNAUTHENTICATED`; revoked/expired/out-of-scope → `403 FORBIDDEN`.
+- `lastUsedAt` is stamped on every use.
+- Data is always scoped to the key's tenant — a key never crosses tenant boundaries.
 
 ### Webhook security
 

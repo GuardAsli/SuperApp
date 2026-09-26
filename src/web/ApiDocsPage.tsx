@@ -52,6 +52,9 @@ const PUBLIC_ENDPOINTS: Array<{ method: string; path: string; desc: string; auth
   { method: "POST", path: "/api/v1/auth/register", desc: "ثبت‌نام (username، password، parentUsername اختیاری)", auth: "ندارد" },
   { method: "POST", path: "/api/v1/auth/login", desc: "ورود — accessToken و refreshToken برمی‌گرداند", auth: "ندارد" },
   { method: "POST", path: "/api/v1/auth/refresh", desc: "چرخش نشست با refreshToken", auth: "refreshToken" },
+  { method: "GET", path: "/api/v1/panel/overview", desc: "نمای کلی tenant (کاربران/اشتراک‌ها)", auth: "کلید API · panel:read" },
+  { method: "GET", path: "/api/v1/panel/users", desc: "فهرست کاربران tenant", auth: "کلید API · panel:read" },
+  { method: "GET", path: "/api/v1/panel/subscriptions", desc: "آخرین ۱۰۰ اشتراک tenant", auth: "کلید API · panel:read" },
 ];
 
 const WEBHOOKS: Array<{ method: string; path: string; desc: string }> = [
@@ -241,7 +244,13 @@ export default function ApiDocsPage() {
               <h3 className="font-extrabold text-emerald-200">کلید API</h3>
               <p className="mt-1 text-xs leading-relaxed text-core-muted">
                 برای سرویس‌های سرور به سرور، از پنل مدیریت کلید API با قالب <code dir="ltr">ga_…</code> بسازید؛
-                فقط هش آن ذخیره می‌شود و مقدار خام یک‌بار نمایش داده می‌شود.
+                فقط هش آن ذخیره می‌شود و مقدار خام یک‌بار نمایش داده می‌شود. مسیرهای
+                <code dir="ltr"> /api/v1/panel/*</code> با هدر زیر احراز می‌شوند:
+              </p>
+              <pre className="mt-2 overflow-x-auto rounded-lg bg-black/40 p-2.5 text-left text-[11px] text-emerald-100" dir="ltr"><code>{`Authorization: Bearer ga_xxxxxxxx…`}</code></pre>
+              <p className="mt-2 text-xs text-core-muted">
+                کلید نامعتبر/غایب ۴۰۱ می‌گیرد؛ ابطال‌شده/منقضی/بدون سکوپ ۴۰۳. سکوپ لازم:
+                <code dir="ltr"> panel:read</code>. داده‌ها همیشه محدود به tenant همان کلید است.
               </p>
             </div>
           </div>

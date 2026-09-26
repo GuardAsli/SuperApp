@@ -41,6 +41,7 @@ export function makeDb(tables: Record<string, Table>) {
       return id;
     },
     async patch(id: string, data: Record<string, unknown>) {
+      indexAll(); // same lazy rule as get — rows pushed after makeDb must be patchable
       const d = byId.get(id);
       if (!d) throw new Error(`NOT_FOUND: ${id}`);
       // patching with undefined removes the field (Convex semantics)
@@ -50,6 +51,7 @@ export function makeDb(tables: Record<string, Table>) {
       }
     },
     async delete(id: string) {
+      indexAll();
       const d = byId.get(id);
       if (!d) throw new Error(`NOT_FOUND: ${id}`);
       for (const [t, rows] of Object.entries(tables)) {

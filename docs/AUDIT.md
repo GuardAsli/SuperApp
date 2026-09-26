@@ -32,7 +32,7 @@ Legend: ✅ Production-ready · 🟡 Partial (gaps listed) · ❌ Missing / stub
 | # | Component | Status | Evidence & remaining work |
 |---|---|---|---|
 | 5 | **Database** (Convex schema) | ✅ | 38 tables, indexes correct (by_tenant/by_user/by_prefix/by_status_next…). Isolation suite drives real handlers through a faithful Convex db shim incl. the filter-builder trap. |
-| 6 | **API** (`/api/v1`) | 🟡 | Real REST: health (real DB probe), ping, version, openapi.json, auth register/login/refresh, 3 webhooks; uniform error contract + requestId; CORS allowlist from systemSettings; on-site docs page `#/api`. **Gap (P0):** API keys (`apiKeyCreate/List/Revoke`, `ga_…` hash-only) exist but **no REST route authenticates with them** — keys are unusable. Plan: key-auth middleware on a new `/api/v1/panel/*` route family. |
+| 6 | **API** (`/api/v1`) | ✅ | Real REST: health (real DB probe), ping, version, openapi.json, auth register/login/refresh, 3 webhooks; uniform error contract + requestId; CORS allowlist; on-site docs page `#/api`. **API-key auth is live (this pass):** `/api/v1/panel/{overview,users,subscriptions}` validate `Authorization: Bearer ga_…` via prefix lookup → hash → status → expiry → scope (`panel:read`), stamp `lastUsedAt`, and scope every response to the key's tenant. 13 tests cover valid-key 200, missing/invalid 401, revoked/expired/out-of-scope 403, cross-tenant isolation. |
 | 7 | **Jobs** (queue) | ✅ | `jobs` table + worker: payment_verify, provision (own executor), auto_backup, bot_command; retry/backoff; stale-running requeue for provisioning; 1-min cron. Covered by botWebhook + provisionExecutor tests. |
 | 8 | **Monitoring** | ✅ | `infra.monitor` health records + `jobStats` + admin dashboard "monitor" tab + `bun run monitor*` scripts. Nothing blocking. |
 | 9 | **Reports** | 🟡 | `reportGenerate` query (users / wallet+revenue / subscriptions) with scope enforcement. **Gap:** no dashboard UI calls it; only 3 kinds. Plan: admin "Reports" tab rendering the three kinds (P2). |
@@ -99,7 +99,7 @@ Legend: ✅ Production-ready · 🟡 Partial (gaps listed) · ❌ Missing / stub
 ## Prioritized remaining work
 
 **P0 (blocks the "works" bar)**
-1. API-key authentication on REST (`/api/v1` panel routes) — keys exist, unusable without it.
+1. ~~API-key authentication on REST~~ — ✅ **done**: `/api/v1/panel/*` secured (see component 6).
 2. Admin CRUD UI: plans, servers/providers, users, API keys, reports (all APIs are live; zero wiring).
 
 **P1**

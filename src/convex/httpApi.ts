@@ -1,9 +1,40 @@
-/** GuardAsli — HTTP API /api/v1 (بند ۳۹): فرمت خطای استاندارد، webhook ها، OpenAPI. */
-import { httpAction } from "./_generated/server";
+/** GuardAsli — HTTP API /api/v1 (بند ۳۹): فرمت خطای استاندارد، webhook ها، OpenAPI، احراز کلید API. */
+import { v } from "convex/values";
+import { httpAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { newRequestId, safeInternalMessage } from "../core/errors";
 import { GUARDASLI, INITIAL_VERSIONS } from "../core/identity";
 import { healthHandler, registerHandler, loginHandler, refreshHandler } from "./httpAuth";
+
+/**
+ * احراز کلید API برای مسیرهای /api/v1/panel/*.
+ * کلید از هدر Authorization: Bearer ga_… خوانده و با apiKeyAuthorize اعتبارسنجی می‌شود
+ * (prefix → hash → status → expiry → scope). پاسخ خطا همیشه با قرارداد استاندارد است.
+ * در صورت موفقیت، lastUsedAt کلید به‌روز می‌شود و handler با tenant کلید اجرا می‌شود.
+ */
+async function authorizeApiKey(
+  ctx: any,
+  req: Request,
+  requestId: string,
+  headers: Record<string, string>,
+  requiredScope?: string,
+): Promise<{ ok: true; apiKeyId: string; tenantId: string; scopes: string[] } | Response> {
+  const auth = req.headers.get("authorization") ?? "";
+  const verdict = (await ctx.runQuery(internal.infra.apiKeyAuthorize, {
+    authorization: auth,
+    ...(requiredScope !== undefined ? { requiredScope } : {}),
+  })) as
+    | { ok: true; apiKeyId: string; tenantId: string; scopes: string[] }
+    | { ok: false; code: string; message: string };
+  if (!verdict.ok) {
+    const status = verdict.code === "FORBIDDEN" ? 403 : 401;
+    return errorResponse(requestId, status, verdict.code, verdict.message, headers);
+  }
+  await ctx
+    .runMutation(internal.infra.apiKeyTouch, { apiKeyId: verdict.apiKeyId as never })
+    .catch(() => undefined); // غیرمسدودکننده
+  return verdict;
+}
 
 /**
  * CORS با allowlist از systemSettings (کلید cors_origins) — بدون wildcard.
@@ -119,6 +150,50 @@ const routes: RouteDef[] = [
     method: "GET",
     handler: async (_ctx, _req, requestId, headers) => jsonResponse(requestId, 200, buildOpenApiSpec(), headers),
   },
+  // ————— مسیرهای پنل — احراز با کلید API (Authorization: Bearer ga_…) —————
+  {
+    path: "/api/v1/panel/overview",
+    method: "GET",
+    handler: async (ctx, req, requestId, headers) => {
+      const auth = await authorizeApiKey(ctx, req, requestId, headers, "panel:read");
+      if (auth instanceof Response) return auth;
+      const data = await ctx.runQuery(internal.httpApi.panelOverviewInternal, {
+        tenantId: auth.tenantId as never,
+      });
+      return jsonResponse(requestId, 200, { ...data, tenantId: auth.tenantId }, headers);
+    },
+  },
+  {
+    path: "/api/v1/panel/users",
+    method: "GET",
+    handler: async (ctx, req, requestId, headers) => {
+      const auth = await authorizeApiKey(ctx, req, requestId, headers, "panel:read");
+      if (auth instanceof Response) return auth;
+      const rows = (await ctx.runQuery(internal.httpApi.panelUsersInternal, {
+        tenantId: auth.tenantId as never,
+      })) as Array<Record<string, unknown>>;
+      // بدون hash رمز — فقط فیلدهای عمومی پنل
+      const safe = rows.map((u) => ({
+        userId: u._id,
+        username: u.username,
+        role: u.role,
+        status: u.status,
+      }));
+      return jsonResponse(requestId, 200, { users: safe, count: safe.length }, headers);
+    },
+  },
+  {
+    path: "/api/v1/panel/subscriptions",
+    method: "GET",
+    handler: async (ctx, req, requestId, headers) => {
+      const auth = await authorizeApiKey(ctx, req, requestId, headers, "panel:read");
+      if (auth instanceof Response) return auth;
+      const rows = await ctx.runQuery(internal.httpApi.panelSubscriptionsInternal, {
+        tenantId: auth.tenantId as never,
+      });
+      return jsonResponse(requestId, 200, { subscriptions: rows }, headers);
+    },
+  },
   {
     prefix: "/api/v1/telegram/webhook/",
     method: "POST",
@@ -205,6 +280,58 @@ export const http = httpAction(async (ctx, req) => {
     }
   }
   return errorResponse(requestId, 404, "NOT_FOUND", "مسیر یافت نشد", headers);
+});
+
+/** داده‌های پنل برای tenant کلید — فقط خواندنی، محدود به همان tenant (داخل query امن). */
+export const panelOverviewInternal = internalQuery({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_tenant", (q: any) => q.eq("tenantId", args.tenantId))
+      .collect();
+    const subs = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_tenant", (q: any) => q.eq("tenantId", args.tenantId))
+      .collect();
+    return {
+      users: users.length,
+      activeUsers: users.filter((u: any) => u.status === "active").length,
+      subscriptions: subs.length,
+      activeSubscriptions: subs.filter((s: any) => s.status === "active").length,
+    };
+  },
+});
+
+export const panelUsersInternal = internalQuery({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("by_tenant", (q: any) => q.eq("tenantId", args.tenantId))
+      .collect();
+  },
+});
+
+export const panelSubscriptionsInternal = internalQuery({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const subs = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_tenant", (q: any) => q.eq("tenantId", args.tenantId))
+      .order("desc")
+      .take(100);
+    return subs.map((s: any) => ({
+      subscriptionId: s._id,
+      userId: s.userId,
+      status: s.status,
+      provisioningState: s.provisioningState,
+      kind: s.kind,
+      trafficLimitGb: s.trafficLimitGb ?? null,
+      trafficUsedGb: s.trafficUsedGb ?? null,
+      durationEndsAt: s.durationEndsAt ?? null,
+    }));
+  },
 });
 
 function buildOpenApiSpec(): Record<string, unknown> {
@@ -294,6 +421,32 @@ function buildOpenApiSpec(): Record<string, unknown> {
           responses: { "200": { description: "OK" }, "401": { description: "امضای نامعتبر" } },
         },
       },
+      "/api/v1/panel/overview": {
+        get: {
+          summary: "نمای کلی tenant — احراز با کلید API (Bearer ga_…، سکوپ panel:read)",
+          security: [{ ApiKeyAuth: [] }],
+          responses: {
+            "200": { description: "OK" },
+            "401": { description: "کلید غایب/نامعتبر" },
+            "403": { description: "ابطال‌شده/منقضی/بدون سکوپ" },
+          },
+        },
+      },
+      "/api/v1/panel/users": {
+        get: {
+          summary: "فهرست کاربران tenant — سکوپ panel:read",
+          security: [{ ApiKeyAuth: [] }],
+          responses: { "200": { description: "OK" }, "401": {}, "403": {} },
+        },
+      },
+      "/api/v1/panel/subscriptions": {
+        get: {
+          summary: "آخرین ۱۰۰ اشتراک tenant — سکوپ panel:read",
+          security: [{ ApiKeyAuth: [] }],
+          responses: { "200": { description: "OK" }, "401": {}, "403": {} },
+        },
+      },
     },
+    securitySchemesNote: "ApiKeyAuth: Authorization: Bearer ga_…",
   };
 }

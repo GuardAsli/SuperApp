@@ -1,6 +1,6 @@
 /** GuardAsli — زیرساخت: Monitoring، Jobs، Backup، Domains، API Keys، Rate Limit، Reports. */
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireActor, requirePermission, requireTenantScope } from "./auth";
 import { generateSecureCredentialRuntime, randomToken } from "./runtime";
@@ -347,6 +347,71 @@ export const apiKeyList = query({
       expiresAt: k.expiresAt ?? null,
       lastUsedAt: k.lastUsedAt ?? null,
     }));
+  },
+});
+
+/**
+ * احراز کلید API برای مسیرهای REST — از هدر Authorization: Bearer ga_…
+ *
+ * زنجیره:
+ *  ۱) فرمت سرآیند (Bearer) و قالب کلید (ga_)
+ *  ۲) lookup با by_prefix — از کاراکتر دهم (جلوتر از بدنه تصادفی)
+ *  ۳) مقایسه hash با stableTokenHash — همان قرارداد نشست‌ها
+ *  ۴) وضعیت active + انقضا + سکوپ خواسته‌شده
+ *
+ * خروجی برای handler: tenantId و scopes — داده‌ها فقط در همان tenant خوانده می‌شوند.
+ * lastUsedAt در internalMutation جداگانه به‌روزرسانی می‌شود (این query خواندنی است).
+ */
+export const apiKeyAuthorize = internalQuery({
+  args: {
+    authorization: v.string(),
+    requiredScope: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const DENY = (code: string, message: string) => ({ ok: false as const, code, message });
+    const header = args.authorization.trim();
+    if (!/^Bearer\s+/i.test(header)) {
+      return DENY("UNAUTHENTICATED", "سرآیند Authorization باید به‌صورت Bearer <api_key> باشد");
+    }
+    const raw = header.replace(/^Bearer\s+/i, "").trim();
+    if (!/^ga_[A-Za-z0-9_-]{16,128}$/.test(raw)) {
+      return DENY("UNAUTHENTICATED", "کلید API نامعتبر است");
+    }
+    const prefix = raw.slice(0, 10);
+    const key = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_prefix", (q) => q.eq("prefix", prefix))
+      .unique();
+    if (!key) return DENY("UNAUTHENTICATED", "کلید API شناخته نشد");
+    if (key.keyHash !== stableTokenHash(raw)) {
+      // کلید با prefix یکسان ولی بدنه غلط — همان پاسخ، بدون افشای وجود کلید
+      return DENY("UNAUTHENTICATED", "کلید API شناخته نشد");
+    }
+    if (key.status !== "active") {
+      return DENY("FORBIDDEN", "کلید API ابطال شده است");
+    }
+    if (key.expiresAt !== undefined && key.expiresAt < Date.now()) {
+      return DENY("FORBIDDEN", "کلید API منقضی شده است");
+    }
+    if (args.requiredScope !== undefined && !key.scopes.includes(args.requiredScope)) {
+      return DENY("FORBIDDEN", `سکوپ لازم «${args.requiredScope}» روی این کلید تعریف نشده است`);
+    }
+    return {
+      ok: true as const,
+      apiKeyId: key._id,
+      tenantId: key.tenantId,
+      createdBy: key.createdBy,
+      scopes: key.scopes,
+    };
+  },
+});
+
+/** ثبت آخرین استفاده از کلید — از handlerهای مسیرهای محافظت‌شده صدا زده می‌شود. */
+export const apiKeyTouch = internalMutation({
+  args: { apiKeyId: v.id("apiKeys") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.apiKeyId, { lastUsedAt: Date.now() });
+    return { ok: true };
   },
 });
 
